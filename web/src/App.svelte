@@ -54,6 +54,7 @@
   <main>
     {#if needsToken}
       <section class="token-gate">
+        <img class="gate-logo" src="/logo.png" alt="" />
         <h1>{copy.appName}</h1>
         <p>{copy.token.prompt}</p>
         <form on:submit|preventDefault={submitToken}>
@@ -112,8 +113,13 @@
 
   .token-gate {
     max-width: 24rem;
-    margin: 5rem auto;
+    margin: 4rem auto;
     text-align: center;
+  }
+
+  .gate-logo {
+    width: 160px;
+    height: 160px;
   }
 
   .token-gate h1 {

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/minos_logo_and_banner.png" alt="Minos — DNS server" width="420" />
+</p>
+
 # Minos
 
 > Every query gets judged.

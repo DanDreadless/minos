@@ -17,7 +17,7 @@
 <nav>
   <div class="meander" aria-hidden="true"></div>
   <a class="brand" href="#/">
-    <span class="name">{copy.appName}</span>
+    <img class="wordmark" src="/banner.png" alt={copy.appName} />
     <span class="tagline">{copy.tagline}</span>
   </a>
   <ul>
@@ -65,18 +65,18 @@
     border-bottom: 1px solid var(--border);
   }
 
-  .brand .name {
+  /* The banner's baked-in background is #101217 — identical to
+     --bg-sunken, so it sits flush on the sidebar. */
+  .brand .wordmark {
     display: block;
-    font-family: var(--font-display);
-    font-size: 1.45rem;
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    color: var(--accent);
+    width: 100%;
+    max-width: 180px;
+    height: auto;
   }
 
   .brand .tagline {
     display: block;
-    margin-top: 0.2rem;
+    margin-top: 0.35rem;
     font-family: var(--font-display);
     font-style: italic;
     font-size: 0.78rem;
