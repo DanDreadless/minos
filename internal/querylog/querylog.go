@@ -67,7 +67,7 @@ type Log struct {
 	subs  map[chan Entry]struct{}
 
 	db        *sql.DB
-	retention time.Duration
+	retention atomic.Int64 // nanoseconds; settable at runtime
 
 	total   atomic.Uint64
 	blocked atomic.Uint64
@@ -81,13 +81,13 @@ func Open(opts Options) (*Log, error) {
 		opts.RingSize = 10000
 	}
 	l := &Log{
-		ch:        make(chan Entry, 4096),
-		done:      make(chan struct{}),
-		dead:      make(chan struct{}),
-		ring:      make([]Entry, opts.RingSize),
-		subs:      make(map[chan Entry]struct{}),
-		retention: time.Duration(opts.RetentionDays) * 24 * time.Hour,
+		ch:   make(chan Entry, 4096),
+		done: make(chan struct{}),
+		dead: make(chan struct{}),
+		ring: make([]Entry, opts.RingSize),
+		subs: make(map[chan Entry]struct{}),
 	}
+	l.retention.Store(int64(time.Duration(opts.RetentionDays) * 24 * time.Hour))
 	if !opts.Ephemeral {
 		db, err := openDB(opts.DBPath)
 		if err != nil {
@@ -186,6 +186,38 @@ func (l *Log) Subscribe() (<-chan Entry, func()) {
 		})
 	}
 	return ch, cancel
+}
+
+// SetRetentionDays changes how long rows live in SQLite. Takes effect at the
+// next prune cycle; safe to call while running.
+func (l *Log) SetRetentionDays(days int) {
+	l.retention.Store(int64(time.Duration(days) * 24 * time.Hour))
+}
+
+// Resize changes the ring buffer capacity at runtime, preserving the newest
+// entries. Safe to call while running; not on the hot path.
+func (l *Log) Resize(n int) {
+	if n <= 0 {
+		return
+	}
+	l.ringMu.Lock()
+	defer l.ringMu.Unlock()
+	if n == len(l.ring) {
+		return
+	}
+	keep := l.count
+	if keep > n {
+		keep = n
+	}
+	fresh := make([]Entry, n)
+	// Copy the newest `keep` entries oldest-first so head/count stay simple.
+	for i := 0; i < keep; i++ {
+		idx := (l.head - keep + i + len(l.ring)*2) % len(l.ring)
+		fresh[i] = l.ring[idx]
+	}
+	l.ring = fresh
+	l.head = keep % n
+	l.count = keep
 }
 
 // Close stops the writer, flushing any buffered entries to disk first.
@@ -299,10 +331,11 @@ func (l *Log) writeBatch(batch []Entry) error {
 }
 
 func (l *Log) prune() {
-	if l.db == nil || l.retention <= 0 {
+	retention := time.Duration(l.retention.Load())
+	if l.db == nil || retention <= 0 {
 		return
 	}
-	cutoff := time.Now().Add(-l.retention).UnixMilli()
+	cutoff := time.Now().Add(-retention).UnixMilli()
 	if _, err := l.db.Exec(`DELETE FROM querylog WHERE ts < ?`, cutoff); err != nil {
 		slog.Error("query log prune failed", "err", err)
 	}

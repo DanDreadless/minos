@@ -101,6 +101,8 @@ func serve(args []string) error {
 		if err := proxy.ApplyConfig(c); err != nil {
 			slog.Error("apply config to dns proxy failed", "err", err)
 		}
+		qlog.SetRetentionDays(c.QueryLog.RetentionDays)
+		qlog.Resize(c.QueryLog.RingSize)
 	})
 	if err := proxy.Start(); err != nil {
 		return err

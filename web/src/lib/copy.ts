@@ -6,9 +6,12 @@ export const copy = {
   appName: 'Minos',
   tagline: 'Every query gets judged.',
 
-  dashboard: {
-    title: 'The Tribunal', // plain: dashboard
-    subtitle: 'dashboard',
+  nav: {
+    dashboard: { label: 'The Tribunal', hint: 'dashboard' },
+    querylog: { label: 'The Docket', hint: 'query log' },
+    lists: { label: 'The Codex', hint: 'blocklists' },
+    domains: { label: 'Pardons & Sentences', hint: 'allow & deny domains' },
+    settings: { label: 'Settings', hint: 'server configuration' },
   },
 
   stats: {
@@ -22,12 +25,26 @@ export const copy = {
     rulesHint: 'compiled block rules',
   },
 
+  dashboard: {
+    timelineTitle: 'Queries — last 24 hours',
+    topBlockedTitle: 'Most condemned domains',
+    topBlockedHint: 'most-blocked, last 24 hours',
+    topClientsTitle: 'Busiest clients',
+    topClientsHint: 'by query count, last 24 hours',
+    noData: 'No query data yet.',
+  },
+
   docket: {
-    title: 'The Docket', // plain: live query log
+    title: 'The Docket',
     subtitle: 'live query log',
     empty: 'No queries yet. Point a device at this resolver and its fate appears here.',
     verdictBlocked: 'condemned', // API value: "blocked"
     verdictAllowed: 'passed', //    API value: "allowed"
+    searchPlaceholder: 'Filter by domain or client…',
+    filterAll: 'All verdicts',
+    filterBlocked: 'Condemned only',
+    filterAllowed: 'Passed only',
+    live: 'live',
   },
 
   pardon: {
@@ -36,12 +53,80 @@ export const copy = {
     done: (domain: string) => `${domain} pardoned — always allowed from now on.`,
   },
 
+  sentence: {
+    action: 'Sentence',
+    actionHint: 'always block this domain',
+    done: (domain: string) => `${domain} sentenced — always blocked from now on.`,
+  },
+
   recess: {
     action: 'Recess',
     actionHint: 'pause blocking',
     resume: 'Resume blocking',
     active: (until: string) => `Blocking paused until ${until}.`,
     activeIndefinite: 'Blocking paused.',
+    headerPill: 'In recess',
+  },
+
+  lists: {
+    title: 'The Codex',
+    subtitle: 'subscribed blocklists',
+    empty: 'No blocklists configured. Add one below.',
+    refreshAll: 'Refresh all lists',
+    refreshing: 'Refreshing…',
+    addTitle: 'Add a blocklist',
+    confirmDelete: (name: string) =>
+      `Remove the list "${name}"? Its rules stop applying immediately.`,
+  },
+
+  domains: {
+    checkTitle: 'Judge a domain',
+    checkHint: 'see which rule decides its fate',
+    checkPlaceholder: 'example.com',
+    checkButton: 'Judge',
+    checkBlocked: (list: string, rule: string) => `Condemned — matched "${rule}" in ${list}.`,
+    checkAllowedByRule: (rule: string) => `Passed — pardoned by "${rule}".`,
+    checkAllowed: 'Passed — no rule matches; it would be forwarded upstream.',
+    pardonsTitle: 'Pardons',
+    pardonsHint: 'domains always allowed (and their subdomains)',
+    pardonsEmpty: 'No pardons granted.',
+    sentencesTitle: 'Sentences',
+    sentencesHint: 'domains always blocked (and their subdomains)',
+    sentencesEmpty: 'No standing sentences.',
+    addPlaceholder: 'domain to add…',
+  },
+
+  settings: {
+    title: 'Settings',
+    save: 'Save changes',
+    saved: 'Settings saved and applied — no restart needed.',
+    upstreamsTitle: 'The Ferrymen',
+    upstreamsHint: 'upstream resolvers, tried in order',
+    blockingTitle: 'Blocking',
+    blockingModeZeroIp: 'Answer with 0.0.0.0 (recommended: fails fast, quiet)',
+    blockingModeNxdomain: 'Answer NXDOMAIN (domain does not exist)',
+    blockTTL: 'Response TTL (seconds)',
+    blockTTLHint: 'how long clients cache a blocked answer',
+    listsTitle: 'Blocklist refresh',
+    refreshInterval: 'Refresh interval',
+    refreshIntervalHint: 'e.g. 24h, 12h, 6h — minimum 5m',
+    querylogTitle: 'Query log',
+    retention: 'Keep history (days)',
+    ringSize: 'Live buffer size (entries)',
+    ephemeralNote: 'Disk logging is off (ephemeral mode) — set in the config file.',
+    dbPathNote: (p: string) => `History is stored in ${p}.`,
+    apiTitle: 'API access',
+    tokenSet: 'An API token is set. The UI and CLI must present it.',
+    tokenUnset: 'No API token — anyone on the LAN can use this interface.',
+    tokenPlaceholder: 'new API token',
+    tokenSave: 'Set token',
+    tokenClear: 'Remove token',
+    tokenConfirmClear: 'Remove the API token? Anyone on the LAN will be able to manage Minos.',
+    listenNote: (dns: string, api: string) =>
+      `DNS listens on ${dns}, this interface on ${api}. Listen addresses are set in the config file and need a restart.`,
+    backupTitle: 'Backup',
+    backupHint: 'download the full configuration as YAML',
+    backupButton: 'Export configuration',
   },
 
   token: {

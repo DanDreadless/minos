@@ -1,0 +1,213 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { api, type ListStatus } from '../lib/api';
+  import { copy } from '../lib/copy';
+  import { notify, notifyError } from '../lib/toast';
+
+  let lists: ListStatus[] = [];
+  let busy = false;
+  let newName = '';
+  let newUrl = '';
+  let newFormat: 'hosts' | 'plain' | 'adblock' = 'hosts';
+
+  function fmtWhen(iso?: string): string {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString();
+  }
+
+  async function load(): Promise<void> {
+    try {
+      lists = await api.lists();
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function refreshAll(): Promise<void> {
+    busy = true;
+    try {
+      lists = await api.refreshLists();
+      notify('All lists refreshed.');
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function toggle(l: ListStatus): Promise<void> {
+    try {
+      lists = await api.updateList(l.name, { enabled: !l.enabled });
+    } catch (e) {
+      notifyError(e);
+      await load();
+    }
+  }
+
+  async function remove(l: ListStatus): Promise<void> {
+    if (!window.confirm(copy.lists.confirmDelete(l.name))) return;
+    try {
+      lists = await api.deleteList(l.name);
+      notify(`List "${l.name}" removed.`);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function add(): Promise<void> {
+    busy = true;
+    try {
+      lists = await api.addList({
+        name: newName.trim(),
+        url: newUrl.trim(),
+        format: newFormat,
+        enabled: true,
+      });
+      notify(`List "${newName.trim()}" added.`);
+      newName = '';
+      newUrl = '';
+      newFormat = 'hosts';
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      busy = false;
+    }
+  }
+
+  onMount(() => void load());
+</script>
+
+<h1>{copy.lists.title} <small>{copy.lists.subtitle}</small></h1>
+
+<div class="actions">
+  <button class="primary" on:click={refreshAll} disabled={busy}>
+    {busy ? copy.lists.refreshing : copy.lists.refreshAll}
+  </button>
+</div>
+
+{#if lists.length === 0}
+  <p class="empty">{copy.lists.empty}</p>
+{:else}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>On</th>
+          <th>Name</th>
+          <th>URL</th>
+          <th>Format</th>
+          <th>Rules</th>
+          <th>Skipped</th>
+          <th>Last refresh</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each lists as l (l.name)}
+          <tr class:disabled={!l.enabled}>
+            <td>
+              <input
+                type="checkbox"
+                checked={l.enabled}
+                title={l.enabled ? 'disable this list' : 'enable this list'}
+                on:change={() => toggle(l)}
+              />
+            </td>
+            <td>{l.name}</td>
+            <td class="url" title={l.url}>{l.url}</td>
+            <td>{l.format}</td>
+            <td class="num">{l.rules.toLocaleString()}</td>
+            <td class="num">{l.skipped ? l.skipped.toLocaleString() : ''}</td>
+            <td>
+              {#if l.last_error}
+                <span class="err" title={l.last_error}>fetch failed</span>
+              {:else}
+                {fmtWhen(l.last_refresh)}
+              {/if}
+            </td>
+            <td>
+              <button class="row-action danger" on:click={() => remove(l)}>Remove</button>
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
+{/if}
+
+<section class="card add">
+  <h2>{copy.lists.addTitle}</h2>
+  <form on:submit|preventDefault={add}>
+    <input placeholder="name" bind:value={newName} required size="14" />
+    <input
+      placeholder="https://example.com/hosts.txt"
+      bind:value={newUrl}
+      required
+      type="url"
+      class="grow"
+    />
+    <select bind:value={newFormat} title="list format">
+      <option value="hosts">hosts</option>
+      <option value="plain">plain domains</option>
+      <option value="adblock">adblock</option>
+    </select>
+    <button type="submit" class="primary" disabled={busy || !newName.trim() || !newUrl.trim()}>
+      Add list
+    </button>
+  </form>
+</section>
+
+<style>
+  h1 small {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    margin-left: 0.5rem;
+  }
+
+  .actions {
+    margin-bottom: 1rem;
+  }
+
+  .empty {
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  tr.disabled td {
+    opacity: 0.45;
+  }
+
+  td.url {
+    max-width: 18rem;
+  }
+
+  td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .err {
+    color: var(--blocked);
+  }
+
+  .row-action {
+    padding: 0.1rem 0.6rem;
+    font-size: 0.78rem;
+  }
+
+  .add {
+    margin-top: 1.5rem;
+  }
+
+  .add form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+  }
+
+  .add .grow {
+    flex: 1;
+    min-width: 16rem;
+  }
+</style>

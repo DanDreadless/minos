@@ -1,284 +1,125 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { api, ApiError, openStream, setToken, type LogEntry, type Status } from './lib/api';
+  import { api, ApiError, setToken, type Status } from './lib/api';
+  import Nav from './lib/components/Nav.svelte';
   import { copy } from './lib/copy';
-
-  const MAX_ROWS = 200;
+  import { route } from './lib/router';
+  import { toasts } from './lib/toast';
+  import Codex from './pages/Codex.svelte';
+  import Dashboard from './pages/Dashboard.svelte';
+  import Docket from './pages/Docket.svelte';
+  import Judgments from './pages/Judgments.svelte';
+  import Settings from './pages/Settings.svelte';
 
   let status: Status | null = null;
-  let entries: LogEntry[] = [];
   let needsToken = false;
   let tokenInput = '';
-  let notice = '';
-  let error = '';
-  let ws: WebSocket | null = null;
+  let fatalError = '';
   let pollTimer: ReturnType<typeof setInterval> | null = null;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let destroyed = false;
-
-  function fmtTime(iso: string): string {
-    return new Date(iso).toLocaleTimeString();
-  }
-
-  function fmtPercent(total: number, blocked: number): string {
-    if (total === 0) return '—';
-    return ((blocked / total) * 100).toFixed(1) + '%';
-  }
 
   async function refresh(): Promise<void> {
     try {
       status = await api.status();
       needsToken = false;
-      error = '';
+      fatalError = '';
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         needsToken = true;
       } else {
-        error = e instanceof Error ? e.message : String(e);
+        fatalError = e instanceof Error ? e.message : String(e);
       }
     }
-  }
-
-  function connect(): void {
-    if (destroyed || needsToken) return;
-    ws = openStream(
-      (e) => {
-        entries = [e, ...entries].slice(0, MAX_ROWS);
-      },
-      () => {
-        ws = null;
-        if (!destroyed) reconnectTimer = setTimeout(connect, 2000);
-      },
-    );
-  }
-
-  async function start(): Promise<void> {
-    await refresh();
-    if (needsToken) return;
-    try {
-      entries = await api.querylog(MAX_ROWS);
-    } catch {
-      // log endpoint failing is not fatal for the dashboard
-    }
-    connect();
-    pollTimer = setInterval(refresh, 5000);
   }
 
   async function submitToken(): Promise<void> {
     setToken(tokenInput.trim());
     tokenInput = '';
-    await start();
-  }
-
-  async function pardon(domain: string): Promise<void> {
-    try {
-      await api.pardon(domain);
-      notice = copy.pardon.done(domain);
-      setTimeout(() => (notice = ''), 5000);
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    }
-  }
-
-  async function recess(duration: string): Promise<void> {
-    try {
-      await api.pause(duration);
-      await refresh();
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    }
-  }
-
-  async function resume(): Promise<void> {
-    try {
-      await api.resume();
-      await refresh();
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    }
+    await refresh();
   }
 
   onMount(() => {
-    void start();
+    void refresh();
+    pollTimer = setInterval(refresh, 5000);
   });
 
   onDestroy(() => {
-    destroyed = true;
     if (pollTimer) clearInterval(pollTimer);
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    ws?.close();
   });
 </script>
 
-<header>
-  <div class="meander" aria-hidden="true"></div>
-  <div class="masthead">
-    <h1>{copy.appName}</h1>
-    <span class="tagline">{copy.tagline}</span>
-    {#if status}
-      <span class="version">v{status.version}</span>
-    {/if}
-  </div>
-</header>
-
-{#if needsToken}
-  <section class="token-gate">
-    <p>{copy.token.prompt}</p>
-    <form on:submit|preventDefault={submitToken}>
-      <input
-        type="password"
-        placeholder={copy.token.placeholder}
-        bind:value={tokenInput}
-        autocomplete="off"
-      />
-      <button type="submit" class="primary">{copy.token.submit}</button>
-    </form>
-  </section>
-{:else}
-  {#if error}
-    <p class="error" role="alert">{error}</p>
-  {/if}
-  {#if notice}
-    <p class="notice" role="status">{notice}</p>
-  {/if}
-
-  {#if status}
-    <section class="controls">
-      {#if status.paused}
-        <span class="paused-banner">
-          {status.paused_until
-            ? copy.recess.active(new Date(status.paused_until).toLocaleTimeString())
-            : copy.recess.activeIndefinite}
-        </span>
-        <button class="primary" on:click={resume}>{copy.recess.resume}</button>
-      {:else}
-        <span class="control-label" title={copy.recess.actionHint}>
-          {copy.recess.action} <small>({copy.recess.actionHint})</small>
-        </span>
-        <button on:click={() => recess('5m')}>5 min</button>
-        <button on:click={() => recess('30m')}>30 min</button>
-        <button on:click={() => recess('')}>Until resumed</button>
-      {/if}
-    </section>
-
-    <section class="stats">
-      <div class="stat">
-        <span class="stat-value">{status.queries_total.toLocaleString()}</span>
-        <span class="stat-label" title={copy.stats.judgedHint}>{copy.stats.judged}</span>
-        <span class="stat-hint">{copy.stats.judgedHint}</span>
-      </div>
-      <div class="stat">
-        <span class="stat-value blocked">{status.queries_blocked.toLocaleString()}</span>
-        <span class="stat-label" title={copy.stats.condemnedHint}>{copy.stats.condemned}</span>
-        <span class="stat-hint">{copy.stats.condemnedHint}</span>
-      </div>
-      <div class="stat">
-        <span class="stat-value">{fmtPercent(status.queries_total, status.queries_blocked)}</span>
-        <span class="stat-label">{copy.stats.blockRate}</span>
-        <span class="stat-hint">{copy.stats.blockRateHint}</span>
-      </div>
-      <div class="stat">
-        <span class="stat-value">{status.rules.toLocaleString()}</span>
-        <span class="stat-label">{copy.stats.rules}</span>
-        <span class="stat-hint">{copy.stats.rulesHint}</span>
-      </div>
-    </section>
-  {/if}
-
-  <section class="docket">
-    <h2>{copy.docket.title} <small>{copy.docket.subtitle}</small></h2>
-    {#if entries.length === 0}
-      <p class="empty">{copy.docket.empty}</p>
+<div class="shell">
+  <aside>
+    <Nav {status} />
+  </aside>
+  <main>
+    {#if needsToken}
+      <section class="token-gate">
+        <h1>{copy.appName}</h1>
+        <p>{copy.token.prompt}</p>
+        <form on:submit|preventDefault={submitToken}>
+          <input
+            type="password"
+            placeholder={copy.token.placeholder}
+            bind:value={tokenInput}
+            autocomplete="off"
+          />
+          <button type="submit" class="primary">{copy.token.submit}</button>
+        </form>
+      </section>
     {:else}
-      <table>
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Client</th>
-            <th>Domain</th>
-            <th>Type</th>
-            <th>Verdict</th>
-            <th>Why</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each entries as e (e.time + e.qname + e.client)}
-            <tr>
-              <td>{fmtTime(e.time)}</td>
-              <td>{e.client}</td>
-              <td title={e.qname}>{e.qname}</td>
-              <td>{e.qtype}</td>
-              {#if e.verdict === 'blocked'}
-                <td class="verdict-blocked">{copy.docket.verdictBlocked}</td>
-                <td title="rule: {e.rule}">{e.list}</td>
-                <td>
-                  <button
-                    class="pardon"
-                    title={copy.pardon.actionHint}
-                    on:click={() => pardon(e.rule ?? e.qname)}
-                  >
-                    {copy.pardon.action}
-                  </button>
-                </td>
-              {:else}
-                <td class="verdict-allowed">{copy.docket.verdictAllowed}</td>
-                <td>{e.upstream ?? ''}</td>
-                <td></td>
-              {/if}
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      {#if fatalError}
+        <p class="fatal" role="alert">{fatalError}</p>
+      {/if}
+      {#if $route === 'dashboard'}
+        <Dashboard {status} onStatusChange={refresh} />
+      {:else if $route === 'querylog'}
+        <Docket />
+      {:else if $route === 'lists'}
+        <Codex />
+      {:else if $route === 'domains'}
+        <Judgments />
+      {:else if $route === 'settings'}
+        <Settings />
+      {/if}
     {/if}
-  </section>
-{/if}
+  </main>
+</div>
+
+<div class="toasts" aria-live="polite">
+  {#each $toasts as t (t.id)}
+    <div class="toast {t.kind}">{t.text}</div>
+  {/each}
+</div>
 
 <style>
-  header {
-    margin-bottom: 2rem;
+  .shell {
+    display: grid;
+    grid-template-columns: 230px 1fr;
+    min-height: 100vh;
   }
 
-  .meander {
-    height: 6px;
-    margin: 0 -1.5rem;
-    background: repeating-linear-gradient(
-      90deg,
-      var(--accent) 0 12px,
-      transparent 12px 24px
-    );
-    opacity: 0.5;
+  aside {
+    position: sticky;
+    top: 0;
+    height: 100vh;
   }
 
-  .masthead {
-    display: flex;
-    align-items: baseline;
-    gap: 1rem;
-    padding-top: 1.5rem;
-  }
-
-  h1 {
-    margin: 0;
-    font-size: 1.9rem;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-  }
-
-  .tagline {
-    color: var(--text-dim);
-    font-style: italic;
-  }
-
-  .version {
-    margin-left: auto;
-    color: var(--text-dim);
-    font-size: 0.8rem;
+  main {
+    padding: 1.75rem 2rem 4rem;
+    min-width: 0;
+    max-width: 1200px;
   }
 
   .token-gate {
     max-width: 24rem;
-    margin: 4rem auto;
+    margin: 5rem auto;
     text-align: center;
+  }
+
+  .token-gate h1 {
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--accent);
   }
 
   .token-gate form {
@@ -287,89 +128,48 @@
     justify-content: center;
   }
 
-  .error {
+  .fatal {
     color: var(--blocked);
   }
 
-  .notice {
-    color: var(--accent);
-  }
-
-  .controls {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .control-label small {
-    color: var(--text-dim);
-  }
-
-  .paused-banner {
-    color: var(--accent);
-  }
-
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-    gap: 1rem;
-    margin-bottom: 2.5rem;
-  }
-
-  .stat {
-    background: var(--bg-raised);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 1rem 1.25rem;
+  .toasts {
+    position: fixed;
+    bottom: 1.25rem;
+    right: 1.25rem;
     display: flex;
     flex-direction: column;
+    gap: 0.5rem;
+    z-index: 10;
+    max-width: 26rem;
   }
 
-  .stat-value {
-    font-size: 1.7rem;
-    font-variant-numeric: tabular-nums;
+  .toast {
+    padding: 0.6rem 1rem;
+    border-radius: 4px;
+    background: var(--bg-raised);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    font-size: 0.85rem;
   }
 
-  .stat-value.blocked {
+  .toast.error {
+    border-color: var(--blocked);
     color: var(--blocked);
   }
 
-  .stat-label {
-    letter-spacing: 0.08em;
-    margin-top: 0.25rem;
-  }
+  @media (max-width: 800px) {
+    .shell {
+      grid-template-columns: 1fr;
+    }
 
-  .stat-hint {
-    color: var(--text-dim);
-    font-size: 0.78rem;
-  }
+    aside {
+      position: static;
+      height: auto;
+    }
 
-  .docket h2 {
-    font-size: 1.2rem;
-  }
-
-  .docket h2 small {
-    color: var(--text-dim);
-    font-size: 0.8rem;
-    margin-left: 0.5rem;
-  }
-
-  .empty {
-    color: var(--text-dim);
-    font-style: italic;
-  }
-
-  .verdict-blocked {
-    color: var(--blocked);
-  }
-
-  .verdict-allowed {
-    color: var(--allowed);
-  }
-
-  button.pardon {
-    padding: 0.1rem 0.6rem;
-    font-size: 0.8rem;
+    main {
+      padding: 1.25rem 1rem 3rem;
+    }
   }
 </style>

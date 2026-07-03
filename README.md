@@ -14,7 +14,10 @@ no appeals (well, except pardons).
 - Judges each query against compiled blocklists (hosts, plain, and AdBlock formats)
 - Blocked queries get `0.0.0.0`/`::` or `NXDOMAIN` (your choice)
 - Allowed queries are forwarded upstream over DoH or DoT (plaintext optional)
-- Live query log streamed to the web UI, with one-click pardons
+- Web dashboard with query charts, top blocked domains, and busiest clients
+- Live query log streamed to the UI, with one-click allow/block from any row
+- Full management from the UI: blocklists, allow/deny domains, upstreams,
+  blocking mode, retention, API token — all applied live, no restarts
 - Batched SQLite persistence that respects SD cards
 - No telemetry. Ever.
 

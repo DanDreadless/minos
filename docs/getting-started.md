@@ -24,22 +24,36 @@ port 53 needs root/admin on most systems; on Linux prefer the systemd unit in
 
 Then point a client (or your router's DHCP DNS option) at the machine's IP.
 
-## The Tribunal (web dashboard)
+## The web interface
 
-Open `http://<host>:8080`. You'll see:
+Open `http://<host>:8080`. Five pages, one per concern:
 
-- **Judged / Condemned** — total queries handled and how many were blocked.
-- **The Docket** — the live query log. Every blocked entry shows *which list
-  and rule* condemned it, and a **Pardon** button that allowlists the domain
-  in one click.
-- **Recess** — pause blocking for 5 or 30 minutes, or until you resume.
+- **The Tribunal** (dashboard) — query counters, a 24-hour volume chart,
+  the most-blocked domains, the busiest clients, and **Recess** controls
+  to pause blocking (5/30 minutes, a custom duration, or until resumed).
+- **The Docket** (query log) — live-streaming log with search and verdict
+  filters. Every blocked entry shows *which list and rule* condemned it and
+  has a one-click **Pardon** button; allowed entries can be **Sentenced**
+  (blocked) just as fast.
+- **The Codex** (blocklists) — add, enable/disable, or remove list
+  subscriptions and refresh them on demand, with per-list rule counts and
+  fetch errors.
+- **Pardons & Sentences** (allow/deny domains) — manage both lists, plus a
+  "judge a domain" tool that shows exactly which rule decides any name's
+  fate before you ever query it.
+- **Settings** — everything below is editable here and applies immediately,
+  no restart: upstream resolvers and their order, blocking mode and TTL,
+  list refresh interval, query-log retention and buffer size, the API
+  token, and a one-click YAML config backup.
 
-If you set `api.token` in the config, the UI and CLI require it.
+If you set `api.token` (in the config file or from Settings), the UI and
+CLI require it.
 
 ## Configuration
 
 Everything lives in one YAML file and every setting can be changed through
-the API without a restart (the DNS listen address is the one exception).
+the API or Settings page without a restart (the two listen addresses and
+the query-log storage location are the exceptions — those are file-only).
 Key sections:
 
 ```yaml

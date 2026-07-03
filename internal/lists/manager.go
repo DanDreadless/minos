@@ -51,11 +51,11 @@ type Manager struct {
 
 func NewManager(engine *filter.Engine, store *config.Store) *Manager {
 	m := &Manager{
-		engine: engine,
-		store:  store,
-		client: &http.Client{Timeout: fetchTimeout},
-		cached: make(map[string][]byte),
-		status: make(map[string]*SourceStatus),
+		engine:     engine,
+		store:      store,
+		client:     &http.Client{Timeout: fetchTimeout},
+		cached:     make(map[string][]byte),
+		status:     make(map[string]*SourceStatus),
 		refreshNow: make(chan struct{}, 1),
 	}
 	// Config changes (new pardons/sentences, list edits) rebuild from cache
@@ -93,6 +93,44 @@ func (m *Manager) TriggerRebuild() {
 // Sources that fail keep their last good cached body.
 func (m *Manager) Refresh(ctx context.Context) {
 	m.rebuild(ctx, true)
+}
+
+// EnsureFetched downloads only enabled sources that have no cached body yet
+// (freshly added or URL-changed lists), then rebuilds. Cheaper than a full
+// Refresh after a config edit.
+func (m *Manager) EnsureFetched(ctx context.Context) {
+	cfg := m.store.Get()
+	for _, src := range cfg.Lists.Sources {
+		if !src.Enabled {
+			continue
+		}
+		m.mu.Lock()
+		_, have := m.cached[src.Name]
+		m.mu.Unlock()
+		if have {
+			continue
+		}
+		body, err := m.fetch(ctx, src.URL)
+		m.mu.Lock()
+		if err != nil {
+			slog.Warn("list fetch failed", "list", src.Name, "url", src.URL, "err", err)
+			m.setStatusError(src, err)
+		} else {
+			m.cached[src.Name] = body
+			m.setStatusFetched(src)
+		}
+		m.mu.Unlock()
+	}
+	m.rebuild(ctx, false)
+}
+
+// Forget drops the cached body and status for a source, forcing a refetch on
+// the next EnsureFetched/Refresh. Used when a list is removed or its URL edited.
+func (m *Manager) Forget(name string) {
+	m.mu.Lock()
+	delete(m.cached, name)
+	delete(m.status, name)
+	m.mu.Unlock()
 }
 
 func (m *Manager) rebuild(ctx context.Context, refetch bool) {

@@ -44,9 +44,9 @@ func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 // Upstream is a single upstream resolver.
 type Upstream struct {
 	// Address is host:port for udp/tcp/dot, or a full URL for doh.
-	Address string `yaml:"address"`
+	Address string `yaml:"address" json:"address"`
 	// Protocol is one of: udp, tcp, dot, doh.
-	Protocol string `yaml:"protocol"`
+	Protocol string `yaml:"protocol" json:"protocol"`
 }
 
 type DNSConfig struct {

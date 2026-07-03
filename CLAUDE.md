@@ -214,3 +214,12 @@ This is security software; hold it to that standard.
 - **web/dist is committed**: it's embedded via `go:embed all:dist`, so
   a plain `go build` must work without Node. Rebuild it (`make web`)
   whenever `web/src` changes and commit the result.
+- **Restart-free settings, and the exceptions**: everything editable via
+  `PUT /api/config` applies live (upstreams/mode/TTL via dnsproxy atomic
+  pointers; retention/ring size via `querylog.SetRetentionDays`/`Resize`
+  wired in main's OnChange). The deliberate exceptions — file-only, need
+  a restart — are `dns.listen`, `api.listen`, and query-log storage
+  (`ephemeral`/`db_path`). Don't expose those as editable in the UI.
+- **Dashboard aggregates read SQLite** (or the ring in ephemeral mode),
+  so entries buffered but not yet flushed (≤30s/500) are missing from
+  charts. Accepted skew — do not "fix" it by flushing per query.

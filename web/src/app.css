@@ -1,17 +1,23 @@
 /* Minos — courtroom gravitas, not fantasy game.
-   Dark slate base, laurel gold accent, one meander detail in the header. */
+   Dark slate base, laurel gold accent, oxblood reserved for verdicts.
+   Serif display for headings; readable sans for body; mono for domains. */
 
 :root {
-  --bg: #16181d;
-  --bg-raised: #1e2128;
-  --bg-hover: #262a33;
-  --border: #2e333d;
-  --text: #d6d8dd;
+  --bg: #14161b;
+  --bg-sunken: #101217;
+  --bg-raised: #1c1f26;
+  --bg-hover: #252932;
+  --border: #2d323d;
+  --text: #d8dade;
   --text-dim: #8a8f9a;
   --accent: #c9a227; /* laurel gold */
-  --blocked: #a63d40; /* oxblood, used sparingly for verdicts */
+  --blocked: #a63d40; /* oxblood */
   --allowed: #6a8f6b;
-  font-family: 'Georgia', 'Times New Roman', serif;
+  --chart-total: #3d4453;
+  --font-display: Georgia, 'Times New Roman', serif;
+  --font-body:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace;
 }
 
 * {
@@ -22,20 +28,33 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
+  font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.5;
 }
 
-#app {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 1.5rem 4rem;
-}
-
 h1,
 h2 {
+  font-family: var(--font-display);
   font-weight: normal;
   letter-spacing: 0.04em;
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin: 0 0 1.25rem;
+}
+
+h2 {
+  font-size: 1.05rem;
+  margin: 0 0 0.9rem;
+}
+
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.1rem 1.3rem;
 }
 
 button {
@@ -44,14 +63,22 @@ button {
   background: transparent;
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 4px;
   padding: 0.35rem 0.9rem;
-  transition: border-color 0.15s, color 0.15s;
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 button.primary {
@@ -59,24 +86,50 @@ button.primary {
   color: var(--accent);
 }
 
-input {
+button.primary:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+button.danger:hover:not(:disabled) {
+  border-color: var(--blocked);
+  color: var(--blocked);
+}
+
+input,
+select {
   font: inherit;
-  background: var(--bg-raised);
+  background: var(--bg-sunken);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 4px;
   padding: 0.35rem 0.6rem;
 }
 
-input:focus {
+input:focus,
+select:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
+  width: 1rem;
+  height: 1rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
 }
 
@@ -84,10 +137,11 @@ th {
   text-align: left;
   color: var(--text-dim);
   font-weight: normal;
-  padding: 0.4rem 0.75rem;
+  padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--border);
-  font-family: Georgia, serif;
-  letter-spacing: 0.05em;
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+  background: var(--bg-raised);
 }
 
 td {
@@ -96,9 +150,32 @@ td {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 28rem;
+  max-width: 26rem;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
 }
 
 tr:hover td {
   background: var(--bg-hover);
+}
+
+.badge {
+  display: inline-block;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  border: 1px solid;
+}
+
+.badge.blocked {
+  color: var(--blocked);
+  border-color: var(--blocked);
+}
+
+.badge.allowed {
+  color: var(--allowed);
+  border-color: color-mix(in srgb, var(--allowed) 55%, transparent);
 }

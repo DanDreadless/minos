@@ -26,7 +26,7 @@ func TestNormalizeDomain(t *testing.T) {
 		{"exa mple.com", ""},
 		{"bücher.example", ""},
 		{"exam\x00ple.com", ""},
-		{strings.Repeat("a", 64) + ".com", ""},           // label too long
+		{strings.Repeat("a", 64) + ".com", ""}, // label too long
 		{strings.Repeat("a.", 127) + "toolongoverall", ""}, // name too long
 		{"a..b", ""},
 	}
