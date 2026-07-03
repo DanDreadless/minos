@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"minos/internal/clients"
 	"minos/internal/config"
 	"minos/internal/filter"
 	"minos/internal/lists"
@@ -34,7 +35,10 @@ func newTestServer(t *testing.T, token string) (*Server, *config.Store) {
 	}
 	t.Cleanup(func() { _ = qlog.Close() })
 	mgr := lists.NewManager(engine, store)
-	return New(engine, qlog, store, mgr, nil, "test"), store
+	reg := clients.NewRegistry()
+	reg.ApplyConfig(store.Get())
+	store.OnChange(func(c *config.Config) { reg.ApplyConfig(c) })
+	return New(engine, qlog, store, mgr, reg, nil, "test"), store
 }
 
 func doJSON(t *testing.T, h http.Handler, method, path, body string, hdr map[string]string) *httptest.ResponseRecorder {

@@ -20,8 +20,14 @@ A DNS forwarding/filtering proxy with an embedded web UI:
 - Single static binary, frontend embedded via `go:embed`
 
 **We are NOT building (pre-1.0, do not add without a maintainer decision):**
-a DHCP server, a recursive resolver, per-client group policies, clustering,
-or plugin systems. If a task drifts toward these, stop and flag it.
+a DHCP server, a recursive resolver, clustering, or plugin systems. If a
+task drifts toward these, stop and flag it.
+
+(Per-client group policies were originally on this list; the maintainer
+decided to add them in July 2026 — see `internal/clients`. The bounded
+design: groups are filter/bypass/block with small per-group domain
+overlays, not per-group blocklist subscriptions, which would multiply
+matcher memory.)
 
 ## Product vocabulary (the lore layer)
 
@@ -70,6 +76,7 @@ Treat these as CI-enforceable budgets, not aspirations:
 ```
 cmd/minos/             main.go — flag parsing, wiring, graceful shutdown only
 internal/dnsproxy/     DNS server + upstream forwarding (miekg/dns)
+internal/clients/      device registry, group policies, ARP/PTR enrichment
 internal/filter/       blocklist engine: parsing, compilation, matching
 internal/lists/        blocklist fetching, refresh scheduling, format parsers
 internal/querylog/     ring buffer + batched SQLite flush
@@ -223,3 +230,15 @@ This is security software; hold it to that standard.
 - **Dashboard aggregates read SQLite** (or the ring in ephemeral mode),
   so entries buffered but not yet flushed (≤30s/500) are missing from
   charts. Accepted skew — do not "fix" it by flushing per query.
+- **Device policy semantics** (fixed decisions): assignment is by source
+  IP (MAC is informational; use DHCP reservations for stability). A
+  client's `blocked: true` overrides its group, including bypass. A
+  device-level DNS block is access control, so recess does NOT lift it;
+  recess does silence group overlay rules. Group overlay pardons beat
+  global denies. Hot-path cost is one sync.Map touch (~15ns) plus one
+  atomic map read (~5ns), zero allocations — keep it that way.
+- **Device identity is best-effort**: MAC comes from the ARP/neighbor
+  table (only works when Minos shares the L2 segment; IPv4 only for
+  now), hostname from a reverse-DNS lookup. Both run on the enrichment
+  worker, never on the query path. Windows reads `arp -a`; Linux reads
+  /proc/net/arp.

@@ -9,6 +9,7 @@ export const copy = {
   nav: {
     dashboard: { label: 'The Tribunal', hint: 'dashboard' },
     querylog: { label: 'The Docket', hint: 'query log' },
+    devices: { label: 'Devices', hint: 'clients & groups' },
     lists: { label: 'The Codex', hint: 'blocklists' },
     domains: { label: 'Pardons & Sentences', hint: 'allow & deny domains' },
     settings: { label: 'Settings', hint: 'server configuration' },
@@ -94,6 +95,33 @@ export const copy = {
     sentencesHint: 'domains always blocked (and their subdomains)',
     sentencesEmpty: 'No standing sentences.',
     addPlaceholder: 'domain to add…',
+  },
+
+  devices: {
+    title: 'Devices',
+    subtitle: 'every client that queries this resolver',
+    empty: 'No devices yet. Point something at this resolver and it appears here.',
+    neverSeen: 'never',
+    blockAction: 'Block DNS',
+    blockHint: 'refuse all DNS from this device',
+    unblockAction: 'Unblock',
+    blockedBadge: 'DNS blocked',
+    namePlaceholder: 'label…',
+    groupDefault: 'default (full rules)',
+    groupsTitle: 'Groups',
+    groupsHint: 'device policies — assign devices above',
+    groupsEmpty: 'No groups. Devices follow the default rules until you create one.',
+    modeFilter: 'filter — default rules plus this group’s lists',
+    modeBypass: 'bypass — no filtering at all',
+    modeBlock: 'block — refuse all DNS',
+    addTitle: 'Create a group',
+    extraAllow: 'Extra pardons (always allow)',
+    extraDeny: 'Extra sentences (always block)',
+    listPlaceholder: 'comma-separated domains',
+    confirmDelete: (name: string) =>
+      `Delete the group "${name}"? Its devices fall back to the default rules.`,
+    forget: 'Forget',
+    forgetHint: 'remove the saved label/group for this device',
   },
 
   settings: {

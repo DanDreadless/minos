@@ -79,6 +79,27 @@ export interface ListStatus {
   last_error?: string;
 }
 
+export interface Device {
+  ip: string;
+  mac?: string;
+  hostname?: string;
+  name?: string;
+  group: string;
+  blocked: boolean;
+  seen: boolean;
+  queries: number;
+  queries_blocked: number;
+  first_seen?: string;
+  last_seen?: string;
+}
+
+export interface Group {
+  name: string;
+  mode: 'filter' | 'bypass' | 'block';
+  allowlist: string[] | null;
+  denylist: string[] | null;
+}
+
 const TOKEN_KEY = 'minos-api-token';
 
 export function getToken(): string {
@@ -146,6 +167,22 @@ export const api = {
   sentence: (domain: string) => request<unknown>('POST', '/api/denylist', { domain }),
   unsentence: (domain: string) =>
     request<unknown>('DELETE', `/api/denylist/${encodeURIComponent(domain)}`),
+
+  clients: () => request<Device[]>('GET', '/api/clients'),
+  updateClient: (
+    ip: string,
+    upd: { name?: string; mac?: string; group?: string; blocked?: boolean },
+  ) => request<Device[]>('PUT', `/api/clients/${encodeURIComponent(ip)}`, upd),
+  deleteClient: (ip: string) =>
+    request<Device[]>('DELETE', `/api/clients/${encodeURIComponent(ip)}`),
+
+  groups: () => request<Group[]>('GET', '/api/groups'),
+  addGroup: (g: { name: string; mode: string; allowlist?: string[]; denylist?: string[] }) =>
+    request<Group[]>('POST', '/api/groups', g),
+  updateGroup: (name: string, upd: { mode?: string; allowlist?: string[]; denylist?: string[] }) =>
+    request<Group[]>('PUT', `/api/groups/${encodeURIComponent(name)}`, upd),
+  deleteGroup: (name: string) =>
+    request<Group[]>('DELETE', `/api/groups/${encodeURIComponent(name)}`),
 
   pause: (duration: string) =>
     request<{ paused: boolean; paused_until?: string }>('POST', '/api/pause', { duration }),

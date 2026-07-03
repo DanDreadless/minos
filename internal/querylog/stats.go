@@ -194,6 +194,42 @@ func (l *Log) TopClients(ctx context.Context, since time.Time, n int) ([]ClientS
 	return out, nil
 }
 
+// ClientSummary is per-client lifetime state from the persisted log, used to
+// rehydrate the device registry after a restart.
+type ClientSummary struct {
+	Client  string
+	Total   uint64
+	Blocked uint64
+	First   time.Time
+	Last    time.Time
+}
+
+// ClientsSummary aggregates the persisted log per client. Returns nil in
+// ephemeral mode. Called once at startup, never on the hot path.
+func (l *Log) ClientsSummary(ctx context.Context) ([]ClientSummary, error) {
+	if l.db == nil {
+		return nil, nil
+	}
+	rows, err := l.db.QueryContext(ctx, `SELECT client, COUNT(*),
+		SUM(verdict = ?), MIN(ts), MAX(ts) FROM querylog GROUP BY client`,
+		VerdictBlocked)
+	if err != nil {
+		return nil, fmt.Errorf("clients summary: %w", err)
+	}
+	defer rows.Close()
+	var out []ClientSummary
+	for rows.Next() {
+		var c ClientSummary
+		var first, last int64
+		if err := rows.Scan(&c.Client, &c.Total, &c.Blocked, &first, &last); err != nil {
+			return nil, fmt.Errorf("clients summary scan: %w", err)
+		}
+		c.First, c.Last = time.UnixMilli(first), time.UnixMilli(last)
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // scanRing visits ring entries at or after since, under the read lock.
 func (l *Log) scanRing(since time.Time, visit func(Entry)) {
 	l.ringMu.RLock()

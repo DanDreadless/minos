@@ -14,6 +14,7 @@ import (
 
 	"github.com/miekg/dns"
 
+	"minos/internal/clients"
 	"minos/internal/config"
 	"minos/internal/filter"
 	"minos/internal/querylog"
@@ -28,8 +29,9 @@ type blockingPolicy struct {
 
 // Server listens on UDP+TCP and serves judged queries.
 type Server struct {
-	engine *filter.Engine
-	qlog   *querylog.Log
+	engine  *filter.Engine
+	qlog    *querylog.Log
+	clients *clients.Registry
 
 	listen    string
 	udp       *dns.Server
@@ -39,11 +41,12 @@ type Server struct {
 	upstreams atomic.Pointer[[]Upstream]
 }
 
-func New(cfg *config.Config, engine *filter.Engine, qlog *querylog.Log) (*Server, error) {
+func New(cfg *config.Config, engine *filter.Engine, qlog *querylog.Log, reg *clients.Registry) (*Server, error) {
 	s := &Server{
-		engine: engine,
-		qlog:   qlog,
-		listen: cfg.DNS.Listen,
+		engine:  engine,
+		qlog:    qlog,
+		clients: reg,
+		listen:  cfg.DNS.Listen,
 	}
 	if err := s.ApplyConfig(cfg); err != nil {
 		return nil, err
@@ -144,12 +147,45 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		return
 	}
 
-	verdict := s.engine.Match(qname)
 	entry := querylog.Entry{
 		Time:   start,
 		Client: clientIP(w.RemoteAddr()),
 		QName:  qname,
 		QType:  dns.TypeToString[q.Qtype],
+	}
+
+	// Per-device policy: one atomic map read; nil means the default rules.
+	pol := s.clients.PolicyFor(entry.Client)
+	if pol.Refuses() {
+		// Device-level DNS block. Deliberately unaffected by recess: it is
+		// access control, not content filtering.
+		reply := new(dns.Msg)
+		reply.SetRcode(req, dns.RcodeRefused)
+		_ = w.WriteMsg(reply)
+		entry.Verdict = querylog.VerdictBlocked
+		entry.List = "clients"
+		entry.Rule = "dns access blocked"
+		s.record(entry, start)
+		return
+	}
+
+	var verdict filter.Result
+	if pol.Bypasses() {
+		entry.List = "group:" + pol.Group
+		entry.Rule = "bypass"
+	} else {
+		// A filter-mode group's overlay is judged first (its pardons beat
+		// global denies, its sentences add blocks); recess silences both.
+		if pol != nil && pol.Overlay != nil {
+			if paused, _ := s.engine.Paused(); !paused {
+				if res := pol.Overlay.Match(qname); res.Rule != "" {
+					verdict = res
+				}
+			}
+		}
+		if verdict.Rule == "" {
+			verdict = s.engine.Match(qname)
+		}
 	}
 
 	if verdict.Blocked {
@@ -158,8 +194,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		entry.Verdict = querylog.VerdictBlocked
 		entry.List = verdict.List
 		entry.Rule = verdict.Rule
-		entry.DurationMs = msSince(start)
-		s.qlog.Record(entry)
+		s.record(entry, start)
 		return
 	}
 
@@ -175,16 +210,21 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		_ = w.WriteMsg(reply)
 		entry.Verdict = querylog.VerdictAllowed
 		entry.Upstream = upstreamName
-		entry.DurationMs = msSince(start)
-		s.qlog.Record(entry)
+		s.record(entry, start)
 		return
 	}
 	resp.Id = req.Id
 	_ = w.WriteMsg(resp)
 	entry.Verdict = querylog.VerdictAllowed
 	entry.Upstream = upstreamName
-	entry.DurationMs = msSince(start)
-	s.qlog.Record(entry)
+	s.record(entry, start)
+}
+
+// record finalizes a query log entry and updates the device registry.
+func (s *Server) record(e querylog.Entry, start time.Time) {
+	e.DurationMs = msSince(start)
+	s.qlog.Record(e)
+	s.clients.Touch(e.Client, e.Verdict == querylog.VerdictBlocked, e.Time)
 }
 
 // forward tries each upstream in order until one answers.

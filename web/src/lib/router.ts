@@ -1,12 +1,14 @@
 // Minimal hash router: '#/docket' → 'docket'. No dependency needed.
 import { readable } from 'svelte/store';
 
-export type Route = 'dashboard' | 'querylog' | 'lists' | 'domains' | 'settings';
+export type Route = 'dashboard' | 'querylog' | 'devices' | 'lists' | 'domains' | 'settings';
 
 function parse(): Route {
   switch (location.hash) {
     case '#/querylog':
       return 'querylog';
+    case '#/devices':
+      return 'devices';
     case '#/lists':
       return 'lists';
     case '#/domains':
@@ -27,6 +29,7 @@ export const route = readable<Route>(parse(), (set) => {
 export const hrefFor: Record<Route, string> = {
   dashboard: '#/',
   querylog: '#/querylog',
+  devices: '#/devices',
   lists: '#/lists',
   domains: '#/domains',
   settings: '#/settings',

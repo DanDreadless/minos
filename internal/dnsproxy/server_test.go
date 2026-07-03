@@ -8,6 +8,7 @@ import (
 
 	"github.com/miekg/dns"
 
+	"minos/internal/clients"
 	"minos/internal/config"
 	"minos/internal/filter"
 	"minos/internal/querylog"
@@ -46,6 +47,13 @@ func startStubUpstream(t *testing.T) string {
 // startProxy builds and starts a judged proxy in front of the stub upstream.
 func startProxy(t *testing.T, mode string, denied ...string) (*Server, *querylog.Log) {
 	t.Helper()
+	srv, qlog := startProxyCfg(t, mode, nil, denied...)
+	return srv, qlog
+}
+
+// startProxyCfg is startProxy with a config mutator, for group/client tests.
+func startProxyCfg(t *testing.T, mode string, mutate func(*config.Config), denied ...string) (*Server, *querylog.Log) {
+	t.Helper()
 	upstream := startStubUpstream(t)
 
 	engine := filter.NewEngine()
@@ -66,8 +74,16 @@ func startProxy(t *testing.T, mode string, denied ...string) (*Server, *querylog
 	cfg.DNS.BlockTTL = 60
 	cfg.DNS.Upstreams = []config.Upstream{{Address: upstream, Protocol: "udp"}}
 	cfg.Blocking.Mode = mode
+	if mutate != nil {
+		mutate(cfg)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
 
-	srv, err := New(cfg, engine, qlog)
+	reg := clients.NewRegistry()
+	reg.ApplyConfig(cfg)
+	srv, err := New(cfg, engine, qlog, reg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +228,7 @@ func TestUpstreamFailureIsServfail(t *testing.T) {
 	// A blackhole upstream: reserved port on localhost that nothing serves.
 	cfg.DNS.Upstreams = []config.Upstream{{Address: "127.0.0.1:1", Protocol: "tcp"}}
 
-	srv, err := New(cfg, engine, qlog)
+	srv, err := New(cfg, engine, qlog, clients.NewRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}

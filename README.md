@@ -20,6 +20,8 @@ no appeals (well, except pardons).
 - Allowed queries are forwarded upstream over DoH or DoT (plaintext optional)
 - Web dashboard with query charts, top blocked domains, and busiest clients
 - Live query log streamed to the UI, with one-click allow/block from any row
+- Device tracking (IP, MAC, hostname) with per-device groups: extra rules,
+  full bypass, or no DNS at all — and a one-click block for any device
 - Full management from the UI: blocklists, allow/deny domains, upstreams,
   blocking mode, retention, API token — all applied live, no restarts
 - Batched SQLite persistence that respects SD cards
@@ -46,10 +48,25 @@ minos resume        # resume blocking
 For local development without root, set `dns.listen: ":5353"` in the config
 and test with `dig @127.0.0.1 -p 5353 doubleclick.net`.
 
-## Deploying
+## Deploying on a Raspberry Pi (or any Linux box)
 
-See `deploy/` for a multi-arch Dockerfile, a compose example, and a hardened
-systemd unit. Docs live in `docs/`.
+Run Minos as a systemd service so it starts on every boot:
+
+```sh
+sudo install -m 755 bin/minos /usr/local/bin/minos
+sudo cp deploy/minos.service /etc/systemd/system/
+sudo systemctl enable --now minos
+```
+
+Before first start, free port 53 (disable the `systemd-resolved` stub
+listener or `dnsmasq`), give the machine a fixed IP, and firewall ports
+53/8080 to your LAN only — the step-by-step walkthrough is in
+[docs/getting-started.md](docs/getting-started.md), including host tuning
+notes for busy networks. Then point your router's DHCP DNS option at the
+machine and every device follows.
+
+`deploy/` also has a multi-arch Dockerfile and compose example
+(`restart: unless-stopped` gives the same boot behavior).
 
 ## Developing
 

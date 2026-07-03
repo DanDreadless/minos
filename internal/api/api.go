@@ -20,6 +20,7 @@ import (
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
+	"minos/internal/clients"
 	"minos/internal/config"
 	"minos/internal/filter"
 	"minos/internal/lists"
@@ -32,19 +33,21 @@ type Server struct {
 	qlog    *querylog.Log
 	store   *config.Store
 	lists   *lists.Manager
+	clients *clients.Registry
 	static  fs.FS // embedded web/dist; nil disables UI serving
 	version string
 	started time.Time
 }
 
 func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
-	mgr *lists.Manager, static fs.FS, version string,
+	mgr *lists.Manager, reg *clients.Registry, static fs.FS, version string,
 ) *Server {
 	return &Server{
 		engine:  engine,
 		qlog:    qlog,
 		store:   store,
 		lists:   mgr,
+		clients: reg,
 		static:  static,
 		version: version,
 		started: time.Now(),
@@ -69,6 +72,13 @@ func (s *Server) Router() http.Handler {
 		r.Post("/lists/refresh", s.handleListsRefresh)
 		r.Put("/lists/{name}", s.handleUpdateList)
 		r.Delete("/lists/{name}", s.handleDeleteList)
+		r.Get("/clients", s.handleGetClients)
+		r.Put("/clients/{ip}", s.handleUpdateClient)
+		r.Delete("/clients/{ip}", s.handleDeleteClient)
+		r.Get("/groups", s.handleGetGroups)
+		r.Post("/groups", s.handleAddGroup)
+		r.Put("/groups/{name}", s.handleUpdateGroup)
+		r.Delete("/groups/{name}", s.handleDeleteGroup)
 		r.Get("/allowlist", s.handleGetDomains("allowlist"))
 		r.Post("/allowlist", s.handleAddDomain("allowlist"))
 		r.Delete("/allowlist/{domain}", s.handleDeleteDomain("allowlist"))

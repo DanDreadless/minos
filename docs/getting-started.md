@@ -24,6 +24,113 @@ port 53 needs root/admin on most systems; on Linux prefer the systemd unit in
 
 Then point a client (or your router's DHCP DNS option) at the machine's IP.
 
+## Prepare the host (Raspberry Pi / Linux)
+
+Do these once before first start so port 53 is free and DNS flows to Minos
+without contention. Commands assume Raspberry Pi OS / Debian / Ubuntu.
+
+**1. Give the machine a fixed IP.** Every client will point at this address;
+it must never change. Either set a DHCP reservation on your router (easiest)
+or configure a static address on the Pi.
+
+**2. Free port 53.** Most distros run a local stub resolver that already
+occupies it:
+
+```sh
+sudo ss -lunp 'sport = :53'      # who owns port 53 right now?
+```
+
+If `systemd-resolved` owns it (Ubuntu, some Debian setups):
+
+```sh
+sudo mkdir -p /etc/systemd/resolved.conf.d
+printf '[Resolve]\nDNSStubListener=no\n' | \
+  sudo tee /etc/systemd/resolved.conf.d/minos.conf
+sudo systemctl restart systemd-resolved
+```
+
+If `dnsmasq` owns it (common when Pi-hole was installed before, or with some
+router/AP packages):
+
+```sh
+sudo systemctl disable --now dnsmasq
+```
+
+**3. Keep the host's own lookups working.** The Pi itself needs a resolver —
+during boot Minos isn't up yet, and Minos needs DNS to fetch blocklists and
+reach DoH/DoT upstreams. The robust setup is to point the host straight at an
+upstream rather than at Minos itself:
+
+```sh
+sudo rm -f /etc/resolv.conf     # may be a resolved-managed symlink
+printf 'nameserver 1.1.1.1\nnameserver 9.9.9.9\n' | sudo tee /etc/resolv.conf
+```
+
+(If you prefer the host to be filtered too, use `nameserver 127.0.0.1` — but
+then add a real upstream as the second entry so boot ordering can't wedge
+the machine.)
+
+**4. Firewall: LAN only.** Nothing outside your network should reach the
+resolver or its admin UI. With ufw, adjusting the subnet to yours:
+
+```sh
+sudo ufw allow from 192.168.1.0/24 to any port 53  proto udp
+sudo ufw allow from 192.168.1.0/24 to any port 53  proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 8080 proto tcp
+sudo ufw enable
+```
+
+Never port-forward 53 or 8080 from the internet: an open resolver gets
+abused for amplification attacks within hours. Set `api.token` in the config
+even on a trusted LAN.
+
+**5. (Busy networks only) raise the UDP buffers.** Defaults are fine for a
+home network; if you serve hundreds of clients, let the kernel queue more
+datagrams during bursts so none are dropped:
+
+```sh
+printf 'net.core.rmem_max=4194304\nnet.core.wmem_max=4194304\n' | \
+  sudo tee /etc/sysctl.d/99-minos.conf
+sudo sysctl --system
+```
+
+Nothing else needs tuning: Minos batches its disk writes (SD-card safe),
+blocked answers are served from memory in well under a millisecond, and
+forwarded queries add only the upstream round trip.
+
+## Run as a service (auto-start on boot)
+
+A hardened systemd unit ships in `deploy/minos.service`: it runs as a
+dynamic non-root user, grants only the capability needed to bind port 53,
+and restarts on failure.
+
+```sh
+# install the binary and the unit
+sudo install -m 755 bin/minos /usr/local/bin/minos
+sudo cp deploy/minos.service /etc/systemd/system/
+
+# enable now + on every boot
+sudo systemctl daemon-reload
+sudo systemctl enable --now minos
+
+# check it
+systemctl status minos
+journalctl -u minos -f                    # follow the logs
+dig @127.0.0.1 doubleclick.net            # should return 0.0.0.0
+```
+
+The unit stores state (config, query-log database) in `/var/lib/minos/`.
+After an upgrade, replace the binary and `sudo systemctl restart minos`.
+
+**Finally, point your network at it:** set your router's DHCP DNS option to
+the Pi's IP so every device picks it up on its next lease renewal — or set
+DNS manually on the devices you care about. Keep a second entry *empty*
+rather than adding a public fallback: a fallback resolver silently bypasses
+all filtering whenever a client feels like using it.
+
+Prefer Docker? `deploy/docker-compose.yaml` has an equivalent setup with
+`restart: unless-stopped` for the same auto-start behavior.
+
 ## The web interface
 
 Open `http://<host>:8080`. Five pages, one per concern:
@@ -35,6 +142,15 @@ Open `http://<host>:8080`. Five pages, one per concern:
   filters. Every blocked entry shows *which list and rule* condemned it and
   has a one-click **Pardon** button; allowed entries can be **Sentenced**
   (blocked) just as fast.
+- **Devices** — every client that queries the resolver, identified by IP
+  plus MAC address (from the ARP table) and hostname (reverse DNS) where
+  available, with query counts and last-seen times. From here you can label
+  a device, block its DNS entirely, or assign it to a **group**:
+  - `filter` groups get the default rules *plus* the group's own extra
+    allow/deny domains (a group pardon beats a global block),
+  - `bypass` groups skip filtering entirely,
+  - `block` groups get no DNS service at all.
+  Unassigned devices follow the default rules.
 - **The Codex** (blocklists) — add, enable/disable, or remove list
   subscriptions and refresh them on demand, with per-list rule counts and
   fetch errors.
@@ -66,6 +182,18 @@ blocking:
   mode: zero_ip             # or nxdomain
   allowlist: []             # pardons: always allowed
   denylist: []              # sentences: always blocked
+groups:                     # device policies (all optional)
+  - name: kids
+    mode: filter            # filter | bypass | block
+    denylist: [tiktok.com]  # extra blocks for members only
+  - name: trusted
+    mode: bypass            # members skip filtering entirely
+clients:                    # device assignments, keyed by IP
+  - ip: 192.168.1.50
+    name: "Danny's laptop"  # free-text label
+    group: trusted
+  - ip: 192.168.1.60
+    blocked: true           # refuse all DNS from this device
 lists:
   sources:
     - name: StevenBlack

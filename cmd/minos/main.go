@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"minos/internal/api"
+	"minos/internal/clients"
 	"minos/internal/config"
 	"minos/internal/dnsproxy"
 	"minos/internal/filter"
@@ -93,7 +94,18 @@ func serve(args []string) error {
 	engine := filter.NewEngine()
 	mgr := lists.NewManager(engine, store)
 
-	proxy, err := dnsproxy.New(cfg, engine, qlog)
+	reg := clients.NewRegistry()
+	reg.ApplyConfig(cfg)
+	// Rehydrate the device list from persisted history (best effort).
+	if summaries, err := qlog.ClientsSummary(context.Background()); err != nil {
+		slog.Warn("device history hydration failed", "err", err)
+	} else {
+		for _, s := range summaries {
+			reg.Seed(s.Client, s.Total, s.Blocked, s.First, s.Last)
+		}
+	}
+
+	proxy, err := dnsproxy.New(cfg, engine, qlog, reg)
 	if err != nil {
 		return err
 	}
@@ -103,6 +115,7 @@ func serve(args []string) error {
 		}
 		qlog.SetRetentionDays(c.QueryLog.RetentionDays)
 		qlog.Resize(c.QueryLog.RingSize)
+		reg.ApplyConfig(c)
 	})
 	if err := proxy.Start(); err != nil {
 		return err
@@ -111,12 +124,13 @@ func serve(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	go mgr.Run(ctx)
+	go reg.Run(ctx)
 
 	static, err := iofs.Sub(web.Dist, "dist")
 	if err != nil {
 		return fmt.Errorf("embedded ui: %w", err)
 	}
-	apiSrv := api.New(engine, qlog, store, mgr, static, version)
+	apiSrv := api.New(engine, qlog, store, mgr, reg, static, version)
 	httpSrv := &http.Server{
 		Addr:              cfg.API.Listen,
 		Handler:           apiSrv.Router(),

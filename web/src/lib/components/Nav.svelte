@@ -8,6 +8,7 @@
   const items: { key: Route; label: string; hint: string }[] = [
     { key: 'dashboard', ...copy.nav.dashboard },
     { key: 'querylog', ...copy.nav.querylog },
+    { key: 'devices', ...copy.nav.devices },
     { key: 'lists', ...copy.nav.lists },
     { key: 'domains', ...copy.nav.domains },
     { key: 'settings', ...copy.nav.settings },

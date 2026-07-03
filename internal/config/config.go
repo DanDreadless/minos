@@ -63,6 +63,32 @@ type BlockingConfig struct {
 	Denylist  []string `yaml:"denylist"`
 }
 
+// Group is a named device policy. Devices not assigned to a group get the
+// default behavior: the full blocklist rules.
+type Group struct {
+	Name string `yaml:"name" json:"name"`
+	// Mode is "filter" (default rules plus this group's extra lists),
+	// "bypass" (no filtering at all), or "block" (refuse all DNS).
+	Mode string `yaml:"mode" json:"mode"`
+	// Extra domains for filter-mode groups, layered over the global rules.
+	// Group allowlist entries beat global denies; group denylist entries
+	// add blocks for members only.
+	Allowlist []string `yaml:"allowlist,omitempty" json:"allowlist"`
+	Denylist  []string `yaml:"denylist,omitempty" json:"denylist"`
+}
+
+// Client is a device assignment, keyed by IP. MAC and Name are labels the
+// user (or ARP enrichment) attaches; matching is by source IP.
+type Client struct {
+	IP   string `yaml:"ip" json:"ip"`
+	MAC  string `yaml:"mac,omitempty" json:"mac,omitempty"`
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+	// Group is the assigned group name; empty means the default rules.
+	Group string `yaml:"group,omitempty" json:"group,omitempty"`
+	// Blocked refuses all DNS from this device, overriding any group.
+	Blocked bool `yaml:"blocked,omitempty" json:"blocked"`
+}
+
 // ListSource is one remote blocklist subscription.
 type ListSource struct {
 	Name    string `yaml:"name"`
@@ -92,6 +118,8 @@ type APIConfig struct {
 type Config struct {
 	DNS      DNSConfig      `yaml:"dns"`
 	Blocking BlockingConfig `yaml:"blocking"`
+	Groups   []Group        `yaml:"groups,omitempty"`
+	Clients  []Client       `yaml:"clients,omitempty"`
 	Lists    ListsConfig    `yaml:"lists"`
 	QueryLog QueryLogConfig `yaml:"querylog"`
 	API      APIConfig      `yaml:"api"`
@@ -135,6 +163,13 @@ func (c *Config) Clone() *Config {
 	out.Blocking.Allowlist = append([]string(nil), c.Blocking.Allowlist...)
 	out.Blocking.Denylist = append([]string(nil), c.Blocking.Denylist...)
 	out.Lists.Sources = append([]ListSource(nil), c.Lists.Sources...)
+	out.Groups = make([]Group, len(c.Groups))
+	for i, g := range c.Groups {
+		out.Groups[i] = g
+		out.Groups[i].Allowlist = append([]string(nil), g.Allowlist...)
+		out.Groups[i].Denylist = append([]string(nil), g.Denylist...)
+	}
+	out.Clients = append([]Client(nil), c.Clients...)
 	return &out
 }
 
@@ -165,6 +200,42 @@ func (c *Config) Validate() error {
 	case "zero_ip", "nxdomain":
 	default:
 		return fmt.Errorf("blocking.mode: must be zero_ip or nxdomain, got %q", c.Blocking.Mode)
+	}
+	groupNames := make(map[string]bool, len(c.Groups))
+	for i, g := range c.Groups {
+		if g.Name == "" {
+			return fmt.Errorf("groups[%d].name: must not be empty", i)
+		}
+		if g.Name == "default" {
+			return fmt.Errorf("groups[%d].name: %q is reserved for unassigned devices", i, g.Name)
+		}
+		if groupNames[g.Name] {
+			return fmt.Errorf("groups[%d].name: duplicate group %q", i, g.Name)
+		}
+		groupNames[g.Name] = true
+		switch g.Mode {
+		case "filter", "bypass", "block":
+		default:
+			return fmt.Errorf("groups[%d].mode: must be filter, bypass, or block, got %q", i, g.Mode)
+		}
+	}
+	clientIPs := make(map[string]bool, len(c.Clients))
+	for i, cl := range c.Clients {
+		if net.ParseIP(cl.IP) == nil {
+			return fmt.Errorf("clients[%d].ip: %q is not a valid IP address", i, cl.IP)
+		}
+		if clientIPs[cl.IP] {
+			return fmt.Errorf("clients[%d].ip: duplicate client %q", i, cl.IP)
+		}
+		clientIPs[cl.IP] = true
+		if cl.MAC != "" {
+			if _, err := net.ParseMAC(cl.MAC); err != nil {
+				return fmt.Errorf("clients[%d].mac: %q is not a valid MAC address", i, cl.MAC)
+			}
+		}
+		if cl.Group != "" && cl.Group != "default" && !groupNames[cl.Group] {
+			return fmt.Errorf("clients[%d].group: no group named %q", i, cl.Group)
+		}
 	}
 	for i, s := range c.Lists.Sources {
 		if s.Name == "" {
