@@ -1,0 +1,343 @@
+// Package querylog records every judged query. The hot path does one
+// non-blocking channel send; a single writer goroutine owns the in-memory
+// ring buffer (which feeds the live UI), fans entries out to WebSocket
+// subscribers, and flushes batches to SQLite — never per query, to keep
+// SD cards alive.
+package querylog
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	_ "modernc.org/sqlite"
+)
+
+// Entry is one judged query. Field names are the literal API vocabulary:
+// verdict is "blocked" or "allowed" (the UI may dress them up, we don't).
+type Entry struct {
+	Time       time.Time `json:"time"`
+	Client     string    `json:"client"`
+	QName      string    `json:"qname"`
+	QType      string    `json:"qtype"`
+	Verdict    string    `json:"verdict"`
+	List       string    `json:"list,omitempty"`
+	Rule       string    `json:"rule,omitempty"`
+	Upstream   string    `json:"upstream,omitempty"`
+	DurationMs float64   `json:"duration_ms"`
+}
+
+const (
+	VerdictBlocked = "blocked"
+	VerdictAllowed = "allowed"
+
+	flushInterval = 30 * time.Second
+	flushBatch    = 500
+	subBuffer     = 256
+)
+
+// Options configures a Log.
+type Options struct {
+	// RingSize is the in-memory buffer length backing the live UI.
+	RingSize int
+	// DBPath is the SQLite file; ignored when Ephemeral.
+	DBPath string
+	// Ephemeral disables disk persistence entirely.
+	Ephemeral bool
+	// RetentionDays bounds how long rows live in SQLite.
+	RetentionDays int
+}
+
+// Log is safe for concurrent use. Record never blocks the caller.
+type Log struct {
+	ch   chan Entry
+	done chan struct{} // closed to stop the writer
+	dead chan struct{} // closed when the writer has flushed and exited
+
+	ringMu sync.RWMutex
+	ring   []Entry
+	head   int // next write position
+	count  int
+
+	subMu sync.Mutex
+	subs  map[chan Entry]struct{}
+
+	db        *sql.DB
+	retention time.Duration
+
+	total   atomic.Uint64
+	blocked atomic.Uint64
+	dropped atomic.Uint64
+
+	closeOnce sync.Once
+}
+
+func Open(opts Options) (*Log, error) {
+	if opts.RingSize <= 0 {
+		opts.RingSize = 10000
+	}
+	l := &Log{
+		ch:        make(chan Entry, 4096),
+		done:      make(chan struct{}),
+		dead:      make(chan struct{}),
+		ring:      make([]Entry, opts.RingSize),
+		subs:      make(map[chan Entry]struct{}),
+		retention: time.Duration(opts.RetentionDays) * 24 * time.Hour,
+	}
+	if !opts.Ephemeral {
+		db, err := openDB(opts.DBPath)
+		if err != nil {
+			return nil, err
+		}
+		l.db = db
+	}
+	go l.run()
+	return l, nil
+}
+
+func openDB(path string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, fmt.Errorf("open query log db: %w", err)
+	}
+	// One writer goroutine; a second connection would only invite SQLITE_BUSY.
+	db.SetMaxOpenConns(1)
+	for _, pragma := range []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA synchronous=NORMAL",
+	} {
+		if _, err := db.Exec(pragma); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("apply %s: %w", pragma, err)
+		}
+	}
+	const schema = `
+CREATE TABLE IF NOT EXISTS querylog (
+	id          INTEGER PRIMARY KEY,
+	ts          INTEGER NOT NULL,
+	client      TEXT NOT NULL,
+	qname       TEXT NOT NULL,
+	qtype       TEXT NOT NULL,
+	verdict     TEXT NOT NULL,
+	list        TEXT NOT NULL DEFAULT '',
+	rule        TEXT NOT NULL DEFAULT '',
+	upstream    TEXT NOT NULL DEFAULT '',
+	duration_ms REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_querylog_ts ON querylog(ts);`
+	if _, err := db.Exec(schema); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create query log schema: %w", err)
+	}
+	return db, nil
+}
+
+// Record enqueues an entry. It never blocks: if the writer is behind, the
+// entry is dropped and counted — latency beats completeness on the hot path.
+func (l *Log) Record(e Entry) {
+	l.total.Add(1)
+	if e.Verdict == VerdictBlocked {
+		l.blocked.Add(1)
+	}
+	select {
+	case l.ch <- e:
+	default:
+		l.dropped.Add(1)
+	}
+}
+
+// Stats returns lifetime counters (since process start).
+func (l *Log) Stats() (total, blocked, dropped uint64) {
+	return l.total.Load(), l.blocked.Load(), l.dropped.Load()
+}
+
+// Recent returns up to n of the newest entries, newest first.
+func (l *Log) Recent(n int) []Entry {
+	l.ringMu.RLock()
+	defer l.ringMu.RUnlock()
+	if n <= 0 || n > l.count {
+		n = l.count
+	}
+	out := make([]Entry, 0, n)
+	for i := 0; i < n; i++ {
+		idx := (l.head - 1 - i + len(l.ring)*2) % len(l.ring)
+		out = append(out, l.ring[idx])
+	}
+	return out
+}
+
+// Subscribe returns a channel of live entries and a cancel function.
+// Slow subscribers lose entries rather than stalling the writer.
+func (l *Log) Subscribe() (<-chan Entry, func()) {
+	ch := make(chan Entry, subBuffer)
+	l.subMu.Lock()
+	l.subs[ch] = struct{}{}
+	l.subMu.Unlock()
+	var once sync.Once
+	cancel := func() {
+		once.Do(func() {
+			l.subMu.Lock()
+			delete(l.subs, ch)
+			l.subMu.Unlock()
+		})
+	}
+	return ch, cancel
+}
+
+// Close stops the writer, flushing any buffered entries to disk first.
+func (l *Log) Close() error {
+	l.closeOnce.Do(func() { close(l.done) })
+	<-l.dead
+	if l.db != nil {
+		return l.db.Close()
+	}
+	return nil
+}
+
+// run is the single writer goroutine.
+func (l *Log) run() {
+	defer close(l.dead)
+	ticker := time.NewTicker(flushInterval)
+	defer ticker.Stop()
+	pruneTicker := time.NewTicker(24 * time.Hour)
+	defer pruneTicker.Stop()
+
+	batch := make([]Entry, 0, flushBatch)
+	flush := func() {
+		if l.db == nil || len(batch) == 0 {
+			return
+		}
+		if err := l.writeBatch(batch); err != nil {
+			slog.Error("query log flush failed", "err", err, "entries", len(batch))
+		}
+		batch = batch[:0]
+	}
+
+	l.prune()
+	for {
+		select {
+		case e := <-l.ch:
+			l.append(e)
+			l.fanOut(e)
+			if l.db != nil {
+				batch = append(batch, e)
+				if len(batch) >= flushBatch {
+					flush()
+				}
+			}
+		case <-ticker.C:
+			flush()
+		case <-pruneTicker.C:
+			flush()
+			l.prune()
+		case <-l.done:
+			// Drain whatever is already queued, then final flush.
+			for {
+				select {
+				case e := <-l.ch:
+					l.append(e)
+					if l.db != nil {
+						batch = append(batch, e)
+					}
+				default:
+					flush()
+					return
+				}
+			}
+		}
+	}
+}
+
+func (l *Log) append(e Entry) {
+	l.ringMu.Lock()
+	l.ring[l.head] = e
+	l.head = (l.head + 1) % len(l.ring)
+	if l.count < len(l.ring) {
+		l.count++
+	}
+	l.ringMu.Unlock()
+}
+
+func (l *Log) fanOut(e Entry) {
+	l.subMu.Lock()
+	for ch := range l.subs {
+		select {
+		case ch <- e:
+		default: // slow subscriber: drop for them, never stall
+		}
+	}
+	l.subMu.Unlock()
+}
+
+func (l *Log) writeBatch(batch []Entry) error {
+	tx, err := l.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after Commit
+	stmt, err := tx.Prepare(`INSERT INTO querylog
+		(ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare: %w", err)
+	}
+	defer stmt.Close()
+	for _, e := range batch {
+		if _, err := stmt.Exec(e.Time.UnixMilli(), e.Client, e.QName, e.QType,
+			e.Verdict, e.List, e.Rule, e.Upstream, e.DurationMs); err != nil {
+			return fmt.Errorf("insert: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
+}
+
+func (l *Log) prune() {
+	if l.db == nil || l.retention <= 0 {
+		return
+	}
+	cutoff := time.Now().Add(-l.retention).UnixMilli()
+	if _, err := l.db.Exec(`DELETE FROM querylog WHERE ts < ?`, cutoff); err != nil {
+		slog.Error("query log prune failed", "err", err)
+	}
+}
+
+// QueryHistory reads persisted entries from SQLite, newest first, for the
+// API's historical view. Not used on the hot path.
+func (l *Log) QueryHistory(ctx context.Context, limit int, before time.Time) ([]Entry, error) {
+	if l.db == nil {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 1000 {
+		limit = 1000
+	}
+	beforeMs := before.UnixMilli()
+	if before.IsZero() {
+		beforeMs = time.Now().Add(time.Hour).UnixMilli()
+	}
+	rows, err := l.db.QueryContext(ctx, `SELECT ts, client, qname, qtype, verdict,
+		list, rule, upstream, duration_ms FROM querylog
+		WHERE ts < ? ORDER BY ts DESC LIMIT ?`, beforeMs, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query history: %w", err)
+	}
+	defer rows.Close()
+	var out []Entry
+	for rows.Next() {
+		var e Entry
+		var ts int64
+		if err := rows.Scan(&ts, &e.Client, &e.QName, &e.QType, &e.Verdict,
+			&e.List, &e.Rule, &e.Upstream, &e.DurationMs); err != nil {
+			return nil, fmt.Errorf("scan history: %w", err)
+		}
+		e.Time = time.UnixMilli(ts)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}

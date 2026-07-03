@@ -1,0 +1,16 @@
+# Build output
+bin/
+
+# Runtime artifacts
+minos.yaml
+minos.db
+minos.db-wal
+minos.db-shm
+
+# Frontend
+web/node_modules/
+# web/dist IS committed: the Go binary embeds it via go:embed.
+
+# Editor/OS noise
+.DS_Store
+Thumbs.db
