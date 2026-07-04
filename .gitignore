@@ -14,3 +14,6 @@ web/node_modules/
 # Editor/OS noise
 .DS_Store
 Thumbs.db
+
+# Claude
+.claude/
