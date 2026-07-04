@@ -62,11 +62,18 @@ jobs:
       - name: create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+        # Idempotent so a rerun after a partial failure replaces assets
+        # instead of colliding with the existing release.
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            dist/*.tar.gz dist/*.zip dist/checksums.txt \
-            --title "Minos $GITHUB_REF_NAME" \
-            --generate-notes
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              dist/*.tar.gz dist/*.zip dist/checksums.txt --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              dist/*.tar.gz dist/*.zip dist/checksums.txt \
+              --title "Minos $GITHUB_REF_NAME" \
+              --generate-notes
+          fi
 
   docker:
     needs: test
