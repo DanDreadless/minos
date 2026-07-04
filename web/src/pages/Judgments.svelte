@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type CheckResult } from '../lib/api';
+  import { api, type CheckResult, type LocalRecord } from '../lib/api';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
@@ -11,13 +11,63 @@
   let checkDomain = '';
   let checkResult: CheckResult | null = null;
   let checkError = '';
+  let localRecords: LocalRecord[] = [];
+  let newLocalName = '';
+  let newLocalType = 'A';
+  let newLocalValue = '';
 
   async function load(): Promise<void> {
     try {
-      [allowlist, denylist] = await Promise.all([api.allowlist(), api.denylist()]);
+      const [al, dl, cfg] = await Promise.all([
+        api.allowlist(),
+        api.denylist(),
+        api.getConfig(),
+      ]);
+      allowlist = al;
+      denylist = dl;
+      localRecords = cfg.dns.local_records;
     } catch (e) {
       notifyError(e);
     }
+  }
+
+  function describeRecord(r: LocalRecord): string {
+    if (r.cname) return `CNAME → ${r.cname}`;
+    const parts: string[] = [];
+    if (r.a?.length) parts.push(r.a.join(', '));
+    if (r.aaaa?.length) parts.push(r.aaaa.join(', '));
+    return parts.join(' · ');
+  }
+
+  async function saveLocalRecords(records: LocalRecord[]): Promise<void> {
+    try {
+      const cfg = await api.updateConfig({ dns: { local_records: records } });
+      localRecords = cfg.dns.local_records;
+      notify(copy.settings.saved);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function addLocalRecord(): Promise<void> {
+    const name = newLocalName.trim();
+    const value = newLocalValue.trim();
+    if (!name || !value) return;
+    const rec: LocalRecord = { name };
+    const values = value
+      .split(/[\s,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (newLocalType === 'CNAME') rec.cname = values[0];
+    else if (newLocalType === 'AAAA') rec.aaaa = values;
+    else rec.a = values;
+    await saveLocalRecords([...localRecords, rec]);
+    newLocalName = '';
+    newLocalValue = '';
+  }
+
+  async function removeLocalRecord(name: string): Promise<void> {
+    await saveLocalRecords(localRecords.filter((r) => r.name !== name));
   }
 
   async function check(): Promise<void> {
@@ -144,6 +194,42 @@
   </div>
 </section>
 
+<section class="card local">
+  <h2>{copy.domains.localTitle} <small>{copy.domains.localHint}</small></h2>
+  <form class="local-add" on:submit|preventDefault={addLocalRecord}>
+    <input placeholder={copy.domains.localNamePlaceholder} bind:value={newLocalName} required />
+    <select bind:value={newLocalType} title="record type">
+      <option value="A">A (IPv4)</option>
+      <option value="AAAA">AAAA (IPv6)</option>
+      <option value="CNAME">CNAME (alias)</option>
+    </select>
+    <input
+      placeholder={copy.domains.localValuePlaceholder(newLocalType)}
+      bind:value={newLocalValue}
+      required
+    />
+    <button type="submit" class="primary" disabled={!newLocalName.trim() || !newLocalValue.trim()}>
+      {copy.domains.localAdd}
+    </button>
+  </form>
+  <p class="note">{copy.domains.localWildcardNote}</p>
+  {#if localRecords.length === 0}
+    <p class="empty">{copy.domains.localEmpty}</p>
+  {:else}
+    <ul>
+      {#each localRecords as r (r.name)}
+        <li>
+          <span class="domain">{r.name}</span>
+          <span class="record-value">{describeRecord(r)}</span>
+          <button class="row-action" title="remove record" on:click={() => removeLocalRecord(r.name)}>
+            Remove
+          </button>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+</section>
+
 <style>
   h1 small,
   h2 small {
@@ -214,5 +300,34 @@
   .row-action {
     padding: 0.1rem 0.6rem;
     font-size: 0.75rem;
+  }
+
+  .local {
+    margin-top: 1.25rem;
+  }
+
+  .local-add {
+    flex-wrap: wrap;
+  }
+
+  .local-add input {
+    min-width: 12rem;
+  }
+
+  .record-value {
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    flex: 1;
+    text-align: right;
+    margin-right: 0.8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .note {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    margin: 0 0 0.6rem;
   }
 </style>

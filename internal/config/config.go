@@ -55,6 +55,20 @@ type DNSConfig struct {
 	// BlockTTL is the TTL (seconds) on synthesized blocked responses.
 	BlockTTL uint32      `yaml:"block_ttl"`
 	Cache    CacheConfig `yaml:"cache"`
+	// LocalRecords are names Minos answers itself, never forwarding them
+	// upstream. LocalTTL is the TTL (seconds) on those answers.
+	LocalRecords []LocalRecord `yaml:"local_records,omitempty"`
+	LocalTTL     uint32        `yaml:"local_ttl"`
+}
+
+// LocalRecord is one locally-answered DNS name: address records, or a CNAME
+// alias (mutually exclusive). A leading "*." makes it a wildcard that matches
+// subdomains at any depth (but not the bare parent name).
+type LocalRecord struct {
+	Name  string   `yaml:"name" json:"name"`
+	A     []string `yaml:"a,omitempty" json:"a,omitempty"`
+	AAAA  []string `yaml:"aaaa,omitempty" json:"aaaa,omitempty"`
+	CNAME string   `yaml:"cname,omitempty" json:"cname,omitempty"`
 }
 
 // CacheConfig bounds the in-memory DNS response cache. Any config change
@@ -154,6 +168,7 @@ func Default() *Config {
 				MinTTL:     10,
 				MaxTTL:     3600,
 			},
+			LocalTTL: 300,
 		},
 		Blocking: BlockingConfig{Mode: "zero_ip"},
 		Lists: ListsConfig{
@@ -189,6 +204,12 @@ func (c *Config) Clone() *Config {
 		out.Groups[i].Denylist = append([]string(nil), g.Denylist...)
 	}
 	out.Clients = append([]Client(nil), c.Clients...)
+	out.DNS.LocalRecords = make([]LocalRecord, len(c.DNS.LocalRecords))
+	for i, r := range c.DNS.LocalRecords {
+		out.DNS.LocalRecords[i] = r
+		out.DNS.LocalRecords[i].A = append([]string(nil), r.A...)
+		out.DNS.LocalRecords[i].AAAA = append([]string(nil), r.AAAA...)
+	}
 	return &out
 }
 
@@ -225,6 +246,41 @@ func (c *Config) Validate() error {
 		if c.DNS.Cache.MinTTL > c.DNS.Cache.MaxTTL {
 			return fmt.Errorf("dns.cache.min_ttl: %d exceeds max_ttl %d",
 				c.DNS.Cache.MinTTL, c.DNS.Cache.MaxTTL)
+		}
+	}
+	if len(c.DNS.LocalRecords) > 0 && c.DNS.LocalTTL == 0 {
+		return fmt.Errorf("dns.local_ttl: must be at least 1 second")
+	}
+	localNames := make(map[string]bool, len(c.DNS.LocalRecords))
+	for i, r := range c.DNS.LocalRecords {
+		name := strings.TrimPrefix(r.Name, "*.")
+		if !validDomain(name) {
+			return fmt.Errorf("dns.local_records[%d].name: %q is not a valid domain", i, r.Name)
+		}
+		if localNames[r.Name] {
+			return fmt.Errorf("dns.local_records[%d].name: duplicate record %q", i, r.Name)
+		}
+		localNames[r.Name] = true
+		if r.CNAME != "" && (len(r.A) > 0 || len(r.AAAA) > 0) {
+			return fmt.Errorf("dns.local_records[%d]: cname and address records are mutually exclusive", i)
+		}
+		if r.CNAME == "" && len(r.A) == 0 && len(r.AAAA) == 0 {
+			return fmt.Errorf("dns.local_records[%d]: needs at least one of a, aaaa, or cname", i)
+		}
+		if r.CNAME != "" && !validDomain(r.CNAME) {
+			return fmt.Errorf("dns.local_records[%d].cname: %q is not a valid domain", i, r.CNAME)
+		}
+		for _, a := range r.A {
+			ip := net.ParseIP(a)
+			if ip == nil || ip.To4() == nil {
+				return fmt.Errorf("dns.local_records[%d].a: %q is not a valid IPv4 address", i, a)
+			}
+		}
+		for _, a := range r.AAAA {
+			ip := net.ParseIP(a)
+			if ip == nil || ip.To4() != nil {
+				return fmt.Errorf("dns.local_records[%d].aaaa: %q is not a valid IPv6 address", i, a)
+			}
 		}
 	}
 	switch c.Blocking.Mode {
@@ -298,6 +354,36 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("api.listen: %w", err)
 	}
 	return nil
+}
+
+// validDomain reports whether s looks like a DNS name: labels of 1-63 bytes
+// from [A-Za-z0-9_-], at most 253 bytes total. (config cannot import
+// internal/filter — that would be an import cycle — so the check lives here.)
+func validDomain(s string) bool {
+	s = strings.TrimSuffix(s, ".")
+	if len(s) == 0 || len(s) > 253 {
+		return false
+	}
+	labelLen := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z',
+			c >= '0' && c <= '9', c == '-', c == '_':
+			labelLen++
+		case c == '.':
+			if labelLen == 0 {
+				return false
+			}
+			labelLen = 0
+		default:
+			return false
+		}
+		if labelLen > 63 {
+			return false
+		}
+	}
+	return labelLen > 0
 }
 
 func validateHostPort(addr string) error {

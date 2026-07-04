@@ -18,10 +18,12 @@ import (
 // marked read-only in the UI: they are the only settings needing a restart.
 type configView struct {
 	DNS struct {
-		Listen    string             `json:"listen"`
-		Upstreams []config.Upstream  `json:"upstreams"`
-		BlockTTL  uint32             `json:"block_ttl"`
-		Cache     config.CacheConfig `json:"cache"`
+		Listen       string               `json:"listen"`
+		Upstreams    []config.Upstream    `json:"upstreams"`
+		BlockTTL     uint32               `json:"block_ttl"`
+		Cache        config.CacheConfig   `json:"cache"`
+		LocalRecords []config.LocalRecord `json:"local_records"`
+		LocalTTL     uint32               `json:"local_ttl"`
 	} `json:"dns"`
 	Blocking struct {
 		Mode string `json:"mode"`
@@ -47,6 +49,11 @@ func viewOf(c *config.Config) configView {
 	v.DNS.Upstreams = c.DNS.Upstreams
 	v.DNS.BlockTTL = c.DNS.BlockTTL
 	v.DNS.Cache = c.DNS.Cache
+	v.DNS.LocalRecords = c.DNS.LocalRecords
+	if v.DNS.LocalRecords == nil {
+		v.DNS.LocalRecords = []config.LocalRecord{}
+	}
+	v.DNS.LocalTTL = c.DNS.LocalTTL
 	v.Blocking.Mode = c.Blocking.Mode
 	v.Lists.RefreshInterval = c.Lists.RefreshInterval.Std().String()
 	v.QueryLog.Ephemeral = c.QueryLog.Ephemeral
@@ -75,6 +82,8 @@ type settingsUpdate struct {
 			MinTTL     *uint32 `json:"min_ttl"`
 			MaxTTL     *uint32 `json:"max_ttl"`
 		} `json:"cache"`
+		LocalRecords *[]config.LocalRecord `json:"local_records"`
+		LocalTTL     *uint32               `json:"local_ttl"`
 	} `json:"dns"`
 	Blocking *struct {
 		Mode *string `json:"mode"`
@@ -130,6 +139,12 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 				if upd.DNS.Cache.MaxTTL != nil {
 					c.DNS.Cache.MaxTTL = *upd.DNS.Cache.MaxTTL
 				}
+			}
+			if upd.DNS.LocalRecords != nil {
+				c.DNS.LocalRecords = *upd.DNS.LocalRecords
+			}
+			if upd.DNS.LocalTTL != nil {
+				c.DNS.LocalTTL = *upd.DNS.LocalTTL
 			}
 		}
 		if upd.Blocking != nil && upd.Blocking.Mode != nil {

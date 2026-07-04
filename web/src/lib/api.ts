@@ -62,8 +62,22 @@ export interface CacheSettings {
   max_ttl: number;
 }
 
+export interface LocalRecord {
+  name: string;
+  a?: string[];
+  aaaa?: string[];
+  cname?: string;
+}
+
 export interface ConfigView {
-  dns: { listen: string; upstreams: Upstream[]; block_ttl: number; cache: CacheSettings };
+  dns: {
+    listen: string;
+    upstreams: Upstream[];
+    block_ttl: number;
+    cache: CacheSettings;
+    local_records: LocalRecord[];
+    local_ttl: number;
+  };
   blocking: { mode: 'zero_ip' | 'nxdomain' };
   lists: { refresh_interval: string };
   querylog: { ephemeral: boolean; db_path: string; ring_size: number; retention_days: number };
@@ -72,7 +86,13 @@ export interface ConfigView {
 
 // Partial settings update; omitted fields are left untouched by the server.
 export interface SettingsUpdate {
-  dns?: { upstreams?: Upstream[]; block_ttl?: number; cache?: Partial<CacheSettings> };
+  dns?: {
+    upstreams?: Upstream[];
+    block_ttl?: number;
+    cache?: Partial<CacheSettings>;
+    local_records?: LocalRecord[];
+    local_ttl?: number;
+  };
   blocking?: { mode?: string };
   lists?: { refresh_interval?: string };
   querylog?: { ring_size?: number; retention_days?: number };

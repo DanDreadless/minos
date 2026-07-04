@@ -39,6 +39,7 @@ type Server struct {
 	udpAddr   net.Addr
 	policy    atomic.Pointer[blockingPolicy]
 	upstreams atomic.Pointer[[]Upstream]
+	local     atomic.Pointer[localZone] // nil when no local records
 
 	// cache is nil when disabled. Hit/miss counters live on the Server so
 	// they survive the cache flush that every config change performs.
@@ -78,6 +79,7 @@ func (s *Server) ApplyConfig(cfg *config.Config) error {
 		nxdomain: cfg.Blocking.Mode == "nxdomain",
 		blockTTL: cfg.DNS.BlockTTL,
 	})
+	s.local.Store(buildLocalZone(cfg))
 	// A fresh cache on every config change doubles as the flush that keeps
 	// cached answers consistent with new upstreams or blocking settings.
 	if cfg.DNS.Cache.Enabled {
@@ -189,6 +191,21 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		entry.Rule = "dns access blocked"
 		s.record(entry, start)
 		return
+	}
+
+	// Local records answer before any filtering: an explicit record beats
+	// the blocklists, and local names never leak upstream. (A device-level
+	// DNS block still wins — it returned above.)
+	if z := s.local.Load(); z != nil {
+		if reply, rule, ok := z.answer(req, q, qname); ok {
+			_ = w.WriteMsg(reply)
+			entry.Verdict = querylog.VerdictAllowed
+			entry.List = "local"
+			entry.Rule = rule
+			entry.Upstream = "local"
+			s.record(entry, start)
+			return
+		}
 	}
 
 	var verdict filter.Result

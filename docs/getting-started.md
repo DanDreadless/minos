@@ -156,7 +156,10 @@ Open `http://<host>:8080`. Five pages, one per concern:
   fetch errors.
 - **Pardons & Sentences** (allow/deny domains) — manage both lists, plus a
   "judge a domain" tool that shows exactly which rule decides any name's
-  fate before you ever query it.
+  fate before you ever query it. The **Local DNS** card lives here too:
+  A/AAAA/CNAME records (wildcards like `*.home.lab` included) that Minos
+  answers itself — they beat the blocklists, never leave your network, and
+  address records answer reverse (PTR) lookups automatically.
 - **Settings** — everything below is editable here and applies immediately,
   no restart: upstream resolvers and their order, blocking mode and TTL,
   the response cache (repeat queries answered from memory — the dashboard
@@ -184,6 +187,14 @@ dns:
     max_entries: 10000      # ~500 B per entry
     min_ttl: 10             # seconds; keep short-lived answers at least this long
     max_ttl: 3600           # never serve a cached answer longer than this
+  local_ttl: 300            # TTL on locally answered records
+  local_records:            # names answered here, never sent upstream
+    - name: nas.home.lab
+      a: [192.168.1.10]     # also answers the reverse (PTR) lookup
+    - name: "*.home.lab"    # wildcard: any subdomain (not home.lab itself)
+      a: [192.168.1.10]
+    - name: media.home.lab
+      cname: nas.home.lab   # alias; cname and a/aaaa are mutually exclusive
 blocking:
   mode: zero_ip             # or nxdomain
   allowlist: []             # pardons: always allowed

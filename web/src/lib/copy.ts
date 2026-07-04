@@ -97,6 +97,14 @@ export const copy = {
     sentencesHint: 'domains always blocked (and their subdomains)',
     sentencesEmpty: 'No standing sentences.',
     addPlaceholder: 'domain to add…',
+    localTitle: 'Local DNS',
+    localHint: 'names answered here — never blocked, never sent upstream',
+    localEmpty: 'No local records. Add one to name a device or service on your network.',
+    localNamePlaceholder: 'nas.home.lab or *.home.lab',
+    localValuePlaceholder: (t: string) =>
+      t === 'CNAME' ? 'target.home.lab' : 'address (comma-separate several)',
+    localAdd: 'Add record',
+    localWildcardNote: 'A leading *. matches all subdomains. Address records also answer reverse (PTR) lookups.',
   },
 
   devices: {
