@@ -136,6 +136,18 @@ export interface Group {
   mode: 'filter' | 'bypass' | 'block';
   allowlist: string[] | null;
   denylist: string[] | null;
+  services: string[] | null;
+}
+
+export interface Service {
+  name: string;
+  label: string;
+  domains: string[];
+}
+
+export interface ServicesView {
+  catalog: Service[];
+  blocked: string[];
 }
 
 const TOKEN_KEY = 'minos-api-token';
@@ -217,8 +229,14 @@ export const api = {
   groups: () => request<Group[]>('GET', '/api/groups'),
   addGroup: (g: { name: string; mode: string; allowlist?: string[]; denylist?: string[] }) =>
     request<Group[]>('POST', '/api/groups', g),
-  updateGroup: (name: string, upd: { mode?: string; allowlist?: string[]; denylist?: string[] }) =>
-    request<Group[]>('PUT', `/api/groups/${encodeURIComponent(name)}`, upd),
+  updateGroup: (
+    name: string,
+    upd: { mode?: string; allowlist?: string[]; denylist?: string[]; services?: string[] },
+  ) => request<Group[]>('PUT', `/api/groups/${encodeURIComponent(name)}`, upd),
+
+  services: () => request<ServicesView>('GET', '/api/services'),
+  updateServices: (blocked: string[]) =>
+    request<ServicesView>('PUT', '/api/services', { blocked }),
   deleteGroup: (name: string) =>
     request<Group[]>('DELETE', `/api/groups/${encodeURIComponent(name)}`),
 

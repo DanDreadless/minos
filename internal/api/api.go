@@ -76,6 +76,8 @@ func (s *Server) Router() http.Handler {
 		r.Get("/config", s.handleGetConfig)
 		r.Put("/config", s.handleUpdateConfig)
 		r.Get("/config/export", s.handleExportConfig)
+		r.Get("/services", s.handleGetServices)
+		r.Put("/services", s.handleUpdateServices)
 		r.Get("/lists", s.handleLists)
 		r.Post("/lists", s.handleAddList)
 		r.Post("/lists/refresh", s.handleListsRefresh)

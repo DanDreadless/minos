@@ -15,6 +15,7 @@ import (
 
 	"minos/internal/config"
 	"minos/internal/filter"
+	"minos/internal/services"
 )
 
 // Group modes (mirrors config validation).
@@ -118,7 +119,7 @@ func (r *Registry) ApplyConfig(cfg *config.Config) {
 	groups := make(map[string]*Policy, len(cfg.Groups))
 	for _, g := range cfg.Groups {
 		p := &Policy{Group: g.Name, Mode: g.Mode}
-		if g.Mode == ModeFilter && (len(g.Allowlist) > 0 || len(g.Denylist) > 0) {
+		if g.Mode == ModeFilter && (len(g.Allowlist) > 0 || len(g.Denylist) > 0 || len(g.Services) > 0) {
 			b := filter.NewBuilder()
 			list := "group:" + g.Name
 			for _, d := range g.Allowlist {
@@ -126,6 +127,13 @@ func (r *Registry) ApplyConfig(cfg *config.Config) {
 			}
 			for _, d := range g.Denylist {
 				b.AddDeny(list, d)
+			}
+			// Group-blocked services join the overlay; group pardons
+			// still beat them (allow wins at every label depth).
+			for _, name := range g.Services {
+				for _, d := range services.Domains(name) {
+					b.AddDeny("service:"+name, d)
+				}
 			}
 			p.Overlay = b.Build()
 		}

@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { api, type Device, type Group } from '../lib/api';
+  import { api, type Device, type Group, type Service } from '../lib/api';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
   let devices: Device[] = [];
   let groups: Group[] = [];
+  let catalog: Service[] = [];
   let names: Record<string, string> = {}; // per-row label drafts
   let newGroupName = '';
   let newGroupMode = 'filter';
@@ -92,6 +93,18 @@
     }
   }
 
+  async function toggleGroupService(g: Group, name: string): Promise<void> {
+    const next = new Set(g.services ?? []);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    try {
+      groups = await api.updateGroup(g.name, { services: [...next] });
+    } catch (e) {
+      notifyError(e);
+      await load();
+    }
+  }
+
   async function setGroupMode(g: Group, ev: Event): Promise<void> {
     try {
       groups = await api.updateGroup(g.name, {
@@ -140,6 +153,10 @@
 
   onMount(() => {
     void load();
+    void api
+      .services()
+      .then((v) => (catalog = v.catalog))
+      .catch(notifyError);
     timer = setInterval(load, 15000);
   });
 
@@ -257,6 +274,26 @@
           </label>
           <button type="submit" class="primary">{copy.settings.save}</button>
         </form>
+        <details class="group-services">
+          <summary>
+            {copy.devices.groupServices}
+            {#if g.services?.length}
+              <span class="count">({g.services.length})</span>
+            {/if}
+          </summary>
+          <div class="service-grid">
+            {#each catalog as svc (svc.name)}
+              <label class="service">
+                <input
+                  type="checkbox"
+                  checked={(g.services ?? []).includes(svc.name)}
+                  on:change={() => toggleGroupService(g, svc.name)}
+                />
+                {svc.label}
+              </label>
+            {/each}
+          </div>
+        </details>
       {/if}
     </div>
   {/each}
@@ -371,5 +408,34 @@
     gap: 0.6rem;
     flex-wrap: wrap;
     align-items: center;
+  }
+
+  .group-services {
+    margin-top: 0.8rem;
+  }
+
+  .group-services summary {
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 0.82rem;
+  }
+
+  .group-services .count {
+    color: var(--accent);
+  }
+
+  .service-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    gap: 0.3rem 1rem;
+    margin-top: 0.6rem;
+  }
+
+  .service {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: pointer;
+    font-size: 0.84rem;
   }
 </style>

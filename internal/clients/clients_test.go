@@ -72,6 +72,29 @@ func TestPolicyResolution(t *testing.T) {
 	}
 }
 
+func TestGroupBlockedServices(t *testing.T) {
+	cfg := testConfig()
+	cfg.Groups[0].Services = []string{"youtube"}
+	cfg.Groups[0].Allowlist = append(cfg.Groups[0].Allowlist, "youtubekids.com")
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry()
+	r.ApplyConfig(cfg)
+
+	kids := r.PolicyFor("10.0.0.10")
+	if kids == nil || kids.Overlay == nil {
+		t.Fatal("kids policy missing overlay")
+	}
+	if res := kids.Overlay.Match("www.youtube.com"); !res.Blocked || res.List != "service:youtube" {
+		t.Errorf("www.youtube.com = %+v, want blocked by service:youtube", res)
+	}
+	// A group pardon beats the group's own service block.
+	if res := kids.Overlay.Match("youtubekids.com"); res.Blocked {
+		t.Errorf("youtubekids.com = %+v, want pardoned", res)
+	}
+}
+
 func TestTouchAndDevices(t *testing.T) {
 	r := NewRegistry()
 	cfg := testConfig()

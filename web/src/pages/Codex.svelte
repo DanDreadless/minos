@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type ListStatus } from '../lib/api';
+  import { api, type ListStatus, type Service } from '../lib/api';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
@@ -9,6 +9,31 @@
   let newName = '';
   let newUrl = '';
   let newFormat: 'hosts' | 'plain' | 'adblock' = 'hosts';
+  let catalog: Service[] = [];
+  let blockedServices = new Set<string>();
+
+  async function loadServices(): Promise<void> {
+    try {
+      const view = await api.services();
+      catalog = view.catalog;
+      blockedServices = new Set(view.blocked);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function toggleService(name: string): Promise<void> {
+    const next = new Set(blockedServices);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    try {
+      const view = await api.updateServices([...next]);
+      blockedServices = new Set(view.blocked);
+    } catch (e) {
+      notifyError(e);
+      await loadServices();
+    }
+  }
 
   function fmtWhen(iso?: string): string {
     if (!iso) return '—';
@@ -74,7 +99,10 @@
     }
   }
 
-  onMount(() => void load());
+  onMount(() => {
+    void load();
+    void loadServices();
+  });
 </script>
 
 <h1>{copy.lists.title} <small>{copy.lists.subtitle}</small></h1>
@@ -134,6 +162,23 @@
     </table>
   </div>
 {/if}
+
+<section class="card services">
+  <h2>{copy.lists.servicesTitle} <small>{copy.lists.servicesHint}</small></h2>
+  <div class="service-grid">
+    {#each catalog as svc (svc.name)}
+      <label class="service" title={copy.lists.serviceDomains(svc.domains.length)}>
+        <input
+          type="checkbox"
+          checked={blockedServices.has(svc.name)}
+          on:change={() => toggleService(svc.name)}
+        />
+        {svc.label}
+      </label>
+    {/each}
+  </div>
+  <p class="note">{copy.lists.servicesNote}</p>
+</section>
 
 <section class="card add">
   <h2>{copy.lists.addTitle}</h2>
@@ -195,8 +240,30 @@
     font-size: 0.78rem;
   }
 
-  .add {
+  .add,
+  .services {
     margin-top: 1.5rem;
+  }
+
+  .service-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: 0.35rem 1rem;
+  }
+
+  .service {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.88rem;
+    padding: 0.15rem 0;
+  }
+
+  .note {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    margin: 0.8rem 0 0;
   }
 
   .add form {

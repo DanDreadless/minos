@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"minos/internal/services"
 )
 
 // Duration wraps time.Duration so YAML can use human strings ("5m", "24h").
@@ -99,6 +101,9 @@ type BlockingConfig struct {
 	Mode      string   `yaml:"mode"`
 	Allowlist []string `yaml:"allowlist"`
 	Denylist  []string `yaml:"denylist"`
+	// Services are catalog names (see internal/services) blocked for
+	// everyone; groups can block more for their members only.
+	Services []string `yaml:"services,omitempty"`
 }
 
 // Group is a named device policy. Devices not assigned to a group get the
@@ -113,6 +118,9 @@ type Group struct {
 	// add blocks for members only.
 	Allowlist []string `yaml:"allowlist,omitempty" json:"allowlist"`
 	Denylist  []string `yaml:"denylist,omitempty" json:"denylist"`
+	// Services are catalog names blocked for this group's members
+	// (filter mode only).
+	Services []string `yaml:"services,omitempty" json:"services"`
 }
 
 // Client is a device assignment, keyed by IP. MAC and Name are labels the
@@ -207,12 +215,14 @@ func (c *Config) Clone() *Config {
 	out.DNS.Upstreams = append([]Upstream(nil), c.DNS.Upstreams...)
 	out.Blocking.Allowlist = append([]string(nil), c.Blocking.Allowlist...)
 	out.Blocking.Denylist = append([]string(nil), c.Blocking.Denylist...)
+	out.Blocking.Services = append([]string(nil), c.Blocking.Services...)
 	out.Lists.Sources = append([]ListSource(nil), c.Lists.Sources...)
 	out.Groups = make([]Group, len(c.Groups))
 	for i, g := range c.Groups {
 		out.Groups[i] = g
 		out.Groups[i].Allowlist = append([]string(nil), g.Allowlist...)
 		out.Groups[i].Denylist = append([]string(nil), g.Denylist...)
+		out.Groups[i].Services = append([]string(nil), g.Services...)
 	}
 	out.Clients = append([]Client(nil), c.Clients...)
 	out.DNS.LocalRecords = make([]LocalRecord, len(c.DNS.LocalRecords))
@@ -312,6 +322,11 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("blocking.mode: must be zero_ip or nxdomain, got %q", c.Blocking.Mode)
 	}
+	for i, s := range c.Blocking.Services {
+		if !services.Exists(s) {
+			return fmt.Errorf("blocking.services[%d]: unknown service %q", i, s)
+		}
+	}
 	groupNames := make(map[string]bool, len(c.Groups))
 	for i, g := range c.Groups {
 		if g.Name == "" {
@@ -328,6 +343,11 @@ func (c *Config) Validate() error {
 		case "filter", "bypass", "block":
 		default:
 			return fmt.Errorf("groups[%d].mode: must be filter, bypass, or block, got %q", i, g.Mode)
+		}
+		for j, s := range g.Services {
+			if !services.Exists(s) {
+				return fmt.Errorf("groups[%d].services[%d]: unknown service %q", i, j, s)
+			}
 		}
 	}
 	clientIPs := make(map[string]bool, len(c.Clients))

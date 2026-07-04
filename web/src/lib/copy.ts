@@ -80,6 +80,11 @@ export const copy = {
     addTitle: 'Add a blocklist',
     confirmDelete: (name: string) =>
       `Remove the list "${name}"? Its rules stop applying immediately.`,
+    servicesTitle: 'Blocked services',
+    servicesHint: 'one click blocks a whole service for every device',
+    servicesNote:
+      'Applies to everyone. To block a service only for some devices, use a group on the Devices page.',
+    serviceDomains: (n: number) => `${n} domain${n === 1 ? '' : 's'}`,
   },
 
   domains: {
@@ -127,6 +132,7 @@ export const copy = {
     addTitle: 'Create a group',
     extraAllow: 'Extra pardons (always allow)',
     extraDeny: 'Extra sentences (always block)',
+    groupServices: 'Blocked services for this group',
     listPlaceholder: 'comma-separated domains',
     confirmDelete: (name: string) =>
       `Delete the group "${name}"? Its devices fall back to the default rules.`,

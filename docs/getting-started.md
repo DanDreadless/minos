@@ -153,7 +153,9 @@ Open `http://<host>:8080`. Five pages, one per concern:
   Unassigned devices follow the default rules.
 - **The Codex** (blocklists) — add, enable/disable, or remove list
   subscriptions and refresh them on demand, with per-list rule counts and
-  fetch errors.
+  fetch errors. The **Blocked services** card blocks a whole service
+  (TikTok, YouTube, Discord…) with one checkbox — for every device, or
+  per group from the Devices page.
 - **Pardons & Sentences** (allow/deny domains) — manage both lists, plus a
   "judge a domain" tool that shows exactly which rule decides any name's
   fate before you ever query it. The **Local DNS** card lives here too:
@@ -206,10 +208,12 @@ blocking:
   mode: zero_ip             # or nxdomain
   allowlist: []             # pardons: always allowed
   denylist: []              # sentences: always blocked
+  services: [onlyfans]      # curated service bundles, blocked for everyone
 groups:                     # device policies (all optional)
   - name: kids
     mode: filter            # filter | bypass | block
     denylist: [tiktok.com]  # extra blocks for members only
+    services: [snapchat]    # service bundles for members only
   - name: trusted
     mode: bypass            # members skip filtering entirely
 clients:                    # device assignments, keyed by IP

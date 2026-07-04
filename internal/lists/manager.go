@@ -12,6 +12,7 @@ import (
 
 	"minos/internal/config"
 	"minos/internal/filter"
+	"minos/internal/services"
 )
 
 const (
@@ -163,6 +164,13 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 	}
 	for _, d := range cfg.Blocking.Denylist {
 		b.AddDeny("denylist", d)
+	}
+	// Globally blocked services: curated bundles, one pseudo-list per
+	// service so the docket names the service that condemned a query.
+	for _, name := range cfg.Blocking.Services {
+		for _, d := range services.Domains(name) {
+			b.AddDeny("service:"+name, d)
+		}
 	}
 
 	m.mu.Lock()

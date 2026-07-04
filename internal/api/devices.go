@@ -117,6 +117,7 @@ type groupBody struct {
 	Mode      *string   `json:"mode"`
 	Allowlist *[]string `json:"allowlist"`
 	Denylist  *[]string `json:"denylist"`
+	Services  *[]string `json:"services"`
 }
 
 func (s *Server) handleAddGroup(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +139,9 @@ func (s *Server) handleAddGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Denylist != nil {
 		g.Denylist = *body.Denylist
+	}
+	if body.Services != nil {
+		g.Services = *body.Services
 	}
 	err := s.store.Update(func(c *config.Config) error {
 		for _, existing := range c.Groups {
@@ -176,6 +180,9 @@ func (s *Server) handleUpdateGroup(w http.ResponseWriter, r *http.Request) {
 			}
 			if body.Denylist != nil {
 				g.Denylist = *body.Denylist
+			}
+			if body.Services != nil {
+				g.Services = *body.Services
 			}
 			return nil
 		}

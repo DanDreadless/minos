@@ -82,6 +82,7 @@ internal/dnsproxy/     DNS server + upstream forwarding (miekg/dns)
 internal/clients/      device registry, group policies, ARP/PTR enrichment
 internal/filter/       blocklist engine: parsing, compilation, matching
 internal/lists/        blocklist fetching, refresh scheduling, format parsers
+internal/services/     curated blocked-services catalog (static data, leaf pkg)
 internal/querylog/     ring buffer + batched SQLite flush
 internal/api/          REST + WebSocket handlers (chi router)
 internal/config/       config load/validate/persist (YAML)
