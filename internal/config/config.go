@@ -574,7 +574,7 @@ func save(path string, c *Config) error {
 		return fmt.Errorf("create temp config: %w", err)
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer func() { _ = os.Remove(tmpName) }() // no-op after the rename succeeds
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		return fmt.Errorf("write temp config: %w", err)

@@ -3,11 +3,11 @@ module minos
 go 1.26.4
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/miekg/dns v1.1.72
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.53.0
-	nhooyr.io/websocket v1.8.17
 )
 
 require (

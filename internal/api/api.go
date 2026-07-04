@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"nhooyr.io/websocket"
-	"nhooyr.io/websocket/wsjson"
 
 	"minos/internal/clients"
 	"minos/internal/config"
@@ -203,7 +203,7 @@ func (s *Server) handleQueryLogStream(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return // Accept already wrote the error response
 	}
-	defer conn.Close(websocket.StatusInternalError, "stream closed")
+	defer func() { _ = conn.Close(websocket.StatusInternalError, "stream closed") }()
 
 	ch, cancel := s.qlog.Subscribe()
 	defer cancel()
@@ -221,7 +221,7 @@ func (s *Server) handleQueryLogStream(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-ctx.Done():
-			conn.Close(websocket.StatusNormalClosure, "")
+			_ = conn.Close(websocket.StatusNormalClosure, "")
 			return
 		case e := <-ch:
 			if err := wsjson.Write(ctx, conn, e); err != nil {

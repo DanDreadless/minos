@@ -1,0 +1,22 @@
+# golangci-lint v2 configuration. Kept minimal: default linters, with one
+# pragmatic carve-out — best-effort Close() on cleanup paths (deferred file,
+# connection, and rows closes) is idiomatic and not worth 27 `_ =` wrappers.
+# Errors that matter (writes, flushes, commits) are still checked.
+version: "2"
+
+linters:
+  settings:
+    errcheck:
+      # errcheck matches the call site's static type, so interfaces and
+      # concrete types are listed separately.
+      exclude-functions:
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (io/fs.File).Close
+        - (net.PacketConn).Close
+        - (net.Listener).Close
+        - (*os.File).Close
+        - (*database/sql.DB).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Stmt).Close
+        - (*minos/internal/querylog.Log).Close

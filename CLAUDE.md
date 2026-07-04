@@ -98,8 +98,9 @@ Rules:
   Dependency direction is api → (dnsproxy, filter, lists, querylog) → config.
 - No package may import from `cmd/`.
 - New third-party deps require justification in the PR description. The
-  blessed set: `miekg/dns`, `go-chi/chi`, `mattn/go-sqlite3` (or modernc
-  if we drop cgo), `gopkg.in/yaml.v3`, `nhooyr.io/websocket`.
+  blessed set: `miekg/dns`, `go-chi/chi`, `modernc.org/sqlite`,
+  `gopkg.in/yaml.v3`, `github.com/coder/websocket` (the maintained home
+  of nhooyr.io/websocket — migrated July 2026).
 
 ## Dev environment & commands
 
@@ -260,9 +261,12 @@ This is security software; hold it to that standard.
 - **Routes are authoritative, uncached**: conditional-forwarding routes
   have no fallback to default upstreams (a dead router = SERVFAIL, like
   Pi-hole), and routed answers skip the response cache (DHCP-lease churn).
-- **This Windows dev box has no `make` or `golangci-lint`**: run the
-  underlying commands directly (`go test ./...`, `gofmt -l`, `go vet`,
-  `npm run build`, `npx svelte-check`). Lint runs in Linux CI.
+- **This Windows dev box has no `make`**: run the underlying commands
+  directly (`go test ./...`, `gofmt -l`, `go vet`, `npm run build`,
+  `npx svelte-check`). golangci-lint v2 is at `~/go/bin/golangci-lint`
+  (go install, so it always matches the local toolchain); CI runs it
+  blocking, installed the same way for the same reason — prebuilt lint
+  binaries can lag go.mod's Go version and refuse to run.
 - **Encrypted listeners reuse handle()**: DoT is the same dns.Handler on
   a tls.Listen socket; DoH adapts RFC 8484 GET/POST onto a captured
   dns.ResponseWriter — so device policies, local records, Safe Search,

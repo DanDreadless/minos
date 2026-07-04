@@ -6,7 +6,8 @@ RUN npm ci --no-fund --no-audit
 COPY web/ ./
 RUN npm run build
 
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS gobuild
+# Keep the Go tag in step with go.mod, or go mod download refuses.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS gobuild
 ARG TARGETOS TARGETARCH VERSION=docker
 WORKDIR /src
 COPY go.mod go.sum ./
