@@ -24,6 +24,29 @@ port 53 needs root/admin on most systems; on Linux prefer the systemd unit in
 
 Then point a client (or your router's DHCP DNS option) at the machine's IP.
 
+## Migrating from Pi-hole or AdGuard Home
+
+One command carries your settings over — run it before starting Minos (or
+restart afterwards), since it edits the config file directly:
+
+```sh
+# From a Pi-hole install (reads gravity.db and custom.list, read-only):
+minos import pihole /etc/pihole
+
+# From AdGuard Home:
+minos import adguard /opt/AdGuardHome/AdGuardHome.yaml
+```
+
+What comes across: blocklist subscriptions (with their enabled state),
+exact allow/deny domains and user rules, local DNS records / rewrites,
+and — from AdGuard Home — blocked services that exist in the Minos
+catalog. Imports only add: nothing already in your Minos config is
+changed, and running an import twice adds nothing new.
+
+What doesn't: regex rules and AdBlock rules with options (Minos matches
+whole domains only), allowlist subscriptions, and upstream/DHCP settings.
+Every skipped item is printed with a reason so nothing vanishes silently.
+
 ## Prepare the host (Raspberry Pi / Linux)
 
 Do these once before first start so port 53 is free and DNS flows to Minos
@@ -263,6 +286,8 @@ api:
 minos status     # show counters and pause state
 minos pause 30m  # pause blocking (blank duration = until resumed)
 minos resume     # resume blocking
+minos import pihole /etc/pihole            # migrate Pi-hole settings
+minos import adguard AdGuardHome.yaml      # migrate AdGuard Home settings
 minos version
 ```
 

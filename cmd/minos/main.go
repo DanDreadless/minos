@@ -22,6 +22,7 @@ import (
 	"minos/internal/config"
 	"minos/internal/dnsproxy"
 	"minos/internal/filter"
+	"minos/internal/importer"
 	"minos/internal/lists"
 	"minos/internal/querylog"
 	"minos/web"
@@ -51,11 +52,13 @@ func run(args []string) error {
 		return clientPause(args)
 	case "resume":
 		return clientResume(args)
+	case "import":
+		return runImport(args)
 	case "version":
 		fmt.Println("minos", version)
 		return nil
 	default:
-		return fmt.Errorf("unknown command %q (try: serve, status, pause, resume, version)", cmd)
+		return fmt.Errorf("unknown command %q (try: serve, status, pause, resume, import, version)", cmd)
 	}
 }
 
@@ -163,6 +166,44 @@ func serve(args []string) error {
 	if err := qlog.Close(); err != nil {
 		slog.Warn("query log close", "err", err)
 	}
+	return nil
+}
+
+// runImport merges another resolver's settings into the Minos config file.
+// It edits the file directly, so restart a running instance afterwards.
+func runImport(args []string) error {
+	if len(args) < 2 || isFlag(args[0]) || isFlag(args[1]) {
+		return fmt.Errorf("usage: minos import <pihole|adguard> <path> [-config minos.yaml]\n" +
+			"  pihole:  path to /etc/pihole (or its gravity.db)\n" +
+			"  adguard: path to AdGuardHome.yaml")
+	}
+	kind, src := args[0], args[1]
+	fs, cfgPath, _ := parseCommon("import", args[2:])
+	if err := fs.Parse(args[2:]); err != nil {
+		return err
+	}
+	store, err := config.Open(*cfgPath)
+	if err != nil {
+		return err
+	}
+	var rep *importer.Report
+	err = store.Update(func(c *config.Config) error {
+		var ierr error
+		switch kind {
+		case "pihole":
+			rep, ierr = importer.Pihole(src, c)
+		case "adguard":
+			rep, ierr = importer.AdGuard(src, c)
+		default:
+			ierr = fmt.Errorf("unknown import source %q (pihole or adguard)", kind)
+		}
+		return ierr
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Println(rep)
+	fmt.Printf("written to %s — restart minos (or start it) to apply\n", *cfgPath)
 	return nil
 }
 

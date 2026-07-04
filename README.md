@@ -31,6 +31,8 @@ no appeals (well, except pardons).
   per group, with optional schedules ("no social media after 21:00")
 - Safe Search enforcement (Google, Bing, DuckDuckGo, YouTube) — network-wide
   or per group
+- One-command migration: `minos import pihole /etc/pihole` or
+  `minos import adguard AdGuardHome.yaml`
 - Full management from the UI: blocklists, allow/deny domains, upstreams,
   blocking mode, retention, API token — all applied live, no restarts
 - Batched SQLite persistence that respects SD cards
