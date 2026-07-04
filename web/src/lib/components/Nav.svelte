@@ -73,6 +73,7 @@
     width: 100%;
     max-width: 180px;
     height: auto;
+    margin-inline: auto;
   }
 
   .brand .tagline {
@@ -82,6 +83,7 @@
     font-style: italic;
     font-size: 0.78rem;
     color: var(--text-dim);
+    text-align: center;
   }
 
   ul {
