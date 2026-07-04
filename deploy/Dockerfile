@@ -18,7 +18,9 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -ldflags "-s -w -X main.version=$VERSION" -o /minos ./cmd/minos
 
 FROM scratch
-LABEL org.opencontainers.image.source="https://github.com/DanDreadless/minos" \n      org.opencontainers.image.description="Minos - every query gets judged. A modern DNS sinkhole." \n      org.opencontainers.image.licenses="GPL-3.0"
+LABEL org.opencontainers.image.source="https://github.com/DanDreadless/minos" \
+      org.opencontainers.image.description="Minos - every query gets judged. A modern DNS sinkhole." \
+      org.opencontainers.image.licenses="GPL-3.0"
 COPY --from=gobuild /minos /minos
 COPY --from=gobuild /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 # DNS in/out, API
