@@ -16,28 +16,42 @@ no appeals (well, except pardons).
 
 ## What it does
 
-- Listens for DNS queries on `:53` (UDP + TCP)
-- Judges each query against compiled blocklists (hosts, plain, and AdBlock formats)
-- Blocked queries get `0.0.0.0`/`::` or `NXDOMAIN` (your choice)
-- Allowed queries are forwarded upstream over DoH or DoT (plaintext optional)
+**Filtering**
+
+- Listens for DNS queries on `:53` (UDP + TCP) and judges each one against
+  compiled blocklists (hosts, plain, and AdBlock formats)
+- Blocked queries get `0.0.0.0`/`::` or `NXDOMAIN` (your choice); allowed
+  queries are forwarded upstream over DoH or DoT (plaintext optional)
+- Every blocked query shows *which list and rule* condemned it, with a
+  one-click pardon from the live log — never more than two clicks from
+  seeing a block to allowing it
 - Repeat queries answered from a built-in response cache — no upstream trip
-- Local DNS records for your LAN (`nas.home.lab`, wildcards, CNAMEs, PTR)
-- Conditional forwarding: route `lan` or your reverse zone to the router
-- Web dashboard with query charts, top blocked domains, and busiest clients
-- Live query log streamed to the UI, with one-click allow/block from any row
+
+**For the household**
+
 - Device tracking (IP, MAC, hostname) with per-device groups: extra rules,
   full bypass, or no DNS at all — and a one-click block for any device
 - One-click blocked services (TikTok, YouTube, Discord…) — globally or
   per group, with optional schedules ("no social media after 21:00")
 - Safe Search enforcement (Google, Bing, DuckDuckGo, YouTube) — network-wide
-  or per group
+  or per group, enforced by the provider so it can't be switched off
+
+**For the network**
+
+- Local DNS records for your LAN (`nas.home.lab`, wildcards, CNAMEs, PTR)
+- Conditional forwarding: route `lan` or your reverse zone to the router
+- Serves encrypted DNS to clients: DoT for Android Private DNS, DoH at
+  `/dns-query` — bring a certificate, filtering follows your devices
+
+**Running it**
+
+- Web dashboard with query charts, top blocked domains, busiest clients,
+  cache hit rate, and a live query log streamed over WebSocket
+- Full management from the UI: blocklists, allow/deny domains, upstreams,
+  blocking mode, retention, API token — all applied live, no restarts
 - One-command migration: `minos import pihole /etc/pihole` or
   `minos import adguard AdGuardHome.yaml`
 - Prometheus `/metrics` for Grafana dashboards — scrape-only, never pushes
-- Serves encrypted DNS to clients: DoT for Android Private DNS, DoH at
-  `/dns-query` — bring a certificate, filtering follows your devices
-- Full management from the UI: blocklists, allow/deny domains, upstreams,
-  blocking mode, retention, API token — all applied live, no restarts
 - Batched SQLite persistence that respects SD cards
 - No telemetry. Ever.
 
@@ -57,6 +71,7 @@ CLI verbs talk to the running instance:
 minos status        # counters, rules, pause state
 minos pause 5m      # pause blocking for five minutes
 minos resume        # resume blocking
+minos import pihole /etc/pihole   # bring your Pi-hole settings with you
 ```
 
 For local development without root, set `dns.listen: ":5353"` in the config
@@ -84,9 +99,11 @@ machine and every device follows.
 
 ## Roadmap
 
-Family controls (blocked services, schedules, Safe Search), a Pi-hole
-importer, Prometheus metrics, and serving DoH/DoT to clients are next —
-the full plan and reasoning are in [docs/roadmap.md](docs/roadmap.md).
+The headline roadmap — response cache, local DNS records, conditional
+forwarding, family controls, the Pi-hole/AdGuard importer, Prometheus
+metrics, and client-facing DoT/DoH — has shipped. What's under
+consideration next (release binaries, smarter upstream failover, ACME,
+serve-stale) lives in [docs/roadmap.md](docs/roadmap.md).
 
 ## Developing
 

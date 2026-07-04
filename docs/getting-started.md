@@ -156,11 +156,12 @@ Prefer Docker? `deploy/docker-compose.yaml` has an equivalent setup with
 
 ## The web interface
 
-Open `http://<host>:8080`. Five pages, one per concern:
+Open `http://<host>:8080`. Six pages, one per concern:
 
-- **The Tribunal** (dashboard) — query counters, a 24-hour volume chart,
-  the most-blocked domains, the busiest clients, and **Recess** controls
-  to pause blocking (5/30 minutes, a custom duration, or until resumed).
+- **The Tribunal** (dashboard) — query counters, cache hit rate, a
+  24-hour volume chart, the most-blocked domains, the busiest clients,
+  and **Recess** controls to pause blocking (5/30 minutes, a custom
+  duration, or until resumed).
 - **The Docket** (query log) — live-streaming log with search and verdict
   filters. Every blocked entry shows *which list and rule* condemned it and
   has a one-click **Pardon** button; allowed entries can be **Sentenced**
@@ -201,9 +202,9 @@ Open `http://<host>:8080`. Five pages, one per concern:
   no restart: upstream resolvers and their order, conditional forwarding
   (send `lan` or your reverse zone to the router so DHCP hostnames keep
   resolving), the response cache (repeat queries answered from memory —
-  the dashboard shows the hit rate), blocking mode and TTL, list refresh
-  interval, query-log retention and buffer size, the API token, and a
-  one-click YAML config backup.
+  the dashboard shows the hit rate), blocking mode and TTL, network-wide
+  Safe Search, list refresh interval, query-log retention and buffer
+  size, the API token, and a one-click YAML config backup.
 
 If you set `api.token` (in the config file or from Settings), the UI and
 CLI require it.
@@ -270,9 +271,9 @@ Mean upstream latency in PromQL:
 ## Configuration
 
 Everything lives in one YAML file and every setting can be changed through
-the API or Settings page without a restart (the two listen addresses and
-the query-log storage location are the exceptions — those are file-only).
-Key sections:
+the API or Settings page without a restart (the listen addresses —
+including `dns.tls` — and the query-log storage location are the
+exceptions; those are file-only). Key sections:
 
 ```yaml
 dns:
@@ -298,6 +299,11 @@ dns:
       upstream:             # e.g. your router, which knows DHCP hostnames
         address: 192.168.1.1:53
         protocol: udp
+  tls:                      # serve DoT/DoH to clients (file-only: restart to change)
+    cert_file: /var/lib/minos/fullchain.pem
+    key_file: /var/lib/minos/privkey.pem
+    dot_listen: ":853"      # DNS-over-TLS (Android Private DNS); empty = off
+    doh_listen: ":8443"     # DNS-over-HTTPS at /dns-query; empty = off
 blocking:
   mode: zero_ip             # or nxdomain
   allowlist: []             # pardons: always allowed
@@ -350,5 +356,6 @@ minos import adguard AdGuardHome.yaml      # migrate AdGuard Home settings
 minos version
 ```
 
-All CLI verbs use the HTTP API of the running instance, honoring `-config`
-to find the address and token.
+`status`, `pause`, and `resume` talk to the running instance over its HTTP
+API, honoring `-config` to find the address and token. `import` edits the
+config file directly — run it while Minos is stopped, or restart afterwards.
