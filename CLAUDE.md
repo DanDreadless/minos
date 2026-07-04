@@ -261,3 +261,11 @@ This is security software; hold it to that standard.
 - **This Windows dev box has no `make` or `golangci-lint`**: run the
   underlying commands directly (`go test ./...`, `gofmt -l`, `go vet`,
   `npm run build`, `npx svelte-check`). Lint runs in Linux CI.
+- **Family-controls semantics** (fixed decisions): blocked services are
+  `service:<name>` pseudo-lists in the existing matchers (never a second
+  matching pass). A scheduled group applies only inside its window —
+  uniform across modes; outside it members follow default rules, though
+  per-device blocks survive. Safe Search rewrites *exact* hostnames only
+  (never subtrees — accounts.google.com must keep working), caches the
+  safe host under its own key, and blanks HTTPS/SVCB for matched names;
+  bypass groups and blocklist verdicts beat it.

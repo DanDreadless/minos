@@ -17,29 +17,15 @@ At or beyond parity with the field:
 - **Response cache** with TTL clamps and RFC 2308 negative caching *(shipped)*
 - **Local DNS records** — wildcards, CNAME chase, automatic PTR *(shipped)*
 - **Conditional forwarding** to route `lan`/reverse zones at the router *(shipped)*
+- **Family controls** — one-click blocked services (25-service catalog),
+  per-group schedules, Safe Search enforcement *(shipped)*
 - Every setting applies live — no restart, ever, except the two listen
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry
 
 ## Next up (in priority order)
 
-### 1. Family controls
-
-The biggest reason households pick AdGuard Home over Pi-hole.
-
-- **Blocked services** — one-click blocking of TikTok, YouTube, Facebook,
-  and friends: curated domain bundles compiled into the existing matcher
-  (list name `service:<name>`), toggled globally or per group. Zero new
-  hot-path cost.
-- **Schedules** — a group's extra rules (and blocked services) active only
-  during set hours ("kids' devices lose social media after 21:00"). A
-  minute ticker recomputes an atomic "active" flag; the hot path still
-  reads one pointer.
-- **Safe Search enforcement** — rewrite google/bing/duckduckgo/youtube to
-  their enforced-safe-search hosts, per group, built on the local-records
-  rewrite machinery.
-
-### 2. Pi-hole / AdGuard Home importer
+### 1. Pi-hole / AdGuard Home importer
 
 `minos import pihole <dir>` (and an upload card in Settings): read
 adlists, allow/deny lists, local DNS records, and groups from a Pi-hole v5
@@ -47,7 +33,7 @@ file layout or v6 database (we already ship a pure-Go SQLite driver) and
 AdGuard Home YAML. Nobody else offers a real migration path; switching
 cost is the #1 adoption blocker for an established Pi-hole household.
 
-### 3. Prometheus metrics
+### 2. Prometheus metrics
 
 `GET /metrics` in Prometheus text format: query/block counters, cache hit
 rate, upstream latency and failures, per-list rule counts. Hand-rolled
@@ -55,7 +41,7 @@ rate, upstream latency and failures, per-list rule counts. Hand-rolled
 Scrape-only and local — consistent with the no-telemetry promise, which
 is about outbound data, not your own dashboards.
 
-### 4. Serve DoH/DoT to clients
+### 3. Serve DoH/DoT to clients
 
 Let phones and laptops use Minos as their encrypted resolver (Android
 Private DNS, iOS profiles) so filtering follows devices onto cellular and
