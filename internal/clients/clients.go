@@ -297,6 +297,13 @@ func (r *Registry) Devices(cfg *config.Config) []Device {
 	return out
 }
 
+// SeenCount reports how many distinct client IPs have queried.
+func (r *Registry) SeenCount() int {
+	n := 0
+	r.seen.Range(func(_, _ any) bool { n++; return true })
+	return n
+}
+
 // setMAC/setHostname are called by the enrichment worker only.
 func (r *Registry) setMAC(ip, mac string) {
 	if v, ok := r.seen.Load(ip); ok {

@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -50,6 +52,57 @@ type Server struct {
 	// safeSearch is the global blocking.safe_search flag; per-group
 	// enforcement rides the client policy.
 	safeSearch atomic.Bool
+
+	// upstreamStats accumulates per-upstream counters for /metrics,
+	// keyed by upstream name so they survive config swaps.
+	upstreamStats sync.Map // string → *upstreamCounters
+}
+
+type upstreamCounters struct {
+	requests atomic.Uint64
+	failures atomic.Uint64
+	// durationNs sums exchange time (successes and failures alike) so a
+	// scraper can derive average latency from sum/count.
+	durationNs atomic.Int64
+}
+
+// UpstreamStat is one upstream's counters, for the metrics endpoint.
+type UpstreamStat struct {
+	Name            string
+	Requests        uint64
+	Failures        uint64
+	DurationSeconds float64
+}
+
+// trackUpstream records one exchange attempt against an upstream.
+func (s *Server) trackUpstream(name string, took time.Duration, err error) {
+	v, ok := s.upstreamStats.Load(name)
+	if !ok {
+		v, _ = s.upstreamStats.LoadOrStore(name, &upstreamCounters{})
+	}
+	c := v.(*upstreamCounters)
+	c.requests.Add(1)
+	if err != nil {
+		c.failures.Add(1)
+	}
+	c.durationNs.Add(took.Nanoseconds())
+}
+
+// UpstreamStats snapshots the per-upstream counters, sorted by name.
+func (s *Server) UpstreamStats() []UpstreamStat {
+	var out []UpstreamStat
+	s.upstreamStats.Range(func(k, v any) bool {
+		c := v.(*upstreamCounters)
+		out = append(out, UpstreamStat{
+			Name:            k.(string),
+			Requests:        c.requests.Load(),
+			Failures:        c.failures.Load(),
+			DurationSeconds: float64(c.durationNs.Load()) / 1e9,
+		})
+		return true
+	})
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 func New(cfg *config.Config, engine *filter.Engine, qlog *querylog.Log, reg *clients.Registry) (*Server, error) {
@@ -357,7 +410,9 @@ func (ft *forwardTable) route(qname string) Upstream {
 func (s *Server) forward(ctx context.Context, req *dns.Msg, qname string) (resp *dns.Msg, upstream string, routed bool, err error) {
 	ft := s.fwd.Load()
 	if up := ft.route(qname); up != nil {
+		began := time.Now()
 		resp, err := up.Exchange(ctx, req)
+		s.trackUpstream(up.Name(), time.Since(began), err)
 		if err != nil {
 			return nil, up.Name(), true, fmt.Errorf("routed upstream failed: %w", err)
 		}
@@ -366,7 +421,9 @@ func (s *Server) forward(ctx context.Context, req *dns.Msg, qname string) (resp 
 	var lastErr error
 	var lastName string
 	for _, up := range ft.defaults {
+		began := time.Now()
 		resp, err := up.Exchange(ctx, req)
+		s.trackUpstream(up.Name(), time.Since(began), err)
 		if err == nil {
 			return resp, up.Name(), false, nil
 		}

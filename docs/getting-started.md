@@ -208,6 +208,27 @@ Open `http://<host>:8080`. Five pages, one per concern:
 If you set `api.token` (in the config file or from Settings), the UI and
 CLI require it.
 
+## Monitoring with Prometheus / Grafana
+
+`GET /metrics` on the API port serves Prometheus exposition format:
+query/block counters, cache hit rate, per-upstream request counts,
+failures, and cumulative latency, per-list rule counts, and pause state.
+It is scrape-only — Minos never pushes data anywhere, so the no-telemetry
+promise holds; these are your own numbers on your own network.
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: minos
+    static_configs:
+      - targets: ["192.168.1.2:8080"]
+    authorization:          # only if you set api.token
+      credentials: your-api-token
+```
+
+Mean upstream latency in PromQL:
+`rate(minos_upstream_duration_seconds_total[5m]) / rate(minos_upstream_requests_total[5m])`
+
 ## Configuration
 
 Everything lives in one YAML file and every setting can be changed through

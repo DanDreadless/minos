@@ -22,15 +22,17 @@ import (
 
 	"minos/internal/clients"
 	"minos/internal/config"
+	"minos/internal/dnsproxy"
 	"minos/internal/filter"
 	"minos/internal/lists"
 	"minos/internal/querylog"
 )
 
-// CacheStatsSource reports DNS response-cache counters; the dnsproxy server
-// implements it. A nil source reports the cache as disabled.
-type CacheStatsSource interface {
+// ProxyStatsSource reports DNS-proxy counters (response cache, upstreams);
+// the dnsproxy server implements it. A nil source reports nothing.
+type ProxyStatsSource interface {
 	CacheStats() (hits, misses uint64, entries int64, enabled bool)
+	UpstreamStats() []dnsproxy.UpstreamStat
 }
 
 // Server wires the HTTP surface to the running components.
@@ -40,14 +42,14 @@ type Server struct {
 	store   *config.Store
 	lists   *lists.Manager
 	clients *clients.Registry
-	cache   CacheStatsSource // may be nil
+	cache   ProxyStatsSource // may be nil
 	static  fs.FS            // embedded web/dist; nil disables UI serving
 	version string
 	started time.Time
 }
 
 func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
-	mgr *lists.Manager, reg *clients.Registry, cache CacheStatsSource,
+	mgr *lists.Manager, reg *clients.Registry, cache ProxyStatsSource,
 	static fs.FS, version string,
 ) *Server {
 	return &Server{
@@ -66,6 +68,9 @@ func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
+	// Prometheus convention puts /metrics at the root; it shares the API
+	// auth (Prometheus scrape configs send Authorization: Bearer).
+	r.With(s.auth).Get("/metrics", s.handleMetrics)
 	r.Route("/api", func(r chi.Router) {
 		r.Use(s.auth)
 		r.Get("/status", s.handleStatus)

@@ -21,21 +21,15 @@ At or beyond parity with the field:
   per-group schedules, Safe Search enforcement *(shipped)*
 - **Migration importer** — `minos import pihole|adguard` carries over
   blocklists, allow/deny rules, local records, blocked services *(shipped)*
+- **Prometheus metrics** — `/metrics` with query, cache, per-upstream, and
+  per-list series; hand-rolled, scrape-only *(shipped)*
 - Every setting applies live — no restart, ever, except the two listen
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry
 
 ## Next up (in priority order)
 
-### 1. Prometheus metrics
-
-`GET /metrics` in Prometheus text format: query/block counters, cache hit
-rate, upstream latency and failures, per-list rule counts. Hand-rolled
-(no new dependency), served by the existing authenticated API listener.
-Scrape-only and local — consistent with the no-telemetry promise, which
-is about outbound data, not your own dashboards.
-
-### 2. Serve DoH/DoT to clients
+### 1. Serve DoH/DoT to clients
 
 Let phones and laptops use Minos as their encrypted resolver (Android
 Private DNS, iOS profiles) so filtering follows devices onto cellular and

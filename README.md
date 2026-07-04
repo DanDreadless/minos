@@ -33,6 +33,7 @@ no appeals (well, except pardons).
   or per group
 - One-command migration: `minos import pihole /etc/pihole` or
   `minos import adguard AdGuardHome.yaml`
+- Prometheus `/metrics` for Grafana dashboards — scrape-only, never pushes
 - Full management from the UI: blocklists, allow/deny domains, upstreams,
   blocking mode, retention, API token — all applied live, no restarts
 - Batched SQLite persistence that respects SD cards
