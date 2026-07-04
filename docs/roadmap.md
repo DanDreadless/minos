@@ -42,6 +42,9 @@ At or beyond parity with the field:
   maps (~82 B/entry, 164 MB) to a sorted slab (~31 B/entry): 2M blocked
   domains now hold at 83 MB RSS against the 150 MB budget, with lookups
   still >1000× inside the latency budget *(shipped)*
+- **Opt-in update check** — off by default; when enabled, one daily GET to
+  the GitHub releases API surfaces "vX.Y.Z available" in the UI and CLI
+  *(shipped)*
 - Every setting applies live — no restart, ever, except the two listen
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry
@@ -59,7 +62,6 @@ next comes from the list below as real-world usage decides:
   the CLI importer ships today)
 - Config restore (import the YAML backup through the UI)
 - DNSSEC validation (today: delegate to validating DoH/DoT upstreams)
-- Opt-in update check (must stay opt-in: no phoning home by default)
 
 ## Not building (pre-1.0)
 

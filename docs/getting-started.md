@@ -223,7 +223,9 @@ Open `http://<host>:8080`. Six pages, one per concern:
   resolving), the response cache (repeat queries answered from memory —
   the dashboard shows the hit rate), blocking mode and TTL, network-wide
   Safe Search, list refresh interval, query-log retention and buffer
-  size, the API token, and a one-click YAML config backup.
+  size, the API token, a one-click YAML config backup, and an opt-in
+  daily update check (a "vX.Y.Z available" link appears in the sidebar
+  when a newer release exists — nothing is sent beyond the request).
 
 If you set `api.token` (in the config file or from Settings), the UI and
 CLI require it.
@@ -368,6 +370,8 @@ querylog:
 api:
   listen: 0.0.0.0:8080
   token: ""                 # set one if the LAN isn't fully trusted
+update_check: false         # opt-in: ask GitHub for the latest release once
+                            # a day; nothing is sent beyond the request itself
 ```
 
 ## CLI

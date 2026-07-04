@@ -197,6 +197,11 @@ export const copy = {
     tokenConfirmClear: 'Remove the API token? Anyone on the LAN will be able to manage Minos.',
     listenNote: (dns: string, api: string) =>
       `DNS listens on ${dns}, this interface on ${api}. Listen addresses are set in the config file and need a restart.`,
+    updatesTitle: 'Updates',
+    updateCheck: 'Check for new releases once a day',
+    updateCheckHint:
+      'Asks GitHub for the latest release tag — nothing about you or your network is sent, only the request itself. Off unless you turn it on.',
+    updateAvailable: (v: string) => `v${v} available`,
     backupTitle: 'Backup',
     backupHint: 'download the full configuration as YAML',
     backupButton: 'Export configuration',

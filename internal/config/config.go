@@ -245,6 +245,11 @@ type Config struct {
 	Lists    ListsConfig    `yaml:"lists"`
 	QueryLog QueryLogConfig `yaml:"querylog"`
 	API      APIConfig      `yaml:"api"`
+	// UpdateCheck, when true, asks the GitHub releases API for the latest
+	// version once a day. Strictly opt-in (default false): nothing is
+	// sent beyond the request itself, and nothing is sent at all unless
+	// the user turns it on.
+	UpdateCheck bool `yaml:"update_check"`
 }
 
 // Default returns the configuration used when no file exists yet.

@@ -38,7 +38,19 @@
       {:else}
         <span class="pill active-pill">blocking active</span>
       {/if}
-      <span class="version">v{status.version}</span>
+      <span class="version">
+        v{status.version}
+        {#if status.update_available && status.latest_version}
+          <a
+            class="update"
+            href="https://github.com/DanDreadless/minos/releases"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {copy.settings.updateAvailable(status.latest_version)}
+          </a>
+        {/if}
+      </span>
     {/if}
   </div>
 </nav>
@@ -153,6 +165,17 @@
   .version {
     margin-left: auto;
     color: var(--text-dim);
+    text-align: right;
+  }
+
+  .version .update {
+    display: block;
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .version .update:hover {
+    text-decoration: underline;
   }
 
   @media (max-width: 800px) {

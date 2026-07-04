@@ -26,6 +26,7 @@
   let cacheMinTTL = 10;
   let cacheMaxTTL = 3600;
   let cacheServeStale = true;
+  let updateCheck = false;
 
   interface RouteRow {
     domains: string;
@@ -48,6 +49,7 @@
     cacheMinTTL = c.dns.cache.min_ttl;
     cacheMaxTTL = c.dns.cache.max_ttl;
     cacheServeStale = c.dns.cache.serve_stale;
+    updateCheck = c.update_check;
     routeRows = c.dns.routes.map((r) => ({
       domains: r.domains.join(', '),
       address: r.upstream.address,
@@ -337,6 +339,19 @@
       {/if}
     </div>
     <p class="note">{copy.settings.listenNote(cfg.dns.listen, cfg.api.listen)}</p>
+  </section>
+
+  <section class="card">
+    <h2>{copy.settings.updatesTitle}</h2>
+    <label class="radio">
+      <input
+        type="checkbox"
+        bind:checked={updateCheck}
+        on:change={() => void save({ update_check: updateCheck })}
+      />
+      {copy.settings.updateCheck}
+    </label>
+    <p class="note">{copy.settings.updateCheckHint}</p>
   </section>
 
   <section class="card">

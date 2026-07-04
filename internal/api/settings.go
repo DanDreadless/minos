@@ -43,6 +43,7 @@ type configView struct {
 		Listen   string `json:"listen"`
 		TokenSet bool   `json:"token_set"`
 	} `json:"api"`
+	UpdateCheck bool `json:"update_check"`
 }
 
 func viewOf(c *config.Config) configView {
@@ -69,6 +70,7 @@ func viewOf(c *config.Config) configView {
 	v.QueryLog.RetentionDays = c.QueryLog.RetentionDays
 	v.API.Listen = c.API.Listen
 	v.API.TokenSet = c.API.Token != ""
+	v.UpdateCheck = c.UpdateCheck
 	return v
 }
 
@@ -108,6 +110,7 @@ type settingsUpdate struct {
 	API *struct {
 		Token *string `json:"token"`
 	} `json:"api"`
+	UpdateCheck *bool `json:"update_check"`
 }
 
 func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
@@ -184,6 +187,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if upd.API != nil && upd.API.Token != nil {
 			c.API.Token = *upd.API.Token
+		}
+		if upd.UpdateCheck != nil {
+			c.UpdateCheck = *upd.UpdateCheck
 		}
 		return nil
 	})

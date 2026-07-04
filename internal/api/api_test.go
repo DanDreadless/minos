@@ -38,7 +38,7 @@ func newTestServer(t *testing.T, token string) (*Server, *config.Store) {
 	reg := clients.NewRegistry()
 	reg.ApplyConfig(store.Get())
 	store.OnChange(func(c *config.Config) { reg.ApplyConfig(c) })
-	return New(engine, qlog, store, mgr, reg, nil, nil, "test"), store
+	return New(engine, qlog, store, mgr, reg, nil, nil, nil, "test"), store
 }
 
 func doJSON(t *testing.T, h http.Handler, method, path, body string, hdr map[string]string) *httptest.ResponseRecorder {

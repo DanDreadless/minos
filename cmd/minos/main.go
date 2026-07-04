@@ -25,6 +25,7 @@ import (
 	"minos/internal/importer"
 	"minos/internal/lists"
 	"minos/internal/querylog"
+	"minos/internal/updates"
 	"minos/web"
 )
 
@@ -129,11 +130,14 @@ func serve(args []string) error {
 	go mgr.Run(ctx)
 	go reg.Run(ctx)
 
+	checker := updates.NewChecker(version, store)
+	go checker.Run(ctx)
+
 	static, err := iofs.Sub(web.Dist, "dist")
 	if err != nil {
 		return fmt.Errorf("embedded ui: %w", err)
 	}
-	apiSrv := api.New(engine, qlog, store, mgr, reg, proxy, static, version)
+	apiSrv := api.New(engine, qlog, store, mgr, reg, proxy, checker, static, version)
 	httpSrv := &http.Server{
 		Addr:              cfg.API.Listen,
 		Handler:           apiSrv.Router(),
@@ -297,6 +301,10 @@ func clientStatus(args []string) error {
 		}
 	} else {
 		fmt.Println("  blocking: active")
+	}
+	if out["update_available"] == true {
+		fmt.Printf("  update:  v%v is available — https://github.com/DanDreadless/minos/releases\n",
+			out["latest_version"])
 	}
 	return nil
 }

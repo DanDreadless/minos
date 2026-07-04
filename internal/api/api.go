@@ -35,6 +35,12 @@ type ProxyStatsSource interface {
 	UpstreamStats() []dnsproxy.UpstreamStat
 }
 
+// UpdateSource reports the newest known release; the updates.Checker
+// implements it. A nil source reports nothing (check disabled or unwired).
+type UpdateSource interface {
+	Latest() (version string, available bool)
+}
+
 // Server wires the HTTP surface to the running components.
 type Server struct {
 	engine  *filter.Engine
@@ -43,6 +49,7 @@ type Server struct {
 	lists   *lists.Manager
 	clients *clients.Registry
 	cache   ProxyStatsSource // may be nil
+	updates UpdateSource     // may be nil
 	static  fs.FS            // embedded web/dist; nil disables UI serving
 	version string
 	started time.Time
@@ -50,7 +57,7 @@ type Server struct {
 
 func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
 	mgr *lists.Manager, reg *clients.Registry, cache ProxyStatsSource,
-	static fs.FS, version string,
+	upd UpdateSource, static fs.FS, version string,
 ) *Server {
 	return &Server{
 		engine:  engine,
@@ -59,6 +66,7 @@ func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
 		lists:   mgr,
 		clients: reg,
 		cache:   cache,
+		updates: upd,
 		static:  static,
 		version: version,
 		started: time.Now(),
@@ -155,6 +163,9 @@ type statusResponse struct {
 	CacheHits      uint64     `json:"cache_hits"`
 	CacheMisses    uint64     `json:"cache_misses"`
 	CacheEntries   int64      `json:"cache_entries"`
+	// LatestVersion is set once an opt-in update check has succeeded.
+	LatestVersion   string `json:"latest_version,omitempty"`
+	UpdateAvailable bool   `json:"update_available"`
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -174,6 +185,9 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.cache != nil {
 		resp.CacheHits, resp.CacheMisses, resp.CacheEntries, resp.CacheEnabled = s.cache.CacheStats()
+	}
+	if s.updates != nil {
+		resp.LatestVersion, resp.UpdateAvailable = s.updates.Latest()
 	}
 	if paused && !until.IsZero() {
 		resp.PausedUntil = &until

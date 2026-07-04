@@ -16,6 +16,8 @@ export interface Status {
   cache_hits: number;
   cache_misses: number;
   cache_entries: number;
+  latest_version?: string;
+  update_available: boolean;
 }
 
 export interface LogEntry {
@@ -89,6 +91,7 @@ export interface ConfigView {
   lists: { refresh_interval: string };
   querylog: { ephemeral: boolean; db_path: string; ring_size: number; retention_days: number };
   api: { listen: string; token_set: boolean };
+  update_check: boolean;
 }
 
 // Partial settings update; omitted fields are left untouched by the server.
@@ -105,6 +108,7 @@ export interface SettingsUpdate {
   lists?: { refresh_interval?: string };
   querylog?: { ring_size?: number; retention_days?: number };
   api?: { token?: string };
+  update_check?: boolean;
 }
 
 export interface ListStatus {
