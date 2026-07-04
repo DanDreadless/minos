@@ -140,9 +140,12 @@ not the lore terms.
 
 ## The filter engine (performance-critical)
 
-- Exact-domain sets use a single interned string map keyed on the
-  reversed-label form (`com.doubleclick.`) so subdomain matches walk
-  parent labels without allocation.
+- Exact-domain sets compile to a sorted byte slab + packed index keyed on
+  the reversed-label form (`com.doubleclick.`): ~31 B/entry (2M domains =
+  62 MB heap, 83 MB RSS — inside the budget) with binary-search lookups
+  (~535 ns hit at 100k, ~500 ns at 2M — the 1 ms budget doesn't notice).
+  The builder still uses maps; Build() compacts, so rebuild peak RSS is
+  ~300 MB at 2M domains (transient, off the hot path — fine on Pi 4+).
 - AdBlock-syntax rules compile to a small matcher; unsupported AdBlock
   features are skipped with a counted warning, never a parse failure.
 - List refresh builds a complete new matcher off the hot path, then

@@ -5,7 +5,10 @@
 // off the hot path and swap it into the Engine atomically.
 package filter
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // Result is the verdict for a single query name.
 type Result struct {
@@ -82,8 +85,8 @@ func (b *Builder) SkippedCount() int { return b.skipped }
 func (b *Builder) Build() *Matcher {
 	return &Matcher{
 		lists:   b.lists,
-		deny:    b.deny,
-		allow:   b.allow,
+		deny:    compactSet(b.deny),
+		allow:   compactSet(b.allow),
 		skipped: b.skipped,
 	}
 }
@@ -92,9 +95,84 @@ func (b *Builder) Build() *Matcher {
 // concurrent use because nothing mutates after Build.
 type Matcher struct {
 	lists   []string
-	deny    map[string]int32
-	allow   map[string]int32
+	deny    domainSet
+	allow   domainSet
 	skipped int
+}
+
+// domainSet is a compact, immutable domain → list-index set: every
+// reversed-label key concatenated in sorted order into one slab, with a
+// packed index entry per key. Two maps at 2M entries cost ~164 MB
+// (~82 B/entry, blowing the 150 MB RSS budget); this layout holds the
+// same data in ~45 B/entry, and a binary-search lookup stays far under
+// the 1 ms blocked-query budget.
+type domainSet struct {
+	slab []byte
+	// idx entries are (offset << 24) | (keyLen << 16) | listIndex,
+	// sorted by key bytes. keyLen fits 8 bits (DNS names cap at 254
+	// with the trailing dot); listIndex fits 16 bits (a config carries
+	// dozens of lists, not thousands); offset gets the remaining 40.
+	idx []uint64
+}
+
+// compactSet flattens a builder map into the slab + index form.
+func compactSet(m map[string]int32) domainSet {
+	if len(m) == 0 {
+		return domainSet{}
+	}
+	keys := make([]string, 0, len(m))
+	total := 0
+	for k := range m {
+		keys = append(keys, k)
+		total += len(k)
+	}
+	sort.Strings(keys)
+	slab := make([]byte, 0, total)
+	idx := make([]uint64, len(keys))
+	for i, k := range keys {
+		off := uint64(len(slab))
+		slab = append(slab, k...)
+		idx[i] = off<<24 | uint64(len(k))<<16 | uint64(uint16(m[k]))
+	}
+	return domainSet{slab: slab, idx: idx}
+}
+
+// lookup binary-searches for key, returning its list index.
+func (s *domainSet) lookup(key string) (int32, bool) {
+	lo, hi := 0, len(s.idx)
+	for lo < hi {
+		mid := int(uint(lo+hi) >> 1)
+		e := s.idx[mid]
+		off := e >> 24
+		k := s.slab[off : off+(e>>16)&0xff]
+		switch c := compareStringBytes(key, k); {
+		case c == 0:
+			return int32(uint16(e)), true
+		case c < 0:
+			hi = mid
+		default:
+			lo = mid + 1
+		}
+	}
+	return 0, false
+}
+
+// compareStringBytes is bytes.Compare across a string and a []byte,
+// avoiding the allocation a string(b) conversion would cost per probe.
+func compareStringBytes(a string, b []byte) int {
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	for i := 0; i < n; i++ {
+		if a[i] != b[i] {
+			if a[i] < b[i] {
+				return -1
+			}
+			return 1
+		}
+	}
+	return len(a) - len(b)
 }
 
 // EmptyMatcher blocks nothing; the Engine starts with it so queries flow
@@ -102,10 +180,10 @@ type Matcher struct {
 func EmptyMatcher() *Matcher { return NewBuilder().Build() }
 
 // Rules returns the number of compiled deny entries.
-func (m *Matcher) Rules() int { return len(m.deny) }
+func (m *Matcher) Rules() int { return len(m.deny.idx) }
 
 // AllowRules returns the number of compiled allow entries.
-func (m *Matcher) AllowRules() int { return len(m.allow) }
+func (m *Matcher) AllowRules() int { return len(m.allow.idx) }
 
 // Skipped returns how many rules were dropped as invalid or unsupported.
 func (m *Matcher) Skipped() int { return m.skipped }
@@ -116,7 +194,7 @@ func (m *Matcher) Skipped() int { return m.skipped }
 // the reversed-label key, so a lookup does exactly one small allocation
 // (the reversed key) regardless of match depth.
 func (m *Matcher) Match(qname string) Result {
-	if len(m.deny) == 0 && len(m.allow) == 0 {
+	if len(m.deny.idx) == 0 && len(m.allow.idx) == 0 {
 		return Result{}
 	}
 	rev := reverseLabels(qname)
@@ -128,11 +206,11 @@ func (m *Matcher) Match(qname string) Result {
 			continue
 		}
 		prefix := rev[:i+1]
-		if idx, ok := m.allow[prefix]; ok {
+		if idx, ok := m.allow.lookup(prefix); ok {
 			return Result{Blocked: false, List: m.lists[idx], Rule: unreverseLabels(prefix)}
 		}
 		if !denied.Blocked {
-			if idx, ok := m.deny[prefix]; ok {
+			if idx, ok := m.deny.lookup(prefix); ok {
 				denied = Result{Blocked: true, List: m.lists[idx], Rule: unreverseLabels(prefix)}
 			}
 		}

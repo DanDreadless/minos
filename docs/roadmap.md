@@ -38,18 +38,18 @@ At or beyond parity with the field:
 - **Query dedup + serve-stale** — concurrent identical queries collapse to
   one exchange; expired answers serve instantly (RFC 8767) with a deduped
   background refresh *(shipped)*
+- **2M-domain memory budget verified** — the matcher was compacted from
+  maps (~82 B/entry, 164 MB) to a sorted slab (~31 B/entry): 2M blocked
+  domains now hold at 83 MB RSS against the 150 MB budget, with lookups
+  still >1000× inside the latency budget *(shipped)*
 - Every setting applies live — no restart, ever, except the two listen
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry
 
 ## Next up
 
-The headline roadmap is shipped. The candidates below are what a July 2026
-review flagged as the highest-impact remaining work, roughly in order:
-
-1. **Verify the 2M-domain memory budget** — the 150 MB RSS budget is
-   untested at Hagezi-Pro++ scale; measure and compact the matcher if it
-   falls short.
+Everything the July 2026 review flagged has shipped. What gets promoted
+next comes from the list below as real-world usage decides:
 
 ## Under consideration
 
