@@ -230,8 +230,9 @@ This is security software; hold it to that standard.
   `PUT /api/config` applies live (upstreams/mode/TTL via dnsproxy atomic
   pointers; retention/ring size via `querylog.SetRetentionDays`/`Resize`
   wired in main's OnChange). The deliberate exceptions — file-only, need
-  a restart — are `dns.listen`, `api.listen`, and query-log storage
-  (`ephemeral`/`db_path`). Don't expose those as editable in the UI.
+  a restart — are `dns.listen`, `api.listen`, `dns.tls` (DoT/DoH
+  listeners + certificate), and query-log storage (`ephemeral`/
+  `db_path`). Don't expose those as editable in the UI.
 - **Dashboard aggregates read SQLite** (or the ring in ephemeral mode),
   so entries buffered but not yet flushed (≤30s/500) are missing from
   charts. Accepted skew — do not "fix" it by flushing per query.
@@ -262,3 +263,8 @@ This is security software; hold it to that standard.
 - **This Windows dev box has no `make` or `golangci-lint`**: run the
   underlying commands directly (`go test ./...`, `gofmt -l`, `go vet`,
   `npm run build`, `npx svelte-check`). Lint runs in Linux CI.
+- **Encrypted listeners reuse handle()**: DoT is the same dns.Handler on
+  a tls.Listen socket; DoH adapts RFC 8484 GET/POST onto a captured
+  dns.ResponseWriter — so device policies, local records, Safe Search,
+  cache, and the docket apply unchanged over DoT/DoH. Don't fork the
+  pipeline for new transports.

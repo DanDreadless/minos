@@ -208,6 +208,44 @@ Open `http://<host>:8080`. Five pages, one per concern:
 If you set `api.token` (in the config file or from Settings), the UI and
 CLI require it.
 
+## Encrypted DNS for your devices (DoT / DoH)
+
+Minos can serve DNS-over-TLS and DNS-over-HTTPS itself, so phones and
+laptops resolve through it encrypted — and Android's Private DNS keeps
+your filtering active even when apps would otherwise hardcode a public
+DoH resolver.
+
+```yaml
+dns:
+  tls:
+    cert_file: /var/lib/minos/fullchain.pem
+    key_file: /var/lib/minos/privkey.pem
+    dot_listen: ":853"     # DNS-over-TLS (Android Private DNS)
+    doh_listen: ":8443"    # DNS-over-HTTPS at /dns-query
+```
+
+Both listeners are optional and share one certificate. Like the plain
+listen addresses, these settings are file-only — restart to change them.
+Everything applies unchanged over the encrypted listeners: device
+policies, local records, Safe Search, the cache, and the query log.
+
+**The certificate must match a real hostname** that clients validate —
+Android Private DNS takes a hostname, not an IP. The usual home setup:
+a DNS-01 Let's Encrypt certificate for a name like `dns.example.com`
+(issued without exposing anything to the internet), plus a local record
+in Minos pointing that name at the server's LAN IP. A self-signed CA
+works too if you install it on the devices.
+
+Point Android at it: Settings → Network → Private DNS → the hostname on
+the certificate. iOS/macOS take DoH/DoT via a configuration profile.
+
+Keep the firewall LAN-only for these ports just like port 53:
+
+```sh
+sudo ufw allow from 192.168.1.0/24 to any port 853  proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 8443 proto tcp
+```
+
 ## Monitoring with Prometheus / Grafana
 
 `GET /metrics` on the API port serves Prometheus exposition format:

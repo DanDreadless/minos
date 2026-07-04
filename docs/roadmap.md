@@ -23,21 +23,22 @@ At or beyond parity with the field:
   blocklists, allow/deny rules, local records, blocked services *(shipped)*
 - **Prometheus metrics** — `/metrics` with query, cache, per-upstream, and
   per-list series; hand-rolled, scrape-only *(shipped)*
+- **Client-facing DoT/DoH** — serve encrypted DNS with your own
+  certificate; Android Private DNS ready *(shipped — manual certs;
+  ACME below)*
 - Every setting applies live — no restart, ever, except the two listen
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry
 
-## Next up (in priority order)
+## Next up
 
-### 1. Serve DoH/DoT to clients
-
-Let phones and laptops use Minos as their encrypted resolver (Android
-Private DNS, iOS profiles) so filtering follows devices onto cellular and
-can't be bypassed by hardcoded DoH. The big lift is TLS certificate
-management (manual certs first; ACME later) — which is why it's last in
-line despite high demand.
+The headline roadmap is shipped. What gets promoted next comes from this
+list as real-world usage decides:
 
 ## Under consideration
+
+- ACME/Let's Encrypt automation for the DoT/DoH certificate (manual
+  certs work today)
 
 - Import through the UI (upload a gravity.db/AdGuardHome.yaml on Settings —
   the CLI importer ships today)

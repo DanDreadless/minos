@@ -34,6 +34,8 @@ no appeals (well, except pardons).
 - One-command migration: `minos import pihole /etc/pihole` or
   `minos import adguard AdGuardHome.yaml`
 - Prometheus `/metrics` for Grafana dashboards — scrape-only, never pushes
+- Serves encrypted DNS to clients: DoT for Android Private DNS, DoH at
+  `/dns-query` — bring a certificate, filtering follows your devices
 - Full management from the UI: blocklists, allow/deny domains, upstreams,
   blocking mode, retention, API token — all applied live, no restarts
 - Batched SQLite persistence that respects SD cards

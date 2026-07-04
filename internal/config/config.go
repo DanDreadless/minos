@@ -64,7 +64,27 @@ type DNSConfig struct {
 	// Routes send matching domains (and their subdomains) to a specific
 	// upstream instead of the default ones — conditional forwarding.
 	Routes []Route `yaml:"routes,omitempty"`
+	// TLS serves encrypted DNS to clients (DoT/DoH). Like the plain
+	// listen addresses, these settings are file-only: changing them
+	// requires a restart.
+	TLS TLSListeners `yaml:"tls,omitempty"`
 }
+
+// TLSListeners configures client-facing encrypted DNS. Both listeners are
+// optional; enabling either requires a certificate whose hostname the
+// clients will validate (Android Private DNS is hostname-based).
+type TLSListeners struct {
+	CertFile string `yaml:"cert_file,omitempty"`
+	KeyFile  string `yaml:"key_file,omitempty"`
+	// DoTListen serves DNS-over-TLS (usually ":853"); empty disables.
+	DoTListen string `yaml:"dot_listen,omitempty"`
+	// DoHListen serves DNS-over-HTTPS at /dns-query (usually ":443");
+	// empty disables.
+	DoHListen string `yaml:"doh_listen,omitempty"`
+}
+
+// Enabled reports whether any encrypted listener is configured.
+func (t TLSListeners) Enabled() bool { return t.DoTListen != "" || t.DoHListen != "" }
 
 // Route is one conditional-forwarding rule. A route is authoritative for
 // its domains: if its upstream fails, the query fails (no fallback to the
@@ -321,6 +341,21 @@ func (c *Config) Validate() error {
 		}
 		if err := validateUpstream(r.Upstream); err != nil {
 			return fmt.Errorf("dns.routes[%d].upstream: %w", i, err)
+		}
+	}
+	if t := c.DNS.TLS; t.Enabled() {
+		if t.CertFile == "" || t.KeyFile == "" {
+			return fmt.Errorf("dns.tls: cert_file and key_file are required when dot_listen or doh_listen is set")
+		}
+		if t.DoTListen != "" {
+			if err := validateHostPort(t.DoTListen); err != nil {
+				return fmt.Errorf("dns.tls.dot_listen: %w", err)
+			}
+		}
+		if t.DoHListen != "" {
+			if err := validateHostPort(t.DoHListen); err != nil {
+				return fmt.Errorf("dns.tls.doh_listen: %w", err)
+			}
 		}
 	}
 	if c.DNS.Cache.Enabled {

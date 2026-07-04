@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -39,9 +40,17 @@ type Server struct {
 	udp     *dns.Server
 	tcp     *dns.Server
 	udpAddr net.Addr
-	policy  atomic.Pointer[blockingPolicy]
-	fwd     atomic.Pointer[forwardTable]
-	local   atomic.Pointer[localZone] // nil when no local records
+
+	// Client-facing encrypted DNS; nil when dns.tls is not configured.
+	// File-only settings like the plain listen address: restart to change.
+	tlsListeners config.TLSListeners
+	dot          *dns.Server
+	doh          *http.Server
+	dotAddr      net.Addr
+	dohAddr      net.Addr
+	policy       atomic.Pointer[blockingPolicy]
+	fwd          atomic.Pointer[forwardTable]
+	local        atomic.Pointer[localZone] // nil when no local records
 
 	// cache is nil when disabled. Hit/miss counters live on the Server so
 	// they survive the cache flush that every config change performs.
@@ -107,10 +116,11 @@ func (s *Server) UpstreamStats() []UpstreamStat {
 
 func New(cfg *config.Config, engine *filter.Engine, qlog *querylog.Log, reg *clients.Registry) (*Server, error) {
 	s := &Server{
-		engine:  engine,
-		qlog:    qlog,
-		clients: reg,
-		listen:  cfg.DNS.Listen,
+		engine:       engine,
+		qlog:         qlog,
+		clients:      reg,
+		listen:       cfg.DNS.Listen,
+		tlsListeners: cfg.DNS.TLS,
 	}
 	if err := s.ApplyConfig(cfg); err != nil {
 		return nil, err
@@ -189,6 +199,11 @@ func (s *Server) Start() error {
 	}
 	s.udpAddr = pc.LocalAddr()
 	handler := dns.HandlerFunc(s.handle)
+	if err := s.startEncrypted(handler); err != nil {
+		pc.Close()
+		ln.Close()
+		return err
+	}
 	s.udp = &dns.Server{PacketConn: pc, Handler: handler}
 	s.tcp = &dns.Server{Listener: ln, Handler: handler}
 	go func() {
@@ -217,6 +232,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		if err := srv.ShutdownContext(ctx); err != nil && firstErr == nil {
 			firstErr = err
 		}
+	}
+	if err := s.shutdownEncrypted(ctx); err != nil && firstErr == nil {
+		firstErr = err
 	}
 	return firstErr
 }
