@@ -16,6 +16,7 @@
   let upstreams: Upstream[] = [];
   let mode: string = 'zero_ip';
   let blockTTL = 60;
+  let safeSearch = false;
   let refreshInterval = '24h';
   let retentionDays = 90;
   let ringSize = 10000;
@@ -36,6 +37,7 @@
     cfg = c;
     upstreams = c.dns.upstreams.map((u) => ({ ...u }));
     mode = c.blocking.mode;
+    safeSearch = c.blocking.safe_search;
     blockTTL = c.dns.block_ttl;
     refreshInterval = c.lists.refresh_interval;
     retentionDays = c.querylog.retention_days;
@@ -69,7 +71,8 @@
   }
 
   const saveUpstreams = () => save({ dns: { upstreams } });
-  const saveBlocking = () => save({ blocking: { mode }, dns: { block_ttl: blockTTL } });
+  const saveBlocking = () =>
+    save({ blocking: { mode, safe_search: safeSearch }, dns: { block_ttl: blockTTL } });
   const saveLists = () => save({ lists: { refresh_interval: refreshInterval } });
   const saveCache = () =>
     save({
@@ -208,6 +211,11 @@
       <span>{copy.settings.blockTTL} <small>{copy.settings.blockTTLHint}</small></span>
       <input type="number" min="0" max="86400" bind:value={blockTTL} />
     </label>
+    <label class="radio safe-search">
+      <input type="checkbox" bind:checked={safeSearch} />
+      {copy.settings.safeSearch}
+    </label>
+    <p class="note">{copy.settings.safeSearchHint}</p>
     <div class="section-actions">
       <button class="primary" on:click={saveBlocking}>{copy.settings.save}</button>
     </div>
@@ -394,6 +402,10 @@
 
   .route-arrow {
     color: var(--text-dim);
+  }
+
+  .safe-search {
+    margin-top: 0.75rem;
   }
 
   .token-row {

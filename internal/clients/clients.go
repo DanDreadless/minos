@@ -31,6 +31,9 @@ type Policy struct {
 	Group   string
 	Mode    string
 	Blocked bool // per-device override: refuse all DNS
+	// SafeSearch enforces safe-search rewrites for this group's members
+	// (on top of the global blocking.safe_search flag).
+	SafeSearch bool
 	// Overlay holds a filter-mode group's extra allow/deny domains,
 	// layered over the global matcher. Nil when the group adds none.
 	Overlay *filter.Matcher
@@ -137,6 +140,9 @@ func (r *Registry) rebuildPolicies(now time.Time) {
 			continue // inactive: members resolve to the default policy
 		}
 		p := &Policy{Group: g.Name, Mode: g.Mode}
+		if g.Mode == ModeFilter {
+			p.SafeSearch = g.SafeSearch
+		}
 		if g.Mode == ModeFilter && (len(g.Allowlist) > 0 || len(g.Denylist) > 0 || len(g.Services) > 0) {
 			b := filter.NewBuilder()
 			list := "group:" + g.Name

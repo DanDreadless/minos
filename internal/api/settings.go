@@ -27,7 +27,8 @@ type configView struct {
 		Routes       []config.Route       `json:"routes"`
 	} `json:"dns"`
 	Blocking struct {
-		Mode string `json:"mode"`
+		Mode       string `json:"mode"`
+		SafeSearch bool   `json:"safe_search"`
 	} `json:"blocking"`
 	Lists struct {
 		RefreshInterval string `json:"refresh_interval"`
@@ -60,6 +61,7 @@ func viewOf(c *config.Config) configView {
 		v.DNS.Routes = []config.Route{}
 	}
 	v.Blocking.Mode = c.Blocking.Mode
+	v.Blocking.SafeSearch = c.Blocking.SafeSearch
 	v.Lists.RefreshInterval = c.Lists.RefreshInterval.Std().String()
 	v.QueryLog.Ephemeral = c.QueryLog.Ephemeral
 	v.QueryLog.DBPath = c.QueryLog.DBPath
@@ -92,7 +94,8 @@ type settingsUpdate struct {
 		Routes       *[]config.Route       `json:"routes"`
 	} `json:"dns"`
 	Blocking *struct {
-		Mode *string `json:"mode"`
+		Mode       *string `json:"mode"`
+		SafeSearch *bool   `json:"safe_search"`
 	} `json:"blocking"`
 	Lists *struct {
 		RefreshInterval *string `json:"refresh_interval"`
@@ -156,8 +159,13 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 				c.DNS.Routes = *upd.DNS.Routes
 			}
 		}
-		if upd.Blocking != nil && upd.Blocking.Mode != nil {
-			c.Blocking.Mode = *upd.Blocking.Mode
+		if upd.Blocking != nil {
+			if upd.Blocking.Mode != nil {
+				c.Blocking.Mode = *upd.Blocking.Mode
+			}
+			if upd.Blocking.SafeSearch != nil {
+				c.Blocking.SafeSearch = *upd.Blocking.SafeSearch
+			}
 		}
 		if upd.Lists != nil && upd.Lists.RefreshInterval != nil {
 			c.Lists.RefreshInterval = config.Duration(refreshInterval)

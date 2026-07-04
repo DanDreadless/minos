@@ -46,6 +46,10 @@ type Server struct {
 	cache       atomic.Pointer[dnsCache]
 	cacheHits   atomic.Uint64
 	cacheMisses atomic.Uint64
+
+	// safeSearch is the global blocking.safe_search flag; per-group
+	// enforcement rides the client policy.
+	safeSearch atomic.Bool
 }
 
 func New(cfg *config.Config, engine *filter.Engine, qlog *querylog.Log, reg *clients.Registry) (*Server, error) {
@@ -92,6 +96,7 @@ func (s *Server) ApplyConfig(cfg *config.Config) error {
 		blockTTL: cfg.DNS.BlockTTL,
 	})
 	s.local.Store(buildLocalZone(cfg))
+	s.safeSearch.Store(cfg.Blocking.SafeSearch)
 	// A fresh cache on every config change doubles as the flush that keeps
 	// cached answers consistent with new upstreams or blocking settings.
 	if cfg.DNS.Cache.Enabled {
@@ -247,6 +252,21 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		entry.Rule = verdict.Rule
 		s.record(entry, start)
 		return
+	}
+
+	// Safe search rewrites matched search domains for enforced clients.
+	// Blocklist verdicts already won above; bypass devices are exempt.
+	if !pol.Bypasses() && (s.safeSearch.Load() || (pol != nil && pol.SafeSearch)) {
+		if target, ok := safeSearchHosts[qname]; ok {
+			if s.answerSafeSearch(w, req, q, target) {
+				entry.Verdict = querylog.VerdictAllowed
+				entry.List = "safesearch"
+				entry.Rule = target
+				entry.Upstream = "safesearch"
+				s.record(entry, start)
+				return
+			}
+		}
 	}
 
 	// Cache lookup happens after judgment so verdicts always reflect the

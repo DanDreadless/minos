@@ -27,6 +27,8 @@ no appeals (well, except pardons).
   full bypass, or no DNS at all — and a one-click block for any device
 - One-click blocked services (TikTok, YouTube, Discord…) — globally or
   per group, with optional schedules ("no social media after 21:00")
+- Safe Search enforcement (Google, Bing, DuckDuckGo, YouTube) — network-wide
+  or per group
 - Full management from the UI: blocklists, allow/deny domains, upstreams,
   blocking mode, retention, API token — all applied live, no restarts
 - Batched SQLite persistence that respects SD cards

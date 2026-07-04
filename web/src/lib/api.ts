@@ -84,7 +84,7 @@ export interface ConfigView {
     local_ttl: number;
     routes: Route[];
   };
-  blocking: { mode: 'zero_ip' | 'nxdomain' };
+  blocking: { mode: 'zero_ip' | 'nxdomain'; safe_search: boolean };
   lists: { refresh_interval: string };
   querylog: { ephemeral: boolean; db_path: string; ring_size: number; retention_days: number };
   api: { listen: string; token_set: boolean };
@@ -100,7 +100,7 @@ export interface SettingsUpdate {
     local_ttl?: number;
     routes?: Route[];
   };
-  blocking?: { mode?: string };
+  blocking?: { mode?: string; safe_search?: boolean };
   lists?: { refresh_interval?: string };
   querylog?: { ring_size?: number; retention_days?: number };
   api?: { token?: string };
@@ -143,6 +143,7 @@ export interface Group {
   allowlist: string[] | null;
   denylist: string[] | null;
   services: string[] | null;
+  safe_search: boolean;
   schedule?: Schedule | null;
 }
 
@@ -243,6 +244,7 @@ export const api = {
       allowlist?: string[];
       denylist?: string[];
       services?: string[];
+      safe_search?: boolean;
       schedule?: Schedule | null;
     },
   ) => request<Group[]>('PUT', `/api/groups/${encodeURIComponent(name)}`, upd),

@@ -104,6 +104,9 @@ type BlockingConfig struct {
 	// Services are catalog names (see internal/services) blocked for
 	// everyone; groups can block more for their members only.
 	Services []string `yaml:"services,omitempty"`
+	// SafeSearch rewrites search engines (and YouTube) to their
+	// enforced-safe variants for every device.
+	SafeSearch bool `yaml:"safe_search,omitempty"`
 }
 
 // Group is a named device policy. Devices not assigned to a group get the
@@ -121,6 +124,9 @@ type Group struct {
 	// Services are catalog names blocked for this group's members
 	// (filter mode only).
 	Services []string `yaml:"services,omitempty" json:"services"`
+	// SafeSearch enforces safe search for this group's members
+	// (filter mode only; global blocking.safe_search covers everyone).
+	SafeSearch bool `yaml:"safe_search,omitempty" json:"safe_search"`
 	// Schedule, when set, activates this group only inside the window;
 	// outside it members follow the default rules. Server-local time.
 	Schedule *Schedule `yaml:"schedule,omitempty" json:"schedule,omitempty"`

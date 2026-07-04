@@ -133,6 +133,7 @@ export const copy = {
     extraAllow: 'Extra pardons (always allow)',
     extraDeny: 'Extra sentences (always block)',
     groupServices: 'Blocked services for this group',
+    groupSafeSearch: 'Enforce Safe Search for this group',
     scheduleSummary: 'Schedule',
     scheduleOn: (start: string, end: string) => `active ${start}–${end}`,
     scheduleNote:
@@ -157,6 +158,9 @@ export const copy = {
     blockingModeNxdomain: 'Answer NXDOMAIN (domain does not exist)',
     blockTTL: 'Response TTL (seconds)',
     blockTTLHint: 'how long clients cache a blocked answer',
+    safeSearch: 'Enforce Safe Search for everyone',
+    safeSearchHint:
+      'Google, Bing, DuckDuckGo, and YouTube (moderate) answer with their enforced-safe variants. Devices in bypass groups are exempt.',
     cacheTitle: 'Response cache',
     cacheHint: 'answers repeat queries from memory instead of asking upstream',
     cacheEnabled: 'Enable the response cache',

@@ -115,6 +115,15 @@
     }
   }
 
+  async function saveGroupSafeSearch(g: Group): Promise<void> {
+    try {
+      groups = await api.updateGroup(g.name, { safe_search: !g.safe_search });
+    } catch (e) {
+      notifyError(e);
+      await load();
+    }
+  }
+
   async function toggleGroupService(g: Group, name: string): Promise<void> {
     const next = new Set(g.services ?? []);
     if (next.has(name)) next.delete(name);
@@ -296,6 +305,14 @@
           </label>
           <button type="submit" class="primary">{copy.settings.save}</button>
         </form>
+        <label class="group-safesearch">
+          <input
+            type="checkbox"
+            checked={g.safe_search}
+            on:change={() => void saveGroupSafeSearch(g)}
+          />
+          {copy.devices.groupSafeSearch}
+        </label>
         <details class="group-services">
           <summary>
             {copy.devices.groupServices}
@@ -469,6 +486,16 @@
   .group-services,
   .group-schedule {
     margin-top: 0.8rem;
+  }
+
+  .group-safesearch {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.8rem;
+    font-size: 0.84rem;
+    cursor: pointer;
+    color: var(--text-dim);
   }
 
   .group-services summary,

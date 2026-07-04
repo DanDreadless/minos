@@ -151,9 +151,18 @@ Open `http://<host>:8080`. Five pages, one per concern:
     global block),
   - `bypass` groups skip filtering entirely,
   - `block` groups get no DNS service at all.
-  Unassigned devices follow the default rules. Any group can carry a
+  Unassigned devices follow the default rules. Filter groups can also
+  enforce **Safe Search** for their members. Any group can carry a
   **schedule** — school-night hours, weekend windows — and applies only
   inside it; outside, its devices follow the default rules.
+
+  **Safe Search** (per group here, or network-wide from Settings) answers
+  queries for Google, Bing, DuckDuckGo, and YouTube with the provider's
+  enforced-safe host (`forcesafesearch.google.com`, `strict.bing.com`,
+  `safe.duckduckgo.com`, `restrictmoderate.youtube.com`), so filtered
+  results are enforced by the provider itself and can't be switched off
+  in the page settings. Only exact search hostnames are rewritten —
+  Gmail, Maps, and other subdomains are untouched.
 - **The Codex** (blocklists) — add, enable/disable, or remove list
   subscriptions and refresh them on demand, with per-list rule counts and
   fetch errors. The **Blocked services** card blocks a whole service
@@ -212,11 +221,13 @@ blocking:
   allowlist: []             # pardons: always allowed
   denylist: []              # sentences: always blocked
   services: [onlyfans]      # curated service bundles, blocked for everyone
+  safe_search: false        # rewrite search engines to enforced-safe variants
 groups:                     # device policies (all optional)
   - name: kids
     mode: filter            # filter | bypass | block
     denylist: [tiktok.com]  # extra blocks for members only
     services: [snapchat]    # service bundles for members only
+    safe_search: true       # enforce safe search for members only
     schedule:               # optional: group active only in this window
       days: [sun, mon, tue, wed, thu]   # empty/omitted = every day
       start: "21:00"        # server-local time
