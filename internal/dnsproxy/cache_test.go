@@ -64,7 +64,7 @@ func TestCacheRoundTripDecrementsTTL(t *testing.T) {
 
 	req2, _ := aResponse("example.com", 0)
 	req2.Id = 4242
-	got := c.get(key, req2)
+	got, _ := c.get(key, req2)
 	if got == nil {
 		t.Fatal("expected cache hit")
 	}
@@ -79,7 +79,7 @@ func TestCacheRoundTripDecrementsTTL(t *testing.T) {
 	}
 	// The stored entry must be untouched by TTL adjustment on serve.
 	*now = now.Add(5 * time.Second)
-	if again := c.get(key, req2); again.Answer[0].Header().Ttl != 290 {
+	if again, _ := c.get(key, req2); again.Answer[0].Header().Ttl != 290 {
 		t.Errorf("second hit TTL = %d, want 290", again.Answer[0].Header().Ttl)
 	}
 }
@@ -91,7 +91,7 @@ func TestCacheExpiry(t *testing.T) {
 	c.put(key, resp)
 
 	*now = now.Add(301 * time.Second)
-	if got := c.get(key, req); got != nil {
+	if got, _ := c.get(key, req); got != nil {
 		t.Fatal("expected miss after TTL expiry")
 	}
 	if c.size.Load() != 0 {
@@ -107,7 +107,7 @@ func TestCacheTTLClamps(t *testing.T) {
 	key := cacheKey("short.example.com", dns.TypeA, req)
 	c.put(key, short)
 	*now = now.Add(5 * time.Second)
-	got := c.get(key, req)
+	got, _ := c.get(key, req)
 	if got == nil {
 		t.Fatal("expected hit inside min_ttl window")
 	}
@@ -120,7 +120,7 @@ func TestCacheTTLClamps(t *testing.T) {
 	key2 := cacheKey("long.example.com", dns.TypeA, req2)
 	c.put(key2, long)
 	*now = now.Add(3601 * time.Second)
-	if c.get(key2, req2) != nil {
+	if hit, _ := c.get(key2, req2); hit != nil {
 		t.Error("expected miss after max_ttl")
 	}
 }
@@ -132,7 +132,7 @@ func TestCacheNegativeUsesSOA(t *testing.T) {
 	c.put(key, resp)
 
 	*now = now.Add(59 * time.Second)
-	got := c.get(key, req)
+	got, _ := c.get(key, req)
 	if got == nil {
 		t.Fatal("expected negative-cache hit inside SOA minimum")
 	}
@@ -140,7 +140,7 @@ func TestCacheNegativeUsesSOA(t *testing.T) {
 		t.Errorf("rcode = %s, want NXDOMAIN", dns.RcodeToString[got.Rcode])
 	}
 	*now = now.Add(2 * time.Second)
-	if c.get(key, req) != nil {
+	if hit, _ := c.get(key, req); hit != nil {
 		t.Error("expected miss after SOA minimum elapsed")
 	}
 }
@@ -302,7 +302,7 @@ func BenchmarkCacheHit(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if c.get(key, req) == nil {
+		if hit, _ := c.get(key, req); hit == nil {
 			b.Fatal("miss")
 		}
 	}

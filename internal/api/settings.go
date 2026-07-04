@@ -88,6 +88,7 @@ type settingsUpdate struct {
 			MaxEntries *int    `json:"max_entries"`
 			MinTTL     *uint32 `json:"min_ttl"`
 			MaxTTL     *uint32 `json:"max_ttl"`
+			ServeStale *bool   `json:"serve_stale"`
 		} `json:"cache"`
 		LocalRecords *[]config.LocalRecord `json:"local_records"`
 		LocalTTL     *uint32               `json:"local_ttl"`
@@ -147,6 +148,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 				}
 				if upd.DNS.Cache.MaxTTL != nil {
 					c.DNS.Cache.MaxTTL = *upd.DNS.Cache.MaxTTL
+				}
+				if upd.DNS.Cache.ServeStale != nil {
+					c.DNS.Cache.ServeStale = *upd.DNS.Cache.ServeStale
 				}
 			}
 			if upd.DNS.LocalRecords != nil {

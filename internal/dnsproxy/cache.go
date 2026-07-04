@@ -15,6 +15,14 @@ import (
 // (which would normally supply the negative TTL per RFC 2308).
 const defaultNegativeTTL = 30
 
+// Serve-stale (RFC 8767): an expired entry may still be served for
+// staleWindow while a background refresh runs, advertised with the
+// RFC-recommended short TTL so clients come back for the fresh answer.
+const (
+	staleWindow = 6 * time.Hour
+	staleTTL    = 30
+)
+
 // dnsCache is a bounded, TTL-respecting cache of forwarded responses. It sits
 // after the filter: blocked answers are synthesized and never cached, so
 // pardons, sentences, and recess all keep working against live rules.
@@ -23,12 +31,13 @@ const defaultNegativeTTL = 30
 // enforced by a bounded sweep on the insert that crossed it. A cache instance
 // is immutable in configuration — config changes swap in a fresh one.
 type dnsCache struct {
-	entries sync.Map // key string → *cacheEntry
-	size    atomic.Int64
-	max     int64
-	minTTL  uint32
-	maxTTL  uint32
-	now     func() time.Time // stubbed in tests
+	entries    sync.Map // key string → *cacheEntry
+	size       atomic.Int64
+	max        int64
+	minTTL     uint32
+	maxTTL     uint32
+	serveStale bool
+	now        func() time.Time // stubbed in tests
 }
 
 type cacheEntry struct {
@@ -41,10 +50,11 @@ type cacheEntry struct {
 
 func newCache(cfg config.CacheConfig) *dnsCache {
 	return &dnsCache{
-		max:    int64(cfg.MaxEntries),
-		minTTL: cfg.MinTTL,
-		maxTTL: cfg.MaxTTL,
-		now:    time.Now,
+		max:        int64(cfg.MaxEntries),
+		minTTL:     cfg.MinTTL,
+		maxTTL:     cfg.MaxTTL,
+		serveStale: cfg.ServeStale,
+		now:        time.Now,
 	}
 }
 
@@ -58,26 +68,34 @@ func cacheKey(qname string, qtype uint16, req *dns.Msg) string {
 	return key
 }
 
-// get returns a response ready to send for req, or nil on a miss.
-func (c *dnsCache) get(key string, req *dns.Msg) *dns.Msg {
+// get returns a response ready to send for req, or nil on a miss. stale
+// reports an expired entry served under RFC 8767 — the caller should kick
+// off a background refresh.
+func (c *dnsCache) get(key string, req *dns.Msg) (resp *dns.Msg, stale bool) {
 	v, ok := c.entries.Load(key)
 	if !ok {
-		return nil
+		return nil, false
 	}
 	e := v.(*cacheEntry)
 	now := c.now()
 	if now.After(e.expires) {
-		c.deleteKey(key)
-		return nil
+		if !c.serveStale || now.After(e.expires.Add(staleWindow)) {
+			c.deleteKey(key)
+			return nil, false
+		}
+		stale = true
 	}
-	resp := e.msg.Copy()
+	resp = e.msg.Copy()
 	elapsed := uint32(now.Sub(e.storedAt) / time.Second)
 	for _, sec := range [][]dns.RR{resp.Answer, resp.Ns, resp.Extra} {
 		for _, rr := range sec {
 			h := rr.Header()
-			if h.Ttl > elapsed {
+			switch {
+			case stale:
+				h.Ttl = staleTTL
+			case h.Ttl > elapsed:
 				h.Ttl -= elapsed
-			} else {
+			default:
 				h.Ttl = 0
 			}
 		}
@@ -89,7 +107,7 @@ func (c *dnsCache) get(key string, req *dns.Msg) *dns.Msg {
 	if opt := req.IsEdns0(); opt != nil {
 		resp.SetEdns0(opt.UDPSize(), opt.Do())
 	}
-	return resp
+	return resp, stale
 }
 
 // put stores a forwarded response if it is cacheable. The message is copied
@@ -174,7 +192,8 @@ func negativeTTL(resp *dns.Msg) uint32 {
 
 // evict brings the cache back under its cap plus headroom (an extra 1/8 of
 // the cap) so steady-state inserts don't sweep on every call. Expired
-// entries go first, then arbitrary ones.
+// entries go first (past the stale window when serve-stale is on), then
+// arbitrary ones.
 func (c *dnsCache) evict() {
 	target := c.max - c.max/8
 	over := c.size.Load() - target
@@ -182,6 +201,9 @@ func (c *dnsCache) evict() {
 		return
 	}
 	now := c.now()
+	if c.serveStale {
+		now = now.Add(-staleWindow) // still-servable stale entries are kept
+	}
 	c.entries.Range(func(k, v any) bool {
 		if now.After(v.(*cacheEntry).expires) && c.deleteKey(k.(string)) {
 			over--

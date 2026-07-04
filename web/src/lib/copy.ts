@@ -169,6 +169,9 @@ export const copy = {
     cacheMinTTLHint: 'short-lived answers are kept at least this long',
     cacheMaxTTL: 'Maximum TTL (seconds)',
     cacheMaxTTLHint: 'no answer is served from cache longer than this',
+    cacheServeStale: 'Serve stale answers while refreshing',
+    cacheServeStaleHint:
+      'if an upstream is slow or down, answer from the expired entry (up to 6 hours old) and fetch a fresh one in the background',
     routesTitle: 'Conditional forwarding',
     routesHint: 'send certain domains to a different resolver (e.g. your router)',
     routesEmpty: 'No routes. All queries use the upstreams above.',

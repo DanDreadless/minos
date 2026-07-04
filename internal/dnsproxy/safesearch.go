@@ -61,7 +61,11 @@ func (s *Server) answerSafeSearch(w dns.ResponseWriter, req *dns.Msg, q dns.Ques
 	cache := s.cache.Load()
 	key := cacheKey(target, q.Qtype, req)
 	if cache != nil {
-		resp = cache.get(key, req)
+		// A stale safe-host answer is treated as a miss: this path has no
+		// background refresh, so resolve fresh instead.
+		if hit, stale := cache.get(key, req); hit != nil && !stale {
+			resp = hit
+		}
 	}
 	if resp == nil {
 		lookup := new(dns.Msg)

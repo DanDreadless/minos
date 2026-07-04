@@ -35,6 +35,9 @@ At or beyond parity with the field:
 - **Private reverse zones answered locally** — RFC 6303 + CGNAT: private
   PTR lookups never leak upstream; local records and routes take
   precedence *(shipped)*
+- **Query dedup + serve-stale** — concurrent identical queries collapse to
+  one exchange; expired answers serve instantly (RFC 8767) with a deduped
+  background refresh *(shipped)*
 - Every setting applies live — no restart, ever, except the two listen
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry
@@ -44,10 +47,7 @@ At or beyond parity with the field:
 The headline roadmap is shipped. The candidates below are what a July 2026
 review flagged as the highest-impact remaining work, roughly in order:
 
-1. **Query deduplication + serve-stale** — collapse concurrent identical
-   upstream queries, and answer from expired cache while refreshing in the
-   background (RFC 8767) so upstream blips are invisible.
-2. **Verify the 2M-domain memory budget** — the 150 MB RSS budget is
+1. **Verify the 2M-domain memory budget** — the 150 MB RSS budget is
    untested at Hagezi-Pro++ scale; measure and compact the matcher if it
    falls short.
 

@@ -272,6 +272,13 @@ This is security software; hold it to that standard.
   dns.ResponseWriter — so device policies, local records, Safe Search,
   cache, and the docket apply unchanged over DoT/DoH. Don't fork the
   pipeline for new transports.
+- **Dedup + serve-stale semantics** (fixed decisions): the inflight table
+  keys like the cache; the leader forwards AND caches, followers copy the
+  leader's snapshot (never the live message — ID stamping would race).
+  Stale serves advertise TTL 30 (RFC 8767), the window is 6h, and the
+  background refresh dedupes through the same table. Safe-search treats
+  stale as a miss (no refresh path there). Judging is unaffected — the
+  cache still sits after the filter.
 - **Private reverse zones are a backstop** (RFC 6303 + RFC 7793 CGNAT):
   matched after local records and only when no route covers the name, so
   auto-PTR and router forwarding always win. Applies to bypass devices

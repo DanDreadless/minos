@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -68,6 +69,74 @@ type Server struct {
 	// upstreamStats accumulates per-upstream counters for /metrics,
 	// keyed by upstream name so they survive config swaps.
 	upstreamStats sync.Map // string → *upstreamCounters
+
+	// inflight collapses concurrent identical forwards (and stale
+	// refreshes) into one upstream exchange, keyed like the cache.
+	inflight sync.Map // string → *inflightCall
+}
+
+// inflightCall is one in-progress upstream exchange; followers wait on
+// done and copy the leader's result.
+type inflightCall struct {
+	done     chan struct{}
+	resp     *dns.Msg // a private copy; nil on error
+	upstream string
+	err      error
+}
+
+// forwardDedup forwards req, collapsing concurrent identical queries: the
+// first caller (leader) exchanges upstream and caches the answer; everyone
+// else waits and receives a copy. shared reports a follower result.
+func (s *Server) forwardDedup(ctx context.Context, req *dns.Msg, qname, key string, cache *dnsCache) (resp *dns.Msg, upstream string, shared bool, err error) {
+	call := &inflightCall{done: make(chan struct{})}
+	if v, loaded := s.inflight.LoadOrStore(key, call); loaded {
+		prior := v.(*inflightCall)
+		select {
+		case <-prior.done:
+			if prior.err != nil {
+				return nil, prior.upstream, true, prior.err
+			}
+			resp := prior.resp.Copy()
+			// The leader's question may differ in case (0x20); answer
+			// under the follower's own casing, as the cache does.
+			resp.Question = req.Question
+			return resp, prior.upstream, true, nil
+		case <-ctx.Done():
+			return nil, "", true, ctx.Err()
+		}
+	}
+	defer s.inflight.Delete(key)
+	r, name, routed, err := s.forward(ctx, req, qname)
+	if err == nil {
+		if cache != nil && !routed {
+			cache.put(key, r)
+		}
+		// Followers copy from a private snapshot: the caller mutates r
+		// (ID stamping) after this returns.
+		call.resp = r.Copy()
+	}
+	call.upstream, call.err = name, err
+	close(call.done)
+	return r, name, false, err
+}
+
+// refreshStale re-resolves a stale cache key in the background, deduped
+// through the same inflight table so a burst of stale hits costs one
+// upstream exchange.
+func (s *Server) refreshStale(key, qname string, qtype uint16) {
+	if _, busy := s.inflight.Load(key); busy {
+		return // a refresh or live query is already on it
+	}
+	go func() {
+		req := new(dns.Msg)
+		req.SetQuestion(dns.Fqdn(qname), qtype)
+		if strings.HasSuffix(key, "|d") {
+			req.SetEdns0(1232, true)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*upstreamTimeout)
+		defer cancel()
+		_, _, _, _ = s.forwardDedup(ctx, req, qname, key, s.cache.Load())
+	}()
 }
 
 // Failover health: an upstream that fails failThreshold consecutive
@@ -406,21 +475,24 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 
 	// Cache lookup happens after judgment so verdicts always reflect the
 	// live rules; only forwarded answers are cached. Load once so the get
-	// and the later put use the same instance across a concurrent flush.
-	var (
-		cache *dnsCache
-		key   string
-	)
+	// and the leader's put use the same instance across a concurrent flush.
+	var cache *dnsCache
 	if q.Qclass == dns.ClassINET {
 		cache = s.cache.Load()
 	}
+	key := cacheKey(qname, q.Qtype, req) // also the dedup key when uncached
 	if cache != nil {
-		key = cacheKey(qname, q.Qtype, req)
-		if resp := cache.get(key, req); resp != nil {
+		if resp, stale := cache.get(key, req); resp != nil {
+			if stale {
+				// RFC 8767: serve the expired answer now, refresh behind it.
+				s.refreshStale(key, qname, q.Qtype)
+				entry.Upstream = "stale"
+			} else {
+				entry.Upstream = "cache"
+			}
 			s.cacheHits.Add(1)
 			_ = w.WriteMsg(resp)
 			entry.Verdict = querylog.VerdictAllowed
-			entry.Upstream = "cache"
 			s.record(entry, start)
 			return
 		}
@@ -429,7 +501,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*upstreamTimeout)
 	defer cancel()
-	resp, upstreamName, routed, err := s.forward(ctx, req, qname)
+	resp, upstreamName, _, err := s.forwardDedup(ctx, req, qname, key, cache)
 	if err != nil {
 		if slog.Default().Enabled(ctx, slog.LevelDebug) {
 			slog.Debug("forward failed", "qname", qname, "err", err)
@@ -443,9 +515,6 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		return
 	}
 	resp.Id = req.Id
-	if cache != nil && !routed {
-		cache.put(key, resp)
-	}
 	_ = w.WriteMsg(resp)
 	entry.Verdict = querylog.VerdictAllowed
 	entry.Upstream = upstreamName

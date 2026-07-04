@@ -305,6 +305,8 @@ dns:
     max_entries: 10000      # ~500 B per entry
     min_ttl: 10             # seconds; keep short-lived answers at least this long
     max_ttl: 3600           # never serve a cached answer longer than this
+    serve_stale: true       # RFC 8767: answer from an expired entry (up to
+                            # 6h old) and refresh in the background
   local_ttl: 300            # TTL on locally answered records
   local_records:            # names answered here, never sent upstream
     - name: nas.home.lab

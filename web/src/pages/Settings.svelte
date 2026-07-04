@@ -25,6 +25,7 @@
   let cacheMaxEntries = 10000;
   let cacheMinTTL = 10;
   let cacheMaxTTL = 3600;
+  let cacheServeStale = true;
 
   interface RouteRow {
     domains: string;
@@ -46,6 +47,7 @@
     cacheMaxEntries = c.dns.cache.max_entries;
     cacheMinTTL = c.dns.cache.min_ttl;
     cacheMaxTTL = c.dns.cache.max_ttl;
+    cacheServeStale = c.dns.cache.serve_stale;
     routeRows = c.dns.routes.map((r) => ({
       domains: r.domains.join(', '),
       address: r.upstream.address,
@@ -82,6 +84,7 @@
           max_entries: cacheMaxEntries,
           min_ttl: cacheMinTTL,
           max_ttl: cacheMaxTTL,
+          serve_stale: cacheServeStale,
         },
       },
     });
@@ -274,6 +277,11 @@
         <span>{copy.settings.cacheMaxTTL} <small>{copy.settings.cacheMaxTTLHint}</small></span>
         <input type="number" min="1" max="604800" bind:value={cacheMaxTTL} />
       </label>
+      <label class="radio">
+        <input type="checkbox" bind:checked={cacheServeStale} />
+        {copy.settings.cacheServeStale}
+      </label>
+      <p class="note">{copy.settings.cacheServeStaleHint}</p>
     {/if}
     <div class="section-actions">
       <button class="primary" on:click={saveCache}>{copy.settings.save}</button>

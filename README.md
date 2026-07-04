@@ -25,7 +25,9 @@ no appeals (well, except pardons).
 - Every blocked query shows *which list and rule* condemned it, with a
   one-click pardon from the live log — never more than two clicks from
   seeing a block to allowing it
-- Repeat queries answered from a built-in response cache — no upstream trip
+- Repeat queries answered from a built-in response cache — no upstream trip;
+  concurrent identical queries collapse into one, and stale answers are
+  served instantly while a fresh one is fetched behind them (RFC 8767)
 - A failing upstream is sidestepped automatically and re-probed until it
   recovers — one dead resolver never slows the whole network
 

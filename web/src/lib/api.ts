@@ -60,6 +60,7 @@ export interface CacheSettings {
   max_entries: number;
   min_ttl: number;
   max_ttl: number;
+  serve_stale: boolean;
 }
 
 export interface Route {

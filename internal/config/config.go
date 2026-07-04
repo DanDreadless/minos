@@ -119,6 +119,9 @@ type CacheConfig struct {
 	// from cache, regardless of the record's own TTL.
 	MinTTL uint32 `yaml:"min_ttl" json:"min_ttl"`
 	MaxTTL uint32 `yaml:"max_ttl" json:"max_ttl"`
+	// ServeStale (RFC 8767) answers from an expired entry for up to six
+	// hours while a background refresh runs — upstream blips go unnoticed.
+	ServeStale bool `yaml:"serve_stale" json:"serve_stale"`
 }
 
 type BlockingConfig struct {
@@ -259,6 +262,7 @@ func Default() *Config {
 				MaxEntries: 10000,
 				MinTTL:     10,
 				MaxTTL:     3600,
+				ServeStale: true,
 			},
 			LocalTTL: 300,
 		},
