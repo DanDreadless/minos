@@ -1,7 +1,9 @@
 <p align="center">
   <img src="docs/assets/minos_logo_and_banner.png" alt="Minos — DNS server" width="420" />
 </p>
-
+<br>
+[![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/DanDreadless?link=https%3A%2F%2Fx.com%2FDanDreadless)](https://x.com/DanDreadless)
+<br>
 # Minos
 
 > Every query gets judged.
