@@ -71,6 +71,12 @@ machine and every device follows.
 `deploy/` also has a multi-arch Dockerfile and compose example
 (`restart: unless-stopped` gives the same boot behavior).
 
+## Roadmap
+
+Family controls (blocked services, schedules, Safe Search), a Pi-hole
+importer, Prometheus metrics, and serving DoH/DoT to clients are next —
+the full plan and reasoning are in [docs/roadmap.md](docs/roadmap.md).
+
 ## Developing
 
 Go 1.22+, Node 20+. `make test` runs the Go suite with the race detector;

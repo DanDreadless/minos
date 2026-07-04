@@ -29,6 +29,9 @@ design: groups are filter/bypass/block with small per-group domain
 overlays, not per-group blocklist subscriptions, which would multiply
 matcher memory.)
 
+The feature roadmap and competitive positioning live in `docs/roadmap.md`
+— keep them there, not in this file.
+
 ## Product vocabulary (the lore layer)
 
 The judgment metaphor is the product identity. Use it consistently in the
@@ -242,3 +245,18 @@ This is security software; hold it to that standard.
   now), hostname from a reverse-DNS lookup. Both run on the enrichment
   worker, never on the query path. Windows reads `arp -a`; Linux reads
   /proc/net/arp.
+- **Response cache semantics** (fixed decisions): the cache sits *after*
+  the filter — verdicts always reflect live rules and blocked answers are
+  never cached. Any config change swaps in a fresh cache (that IS the
+  flush mechanism; don't add a separate one). Hit/miss counters live on
+  the Server so they survive flushes. Cache hit ~128 ns, one sync.Map
+  load — no mutexes.
+- **Local records beat blocklists** and never leak upstream: unsupported
+  qtypes for a local name return an authoritative empty NOERROR rather
+  than forwarding. A device-level DNS block still wins over local records.
+- **Routes are authoritative, uncached**: conditional-forwarding routes
+  have no fallback to default upstreams (a dead router = SERVFAIL, like
+  Pi-hole), and routed answers skip the response cache (DHCP-lease churn).
+- **This Windows dev box has no `make` or `golangci-lint`**: run the
+  underlying commands directly (`go test ./...`, `gofmt -l`, `go vet`,
+  `npm run build`, `npx svelte-check`). Lint runs in Linux CI.
