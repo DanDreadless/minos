@@ -44,7 +44,11 @@ curl -fsSL -o "${TMP}/${NAME}.tar.gz" "${BASE}/${NAME}.tar.gz"
 curl -fsSL -o "${TMP}/checksums.txt" "${BASE}/checksums.txt"
 
 say "verifying checksum..."
-(cd "$TMP" && grep "  ${NAME}.tar.gz\$" checksums.txt | sha256sum -c - >/dev/null) ||
+# Tolerate an optional ./ prefix in checksums.txt (v0.1.0 has one), and
+# rewrite to the bare local filename before checking.
+(cd "$TMP" &&
+  grep -E "  (\./)?${NAME}\.tar\.gz\$" checksums.txt |
+  sed 's|  \./|  |' | sha256sum -c - >/dev/null) ||
   die "checksum verification failed — aborting without installing"
 
 tar -xzf "${TMP}/${NAME}.tar.gz" -C "$TMP"
