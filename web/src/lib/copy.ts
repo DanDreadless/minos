@@ -24,6 +24,8 @@ export const copy = {
     blockRateHint: 'share of queries blocked',
     rules: 'Rules',
     rulesHint: 'compiled block rules',
+    cacheRate: 'Cache hits',
+    cacheRateHint: 'answers served from memory, no upstream trip',
   },
 
   dashboard: {
@@ -135,6 +137,14 @@ export const copy = {
     blockingModeNxdomain: 'Answer NXDOMAIN (domain does not exist)',
     blockTTL: 'Response TTL (seconds)',
     blockTTLHint: 'how long clients cache a blocked answer',
+    cacheTitle: 'Response cache',
+    cacheHint: 'answers repeat queries from memory instead of asking upstream',
+    cacheEnabled: 'Enable the response cache',
+    cacheMaxEntries: 'Max cached answers',
+    cacheMinTTL: 'Minimum TTL (seconds)',
+    cacheMinTTLHint: 'short-lived answers are kept at least this long',
+    cacheMaxTTL: 'Maximum TTL (seconds)',
+    cacheMaxTTLHint: 'no answer is served from cache longer than this',
     listsTitle: 'Blocklist refresh',
     refreshInterval: 'Refresh interval',
     refreshIntervalHint: 'e.g. 24h, 12h, 6h — minimum 5m',

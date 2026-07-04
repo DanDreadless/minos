@@ -20,6 +20,10 @@
   let retentionDays = 90;
   let ringSize = 10000;
   let newToken = '';
+  let cacheEnabled = true;
+  let cacheMaxEntries = 10000;
+  let cacheMinTTL = 10;
+  let cacheMaxTTL = 3600;
 
   function initFrom(c: ConfigView): void {
     cfg = c;
@@ -29,6 +33,10 @@
     refreshInterval = c.lists.refresh_interval;
     retentionDays = c.querylog.retention_days;
     ringSize = c.querylog.ring_size;
+    cacheEnabled = c.dns.cache.enabled;
+    cacheMaxEntries = c.dns.cache.max_entries;
+    cacheMinTTL = c.dns.cache.min_ttl;
+    cacheMaxTTL = c.dns.cache.max_ttl;
   }
 
   async function load(): Promise<void> {
@@ -51,6 +59,17 @@
   const saveUpstreams = () => save({ dns: { upstreams } });
   const saveBlocking = () => save({ blocking: { mode }, dns: { block_ttl: blockTTL } });
   const saveLists = () => save({ lists: { refresh_interval: refreshInterval } });
+  const saveCache = () =>
+    save({
+      dns: {
+        cache: {
+          enabled: cacheEnabled,
+          max_entries: cacheMaxEntries,
+          min_ttl: cacheMinTTL,
+          max_ttl: cacheMaxTTL,
+        },
+      },
+    });
   const saveQuerylog = () =>
     save({ querylog: { retention_days: retentionDays, ring_size: ringSize } });
 
@@ -158,6 +177,31 @@
     </label>
     <div class="section-actions">
       <button class="primary" on:click={saveBlocking}>{copy.settings.save}</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>{copy.settings.cacheTitle} <small>{copy.settings.cacheHint}</small></h2>
+    <label class="radio">
+      <input type="checkbox" bind:checked={cacheEnabled} />
+      {copy.settings.cacheEnabled}
+    </label>
+    {#if cacheEnabled}
+      <label class="field">
+        <span>{copy.settings.cacheMaxEntries}</span>
+        <input type="number" min="100" max="1000000" step="100" bind:value={cacheMaxEntries} />
+      </label>
+      <label class="field">
+        <span>{copy.settings.cacheMinTTL} <small>{copy.settings.cacheMinTTLHint}</small></span>
+        <input type="number" min="0" max="86400" bind:value={cacheMinTTL} />
+      </label>
+      <label class="field">
+        <span>{copy.settings.cacheMaxTTL} <small>{copy.settings.cacheMaxTTLHint}</small></span>
+        <input type="number" min="1" max="604800" bind:value={cacheMaxTTL} />
+      </label>
+    {/if}
+    <div class="section-actions">
+      <button class="primary" on:click={saveCache}>{copy.settings.save}</button>
     </div>
   </section>
 

@@ -130,7 +130,7 @@ func serve(args []string) error {
 	if err != nil {
 		return fmt.Errorf("embedded ui: %w", err)
 	}
-	apiSrv := api.New(engine, qlog, store, mgr, reg, static, version)
+	apiSrv := api.New(engine, qlog, store, mgr, reg, proxy, static, version)
 	httpSrv := &http.Server{
 		Addr:              cfg.API.Listen,
 		Handler:           apiSrv.Router(),

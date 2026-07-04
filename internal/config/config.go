@@ -53,7 +53,20 @@ type DNSConfig struct {
 	Listen    string     `yaml:"listen"`
 	Upstreams []Upstream `yaml:"upstreams"`
 	// BlockTTL is the TTL (seconds) on synthesized blocked responses.
-	BlockTTL uint32 `yaml:"block_ttl"`
+	BlockTTL uint32      `yaml:"block_ttl"`
+	Cache    CacheConfig `yaml:"cache"`
+}
+
+// CacheConfig bounds the in-memory DNS response cache. Any config change
+// flushes the cache (safe: it repopulates within seconds).
+type CacheConfig struct {
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// MaxEntries caps memory; ~500 B per entry.
+	MaxEntries int `yaml:"max_entries" json:"max_entries"`
+	// MinTTL/MaxTTL clamp (seconds) how long an answer may be served
+	// from cache, regardless of the record's own TTL.
+	MinTTL uint32 `yaml:"min_ttl" json:"min_ttl"`
+	MaxTTL uint32 `yaml:"max_ttl" json:"max_ttl"`
 }
 
 type BlockingConfig struct {
@@ -135,6 +148,12 @@ func Default() *Config {
 				{Address: "1.1.1.1:853", Protocol: "dot"},
 			},
 			BlockTTL: 60,
+			Cache: CacheConfig{
+				Enabled:    true,
+				MaxEntries: 10000,
+				MinTTL:     10,
+				MaxTTL:     3600,
+			},
 		},
 		Blocking: BlockingConfig{Mode: "zero_ip"},
 		Lists: ListsConfig{
@@ -194,6 +213,18 @@ func (c *Config) Validate() error {
 			}
 		default:
 			return fmt.Errorf("dns.upstreams[%d].protocol: must be udp, tcp, dot, or doh, got %q", i, u.Protocol)
+		}
+	}
+	if c.DNS.Cache.Enabled {
+		if c.DNS.Cache.MaxEntries <= 0 {
+			return fmt.Errorf("dns.cache.max_entries: must be positive, got %d", c.DNS.Cache.MaxEntries)
+		}
+		if c.DNS.Cache.MaxTTL == 0 {
+			return fmt.Errorf("dns.cache.max_ttl: must be at least 1 second")
+		}
+		if c.DNS.Cache.MinTTL > c.DNS.Cache.MaxTTL {
+			return fmt.Errorf("dns.cache.min_ttl: %d exceeds max_ttl %d",
+				c.DNS.Cache.MinTTL, c.DNS.Cache.MaxTTL)
 		}
 	}
 	switch c.Blocking.Mode {

@@ -18,9 +18,10 @@ import (
 // marked read-only in the UI: they are the only settings needing a restart.
 type configView struct {
 	DNS struct {
-		Listen    string            `json:"listen"`
-		Upstreams []config.Upstream `json:"upstreams"`
-		BlockTTL  uint32            `json:"block_ttl"`
+		Listen    string             `json:"listen"`
+		Upstreams []config.Upstream  `json:"upstreams"`
+		BlockTTL  uint32             `json:"block_ttl"`
+		Cache     config.CacheConfig `json:"cache"`
 	} `json:"dns"`
 	Blocking struct {
 		Mode string `json:"mode"`
@@ -45,6 +46,7 @@ func viewOf(c *config.Config) configView {
 	v.DNS.Listen = c.DNS.Listen
 	v.DNS.Upstreams = c.DNS.Upstreams
 	v.DNS.BlockTTL = c.DNS.BlockTTL
+	v.DNS.Cache = c.DNS.Cache
 	v.Blocking.Mode = c.Blocking.Mode
 	v.Lists.RefreshInterval = c.Lists.RefreshInterval.Std().String()
 	v.QueryLog.Ephemeral = c.QueryLog.Ephemeral
@@ -67,6 +69,12 @@ type settingsUpdate struct {
 	DNS *struct {
 		Upstreams *[]config.Upstream `json:"upstreams"`
 		BlockTTL  *uint32            `json:"block_ttl"`
+		Cache     *struct {
+			Enabled    *bool   `json:"enabled"`
+			MaxEntries *int    `json:"max_entries"`
+			MinTTL     *uint32 `json:"min_ttl"`
+			MaxTTL     *uint32 `json:"max_ttl"`
+		} `json:"cache"`
 	} `json:"dns"`
 	Blocking *struct {
 		Mode *string `json:"mode"`
@@ -108,6 +116,20 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			if upd.DNS.BlockTTL != nil {
 				c.DNS.BlockTTL = *upd.DNS.BlockTTL
+			}
+			if upd.DNS.Cache != nil {
+				if upd.DNS.Cache.Enabled != nil {
+					c.DNS.Cache.Enabled = *upd.DNS.Cache.Enabled
+				}
+				if upd.DNS.Cache.MaxEntries != nil {
+					c.DNS.Cache.MaxEntries = *upd.DNS.Cache.MaxEntries
+				}
+				if upd.DNS.Cache.MinTTL != nil {
+					c.DNS.Cache.MinTTL = *upd.DNS.Cache.MinTTL
+				}
+				if upd.DNS.Cache.MaxTTL != nil {
+					c.DNS.Cache.MaxTTL = *upd.DNS.Cache.MaxTTL
+				}
 			}
 		}
 		if upd.Blocking != nil && upd.Blocking.Mode != nil {

@@ -107,6 +107,13 @@
       label={copy.stats.rules}
       hint={copy.stats.rulesHint}
     />
+    {#if status.cache_enabled}
+      <StatTile
+        value={fmtPercent(status.cache_hits + status.cache_misses, status.cache_hits)}
+        label={copy.stats.cacheRate}
+        hint={copy.stats.cacheRateHint}
+      />
+    {/if}
   </section>
 {/if}
 

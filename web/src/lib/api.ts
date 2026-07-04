@@ -12,6 +12,10 @@ export interface Status {
   rules: number;
   allow_rules: number;
   rules_skipped: number;
+  cache_enabled: boolean;
+  cache_hits: number;
+  cache_misses: number;
+  cache_entries: number;
 }
 
 export interface LogEntry {
@@ -51,8 +55,15 @@ export interface Upstream {
   protocol: 'udp' | 'tcp' | 'dot' | 'doh';
 }
 
+export interface CacheSettings {
+  enabled: boolean;
+  max_entries: number;
+  min_ttl: number;
+  max_ttl: number;
+}
+
 export interface ConfigView {
-  dns: { listen: string; upstreams: Upstream[]; block_ttl: number };
+  dns: { listen: string; upstreams: Upstream[]; block_ttl: number; cache: CacheSettings };
   blocking: { mode: 'zero_ip' | 'nxdomain' };
   lists: { refresh_interval: string };
   querylog: { ephemeral: boolean; db_path: string; ring_size: number; retention_days: number };
@@ -61,7 +72,7 @@ export interface ConfigView {
 
 // Partial settings update; omitted fields are left untouched by the server.
 export interface SettingsUpdate {
-  dns?: { upstreams?: Upstream[]; block_ttl?: number };
+  dns?: { upstreams?: Upstream[]; block_ttl?: number; cache?: Partial<CacheSettings> };
   blocking?: { mode?: string };
   lists?: { refresh_interval?: string };
   querylog?: { ring_size?: number; retention_days?: number };

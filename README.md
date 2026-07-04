@@ -18,6 +18,7 @@ no appeals (well, except pardons).
 - Judges each query against compiled blocklists (hosts, plain, and AdBlock formats)
 - Blocked queries get `0.0.0.0`/`::` or `NXDOMAIN` (your choice)
 - Allowed queries are forwarded upstream over DoH or DoT (plaintext optional)
+- Repeat queries answered from a built-in response cache — no upstream trip
 - Web dashboard with query charts, top blocked domains, and busiest clients
 - Live query log streamed to the UI, with one-click allow/block from any row
 - Device tracking (IP, MAC, hostname) with per-device groups: extra rules,

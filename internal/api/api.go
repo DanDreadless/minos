@@ -27,6 +27,12 @@ import (
 	"minos/internal/querylog"
 )
 
+// CacheStatsSource reports DNS response-cache counters; the dnsproxy server
+// implements it. A nil source reports the cache as disabled.
+type CacheStatsSource interface {
+	CacheStats() (hits, misses uint64, entries int64, enabled bool)
+}
+
 // Server wires the HTTP surface to the running components.
 type Server struct {
 	engine  *filter.Engine
@@ -34,13 +40,15 @@ type Server struct {
 	store   *config.Store
 	lists   *lists.Manager
 	clients *clients.Registry
-	static  fs.FS // embedded web/dist; nil disables UI serving
+	cache   CacheStatsSource // may be nil
+	static  fs.FS            // embedded web/dist; nil disables UI serving
 	version string
 	started time.Time
 }
 
 func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
-	mgr *lists.Manager, reg *clients.Registry, static fs.FS, version string,
+	mgr *lists.Manager, reg *clients.Registry, cache CacheStatsSource,
+	static fs.FS, version string,
 ) *Server {
 	return &Server{
 		engine:  engine,
@@ -48,6 +56,7 @@ func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
 		store:   store,
 		lists:   mgr,
 		clients: reg,
+		cache:   cache,
 		static:  static,
 		version: version,
 		started: time.Now(),
@@ -135,6 +144,10 @@ type statusResponse struct {
 	Rules          int        `json:"rules"`
 	AllowRules     int        `json:"allow_rules"`
 	RulesSkipped   int        `json:"rules_skipped"`
+	CacheEnabled   bool       `json:"cache_enabled"`
+	CacheHits      uint64     `json:"cache_hits"`
+	CacheMisses    uint64     `json:"cache_misses"`
+	CacheEntries   int64      `json:"cache_entries"`
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -151,6 +164,9 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Rules:          m.Rules(),
 		AllowRules:     m.AllowRules(),
 		RulesSkipped:   m.Skipped(),
+	}
+	if s.cache != nil {
+		resp.CacheHits, resp.CacheMisses, resp.CacheEntries, resp.CacheEnabled = s.cache.CacheStats()
 	}
 	if paused && !until.IsZero() {
 		resp.PausedUntil = &until

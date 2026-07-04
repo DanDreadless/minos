@@ -39,6 +39,12 @@ type Server struct {
 	udpAddr   net.Addr
 	policy    atomic.Pointer[blockingPolicy]
 	upstreams atomic.Pointer[[]Upstream]
+
+	// cache is nil when disabled. Hit/miss counters live on the Server so
+	// they survive the cache flush that every config change performs.
+	cache       atomic.Pointer[dnsCache]
+	cacheHits   atomic.Uint64
+	cacheMisses atomic.Uint64
 }
 
 func New(cfg *config.Config, engine *filter.Engine, qlog *querylog.Log, reg *clients.Registry) (*Server, error) {
@@ -72,7 +78,23 @@ func (s *Server) ApplyConfig(cfg *config.Config) error {
 		nxdomain: cfg.Blocking.Mode == "nxdomain",
 		blockTTL: cfg.DNS.BlockTTL,
 	})
+	// A fresh cache on every config change doubles as the flush that keeps
+	// cached answers consistent with new upstreams or blocking settings.
+	if cfg.DNS.Cache.Enabled {
+		s.cache.Store(newCache(cfg.DNS.Cache))
+	} else {
+		s.cache.Store(nil)
+	}
 	return nil
+}
+
+// CacheStats reports response-cache counters for the status API.
+func (s *Server) CacheStats() (hits, misses uint64, entries int64, enabled bool) {
+	c := s.cache.Load()
+	if c == nil {
+		return s.cacheHits.Load(), s.cacheMisses.Load(), 0, false
+	}
+	return s.cacheHits.Load(), s.cacheMisses.Load(), c.size.Load(), true
 }
 
 // Start binds UDP and TCP listeners and begins serving. It returns once
@@ -198,6 +220,29 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		return
 	}
 
+	// Cache lookup happens after judgment so verdicts always reflect the
+	// live rules; only forwarded answers are cached. Load once so the get
+	// and the later put use the same instance across a concurrent flush.
+	var (
+		cache *dnsCache
+		key   string
+	)
+	if q.Qclass == dns.ClassINET {
+		cache = s.cache.Load()
+	}
+	if cache != nil {
+		key = cacheKey(qname, q.Qtype, req)
+		if resp := cache.get(key, req); resp != nil {
+			s.cacheHits.Add(1)
+			_ = w.WriteMsg(resp)
+			entry.Verdict = querylog.VerdictAllowed
+			entry.Upstream = "cache"
+			s.record(entry, start)
+			return
+		}
+		s.cacheMisses.Add(1)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*upstreamTimeout)
 	defer cancel()
 	resp, upstreamName, err := s.forward(ctx, req)
@@ -214,6 +259,9 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		return
 	}
 	resp.Id = req.Id
+	if cache != nil {
+		cache.put(key, resp)
+	}
 	_ = w.WriteMsg(resp)
 	entry.Verdict = querylog.VerdictAllowed
 	entry.Upstream = upstreamName

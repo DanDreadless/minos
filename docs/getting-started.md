@@ -159,8 +159,9 @@ Open `http://<host>:8080`. Five pages, one per concern:
   fate before you ever query it.
 - **Settings** — everything below is editable here and applies immediately,
   no restart: upstream resolvers and their order, blocking mode and TTL,
-  list refresh interval, query-log retention and buffer size, the API
-  token, and a one-click YAML config backup.
+  the response cache (repeat queries answered from memory — the dashboard
+  shows the hit rate), list refresh interval, query-log retention and
+  buffer size, the API token, and a one-click YAML config backup.
 
 If you set `api.token` (in the config file or from Settings), the UI and
 CLI require it.
@@ -178,6 +179,11 @@ dns:
   upstreams:                # tried in order — "the ferrymen"
     - address: https://cloudflare-dns.com/dns-query
       protocol: doh         # udp | tcp | dot | doh
+  cache:                    # answer repeat queries from memory
+    enabled: true
+    max_entries: 10000      # ~500 B per entry
+    min_ttl: 10             # seconds; keep short-lived answers at least this long
+    max_ttl: 3600           # never serve a cached answer longer than this
 blocking:
   mode: zero_ip             # or nxdomain
   allowlist: []             # pardons: always allowed
