@@ -131,12 +131,19 @@ export interface Device {
   last_seen?: string;
 }
 
+export interface Schedule {
+  days?: string[]; // mon..sun; empty = every day
+  start: string; // "HH:MM"
+  end: string; // "HH:MM"; earlier than start wraps past midnight
+}
+
 export interface Group {
   name: string;
   mode: 'filter' | 'bypass' | 'block';
   allowlist: string[] | null;
   denylist: string[] | null;
   services: string[] | null;
+  schedule?: Schedule | null;
 }
 
 export interface Service {
@@ -231,7 +238,13 @@ export const api = {
     request<Group[]>('POST', '/api/groups', g),
   updateGroup: (
     name: string,
-    upd: { mode?: string; allowlist?: string[]; denylist?: string[]; services?: string[] },
+    upd: {
+      mode?: string;
+      allowlist?: string[];
+      denylist?: string[];
+      services?: string[];
+      schedule?: Schedule | null;
+    },
   ) => request<Group[]>('PUT', `/api/groups/${encodeURIComponent(name)}`, upd),
 
   services: () => request<ServicesView>('GET', '/api/services'),

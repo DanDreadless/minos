@@ -72,7 +72,8 @@ type Device struct {
 type Registry struct {
 	seen     sync.Map // ip string → *device
 	policies atomic.Pointer[map[string]*Policy]
-	enrichCh chan string // newly seen IPs awaiting enrichment
+	cfg      atomic.Pointer[config.Config] // snapshot for scheduled rebuilds
+	enrichCh chan string                   // newly seen IPs awaiting enrichment
 }
 
 func NewRegistry() *Registry {
@@ -116,8 +117,25 @@ func (r *Registry) PolicyFor(ip string) *Policy {
 // ApplyConfig rebuilds the policy table from config. Called on every config
 // change (off the hot path), then swapped in atomically.
 func (r *Registry) ApplyConfig(cfg *config.Config) {
+	r.cfg.Store(cfg)
+	r.rebuildPolicies(time.Now())
+}
+
+// rebuildPolicies compiles the policy table for one moment in time: a group
+// with a schedule counts only while its window is active; outside it,
+// members follow the default rules (a per-device block still refuses).
+// Run's minute ticker re-invokes this so windows open and close on their
+// own — the hot path never checks the clock.
+func (r *Registry) rebuildPolicies(now time.Time) {
+	cfg := r.cfg.Load()
+	if cfg == nil {
+		return
+	}
 	groups := make(map[string]*Policy, len(cfg.Groups))
 	for _, g := range cfg.Groups {
+		if g.Schedule != nil && !scheduleActive(g.Schedule, now) {
+			continue // inactive: members resolve to the default policy
+		}
 		p := &Policy{Group: g.Name, Mode: g.Mode}
 		if g.Mode == ModeFilter && (len(g.Allowlist) > 0 || len(g.Denylist) > 0 || len(g.Services) > 0) {
 			b := filter.NewBuilder()
@@ -154,6 +172,48 @@ func (r *Registry) ApplyConfig(cfg *config.Config) {
 		}
 	}
 	r.policies.Store(&table)
+}
+
+// scheduleActive reports whether now falls inside the schedule's window.
+// Windows anchor on each allowed day at Start; an End at or before Start
+// wraps past midnight into the next day, so both today's and yesterday's
+// anchors are checked.
+func scheduleActive(s *config.Schedule, now time.Time) bool {
+	startMin, endMin := config.ParseHHMM(s.Start), config.ParseHHMM(s.End)
+	if startMin < 0 || endMin < 0 {
+		return false // unreachable on validated config
+	}
+	lengthMin := endMin - startMin
+	if lengthMin <= 0 {
+		lengthMin += 24 * 60
+	}
+	for _, dayOffset := range []int{0, -1} {
+		anchor := now.AddDate(0, 0, dayOffset)
+		if !config.DayAllowed(s.Days, anchor.Weekday()) {
+			continue
+		}
+		start := time.Date(anchor.Year(), anchor.Month(), anchor.Day(),
+			startMin/60, startMin%60, 0, 0, now.Location())
+		end := start.Add(time.Duration(lengthMin) * time.Minute)
+		if !now.Before(start) && now.Before(end) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasSchedules reports whether any group needs clock-driven rebuilds.
+func (r *Registry) hasSchedules() bool {
+	cfg := r.cfg.Load()
+	if cfg == nil {
+		return false
+	}
+	for _, g := range cfg.Groups {
+		if g.Schedule != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // Seed pre-populates a device from persisted history (query log DB), so the

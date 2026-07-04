@@ -133,6 +133,12 @@ export const copy = {
     extraAllow: 'Extra pardons (always allow)',
     extraDeny: 'Extra sentences (always block)',
     groupServices: 'Blocked services for this group',
+    scheduleSummary: 'Schedule',
+    scheduleOn: (start: string, end: string) => `active ${start}–${end}`,
+    scheduleNote:
+      'The group applies only during these hours (server time); outside them its devices follow the default rules. An end before the start runs past midnight.',
+    scheduleSet: 'Set schedule',
+    scheduleClear: 'Remove schedule',
     listPlaceholder: 'comma-separated domains',
     confirmDelete: (name: string) =>
       `Delete the group "${name}"? Its devices fall back to the default rules.`,

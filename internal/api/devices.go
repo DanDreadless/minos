@@ -118,6 +118,26 @@ type groupBody struct {
 	Allowlist *[]string `json:"allowlist"`
 	Denylist  *[]string `json:"denylist"`
 	Services  *[]string `json:"services"`
+	// Schedule distinguishes three states: absent (untouched), JSON null
+	// (clear the schedule), or an object (set it).
+	Schedule json.RawMessage `json:"schedule"`
+}
+
+// applySchedule interprets the raw schedule field onto a group.
+func applySchedule(g *config.Group, raw json.RawMessage) error {
+	if len(raw) == 0 {
+		return nil // absent: leave as is
+	}
+	if string(raw) == "null" {
+		g.Schedule = nil
+		return nil
+	}
+	var sch config.Schedule
+	if err := json.Unmarshal(raw, &sch); err != nil {
+		return fmt.Errorf("schedule must be null or {days?, start, end}: %w", err)
+	}
+	g.Schedule = &sch
+	return nil
 }
 
 func (s *Server) handleAddGroup(w http.ResponseWriter, r *http.Request) {
@@ -142,6 +162,10 @@ func (s *Server) handleAddGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Services != nil {
 		g.Services = *body.Services
+	}
+	if err := applySchedule(&g, body.Schedule); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 	err := s.store.Update(func(c *config.Config) error {
 		for _, existing := range c.Groups {
@@ -183,6 +207,9 @@ func (s *Server) handleUpdateGroup(w http.ResponseWriter, r *http.Request) {
 			}
 			if body.Services != nil {
 				g.Services = *body.Services
+			}
+			if err := applySchedule(g, body.Schedule); err != nil {
+				return err
 			}
 			return nil
 		}

@@ -93,6 +93,28 @@
     }
   }
 
+  const weekdays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+  function submitSchedule(g: Group, e: Event): void {
+    const f = e.currentTarget as HTMLFormElement;
+    const days = weekdays.filter(
+      (d) => (f.elements.namedItem(`day-${d}`) as HTMLInputElement).checked,
+    );
+    const start = (f.elements.namedItem('start') as HTMLInputElement).value;
+    const end = (f.elements.namedItem('end') as HTMLInputElement).value;
+    if (!start || !end) return;
+    void saveSchedule(g, { days: days.length === 7 ? [] : days, start, end });
+  }
+
+  async function saveSchedule(g: Group, schedule: Group['schedule']): Promise<void> {
+    try {
+      groups = await api.updateGroup(g.name, { schedule: schedule ?? null });
+      notify(`Group "${g.name}" updated.`);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
   async function toggleGroupService(g: Group, name: string): Promise<void> {
     const next = new Set(g.services ?? []);
     if (next.has(name)) next.delete(name);
@@ -295,6 +317,40 @@
           </div>
         </details>
       {/if}
+      <details class="group-schedule">
+        <summary>
+          {copy.devices.scheduleSummary}
+          {#if g.schedule}
+            <span class="count">({copy.devices.scheduleOn(g.schedule.start, g.schedule.end)})</span>
+          {/if}
+        </summary>
+        <form class="schedule-form" on:submit|preventDefault={(e) => submitSchedule(g, e)}>
+          <div class="day-row">
+            {#each weekdays as d (d)}
+              <label class="day">
+                <input
+                  type="checkbox"
+                  name="day-{d}"
+                  checked={!g.schedule?.days?.length || g.schedule.days.includes(d)}
+                />
+                {d}
+              </label>
+            {/each}
+          </div>
+          <div class="time-row">
+            <input type="time" name="start" value={g.schedule?.start ?? '21:00'} required />
+            <span class="range-dash">–</span>
+            <input type="time" name="end" value={g.schedule?.end ?? '07:00'} required />
+            <button type="submit" class="primary">{copy.devices.scheduleSet}</button>
+            {#if g.schedule}
+              <button type="button" on:click={() => saveSchedule(g, null)}>
+                {copy.devices.scheduleClear}
+              </button>
+            {/if}
+          </div>
+          <p class="schedule-note">{copy.devices.scheduleNote}</p>
+        </form>
+      </details>
     </div>
   {/each}
 
@@ -410,18 +466,58 @@
     align-items: center;
   }
 
-  .group-services {
+  .group-services,
+  .group-schedule {
     margin-top: 0.8rem;
   }
 
-  .group-services summary {
+  .group-services summary,
+  .group-schedule summary {
     cursor: pointer;
     color: var(--text-dim);
     font-size: 0.82rem;
   }
 
-  .group-services .count {
+  .group-services .count,
+  .group-schedule .count {
     color: var(--accent);
+  }
+
+  .schedule-form {
+    margin-top: 0.6rem;
+  }
+
+  .day-row {
+    display: flex;
+    gap: 0.9rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.6rem;
+  }
+
+  .day {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-transform: capitalize;
+  }
+
+  .time-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  .range-dash {
+    color: var(--text-dim);
+  }
+
+  .schedule-note {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    margin: 0.6rem 0 0;
   }
 
   .service-grid {

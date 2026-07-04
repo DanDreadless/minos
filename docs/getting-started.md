@@ -147,10 +147,13 @@ Open `http://<host>:8080`. Five pages, one per concern:
   available, with query counts and last-seen times. From here you can label
   a device, block its DNS entirely, or assign it to a **group**:
   - `filter` groups get the default rules *plus* the group's own extra
-    allow/deny domains (a group pardon beats a global block),
+    allow/deny domains and blocked services (a group pardon beats a
+    global block),
   - `bypass` groups skip filtering entirely,
   - `block` groups get no DNS service at all.
-  Unassigned devices follow the default rules.
+  Unassigned devices follow the default rules. Any group can carry a
+  **schedule** — school-night hours, weekend windows — and applies only
+  inside it; outside, its devices follow the default rules.
 - **The Codex** (blocklists) — add, enable/disable, or remove list
   subscriptions and refresh them on demand, with per-list rule counts and
   fetch errors. The **Blocked services** card blocks a whole service
@@ -214,6 +217,10 @@ groups:                     # device policies (all optional)
     mode: filter            # filter | bypass | block
     denylist: [tiktok.com]  # extra blocks for members only
     services: [snapchat]    # service bundles for members only
+    schedule:               # optional: group active only in this window
+      days: [sun, mon, tue, wed, thu]   # empty/omitted = every day
+      start: "21:00"        # server-local time
+      end: "07:00"          # before start = runs past midnight
   - name: trusted
     mode: bypass            # members skip filtering entirely
 clients:                    # device assignments, keyed by IP

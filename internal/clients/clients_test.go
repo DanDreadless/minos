@@ -72,6 +72,87 @@ func TestPolicyResolution(t *testing.T) {
 	}
 }
 
+func TestScheduleActive(t *testing.T) {
+	// 2026-07-04 is a Saturday.
+	at := func(day, hour, min int) time.Time {
+		return time.Date(2026, 7, day, hour, min, 0, 0, time.UTC)
+	}
+	day := &config.Schedule{Start: "09:00", End: "17:00"}
+	wrap := &config.Schedule{Start: "21:00", End: "07:00"}
+	satNight := &config.Schedule{Days: []string{"sat"}, Start: "21:00", End: "07:00"}
+
+	cases := []struct {
+		name string
+		s    *config.Schedule
+		now  time.Time
+		want bool
+	}{
+		{"inside day window", day, at(4, 10, 0), true},
+		{"start is inclusive", day, at(4, 9, 0), true},
+		{"end is exclusive", day, at(4, 17, 0), false},
+		{"before window", day, at(4, 8, 59), false},
+		{"wrap: late evening", wrap, at(4, 23, 0), true},
+		{"wrap: early morning (yesterday's anchor)", wrap, at(4, 3, 0), true},
+		{"wrap: midday", wrap, at(4, 12, 0), false},
+		{"sat-only: saturday night", satNight, at(4, 23, 0), true},
+		{"sat-only: sunday 3am still saturday's window", satNight, at(5, 3, 0), true},
+		{"sat-only: sunday night", satNight, at(5, 23, 0), false},
+		{"sat-only: friday night", satNight, at(3, 23, 0), false},
+	}
+	for _, tc := range cases {
+		if got := scheduleActive(tc.s, tc.now); got != tc.want {
+			t.Errorf("%s: scheduleActive(%v) = %v, want %v", tc.name, tc.now, got, tc.want)
+		}
+	}
+}
+
+func TestScheduledGroupTogglesPolicy(t *testing.T) {
+	cfg := testConfig()
+	cfg.Groups[0].Schedule = &config.Schedule{Start: "21:00", End: "07:00"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry()
+	r.ApplyConfig(cfg)
+
+	// Inside the window the kids policy applies...
+	r.rebuildPolicies(time.Date(2026, 7, 4, 23, 0, 0, 0, time.UTC))
+	if p := r.PolicyFor("10.0.0.10"); p == nil || p.Group != "kids" {
+		t.Errorf("in-window policy = %+v, want kids group", p)
+	}
+	// ...outside it the member follows the default rules.
+	r.rebuildPolicies(time.Date(2026, 7, 4, 12, 0, 0, 0, time.UTC))
+	if p := r.PolicyFor("10.0.0.10"); p != nil {
+		t.Errorf("out-of-window policy = %+v, want nil (default)", p)
+	}
+	// A per-device block survives its group's window closing.
+	cfg2 := testConfig()
+	cfg2.Groups[0].Schedule = &config.Schedule{Start: "21:00", End: "07:00"}
+	cfg2.Clients[0].Blocked = true
+	r.ApplyConfig(cfg2)
+	r.rebuildPolicies(time.Date(2026, 7, 4, 12, 0, 0, 0, time.UTC))
+	if p := r.PolicyFor("10.0.0.10"); !p.Refuses() {
+		t.Errorf("blocked device out-of-window = %+v, want refuse", p)
+	}
+}
+
+func TestScheduleValidation(t *testing.T) {
+	bad := []config.Schedule{
+		{Days: []string{"monday"}, Start: "09:00", End: "17:00"},
+		{Start: "9am", End: "17:00"},
+		{Start: "09:00", End: "24:30"},
+		{Start: "09:00", End: "09:00"},
+	}
+	for i, sch := range bad {
+		cfg := testConfig()
+		s := sch
+		cfg.Groups[0].Schedule = &s
+		if err := cfg.Validate(); err == nil {
+			t.Errorf("case %d: Validate() accepted %+v", i, sch)
+		}
+	}
+}
+
 func TestGroupBlockedServices(t *testing.T) {
 	cfg := testConfig()
 	cfg.Groups[0].Services = []string{"youtube"}

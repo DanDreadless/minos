@@ -121,6 +121,48 @@ type Group struct {
 	// Services are catalog names blocked for this group's members
 	// (filter mode only).
 	Services []string `yaml:"services,omitempty" json:"services"`
+	// Schedule, when set, activates this group only inside the window;
+	// outside it members follow the default rules. Server-local time.
+	Schedule *Schedule `yaml:"schedule,omitempty" json:"schedule,omitempty"`
+}
+
+// Schedule is a weekly time window. End may be earlier than Start, in which
+// case the window wraps past midnight ("21:00"–"07:00" starting on each
+// listed day).
+type Schedule struct {
+	// Days are three-letter weekday names (mon..sun); empty means every day.
+	Days  []string `yaml:"days,omitempty" json:"days,omitempty"`
+	Start string   `yaml:"start" json:"start"` // "HH:MM"
+	End   string   `yaml:"end" json:"end"`     // "HH:MM"
+}
+
+// weekdayNames maps config day names to time.Weekday.
+var weekdayNames = map[string]time.Weekday{
+	"mon": time.Monday, "tue": time.Tuesday, "wed": time.Wednesday,
+	"thu": time.Thursday, "fri": time.Friday, "sat": time.Saturday,
+	"sun": time.Sunday,
+}
+
+// ParseHHMM returns minutes since midnight, or -1 if s is not "HH:MM".
+func ParseHHMM(s string) int {
+	t, err := time.Parse("15:04", s)
+	if err != nil {
+		return -1
+	}
+	return t.Hour()*60 + t.Minute()
+}
+
+// DayAllowed reports whether d is in days (empty days = every day).
+func DayAllowed(days []string, d time.Weekday) bool {
+	if len(days) == 0 {
+		return true
+	}
+	for _, name := range days {
+		if weekdayNames[name] == d {
+			return true
+		}
+	}
+	return false
 }
 
 // Client is a device assignment, keyed by IP. MAC and Name are labels the
@@ -223,6 +265,11 @@ func (c *Config) Clone() *Config {
 		out.Groups[i].Allowlist = append([]string(nil), g.Allowlist...)
 		out.Groups[i].Denylist = append([]string(nil), g.Denylist...)
 		out.Groups[i].Services = append([]string(nil), g.Services...)
+		if g.Schedule != nil {
+			sch := *g.Schedule
+			sch.Days = append([]string(nil), g.Schedule.Days...)
+			out.Groups[i].Schedule = &sch
+		}
 	}
 	out.Clients = append([]Client(nil), c.Clients...)
 	out.DNS.LocalRecords = make([]LocalRecord, len(c.DNS.LocalRecords))
@@ -347,6 +394,23 @@ func (c *Config) Validate() error {
 		for j, s := range g.Services {
 			if !services.Exists(s) {
 				return fmt.Errorf("groups[%d].services[%d]: unknown service %q", i, j, s)
+			}
+		}
+		if sch := g.Schedule; sch != nil {
+			for j, d := range sch.Days {
+				if _, ok := weekdayNames[d]; !ok {
+					return fmt.Errorf("groups[%d].schedule.days[%d]: %q is not one of mon..sun", i, j, d)
+				}
+			}
+			start, end := ParseHHMM(sch.Start), ParseHHMM(sch.End)
+			if start < 0 {
+				return fmt.Errorf("groups[%d].schedule.start: %q is not HH:MM", i, sch.Start)
+			}
+			if end < 0 {
+				return fmt.Errorf("groups[%d].schedule.end: %q is not HH:MM", i, sch.End)
+			}
+			if start == end {
+				return fmt.Errorf("groups[%d].schedule: start and end are both %q — an always-on group needs no schedule", i, sch.Start)
 			}
 		}
 	}

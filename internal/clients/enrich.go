@@ -10,6 +10,9 @@ import (
 const (
 	arpRefreshInterval = 60 * time.Second
 	ptrTimeout         = 2 * time.Second
+	// scheduleTick re-evaluates group schedules so windows open and close
+	// within half a minute of their configured times.
+	scheduleTick = 30 * time.Second
 )
 
 // Run performs background enrichment until ctx ends: reverse-DNS lookups for
@@ -20,6 +23,8 @@ func (r *Registry) Run(ctx context.Context) {
 	r.refreshMACs()
 	ticker := time.NewTicker(arpRefreshInterval)
 	defer ticker.Stop()
+	schedTicker := time.NewTicker(scheduleTick)
+	defer schedTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -28,6 +33,10 @@ func (r *Registry) Run(ctx context.Context) {
 			r.enrichOne(ctx, ip)
 		case <-ticker.C:
 			r.refreshMACs()
+		case now := <-schedTicker.C:
+			if r.hasSchedules() {
+				r.rebuildPolicies(now)
+			}
 		}
 	}
 }
