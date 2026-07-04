@@ -1,6 +1,7 @@
 services:
   minos:
-    image: minos:latest
+    # Published multi-arch image; swap for minos:latest if you build locally.
+    image: ghcr.io/dandreadless/minos:latest
     container_name: minos
     restart: unless-stopped
     ports:

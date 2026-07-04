@@ -2,14 +2,33 @@
 
 ## Install
 
-Build from source (Go 1.22+ and Node 20+ required):
+**Install script (Linux amd64/arm64)** — downloads the latest release,
+verifies its checksum, installs to `/usr/local/bin`, and sets up the
+systemd unit:
 
 ```sh
-git clone <repo-url> minos && cd minos
+curl -fsSL https://raw.githubusercontent.com/DanDreadless/minos/main/deploy/install.sh | sudo sh
+```
+
+**Docker** — multi-arch images on GHCR (see `deploy/docker-compose.yaml`
+for a complete example):
+
+```sh
+docker pull ghcr.io/dandreadless/minos:latest
+```
+
+**Release archives** — binaries for Linux, macOS, and Windows with a
+`checksums.txt` are on the [releases page](https://github.com/DanDreadless/minos/releases).
+
+**From source** (Go 1.22+ and Node 20+ required):
+
+```sh
+git clone https://github.com/DanDreadless/minos && cd minos
 make build
 ```
 
-The result is a single static binary at `bin/minos` with the web UI embedded.
+Every path produces the same thing: a single static binary with the web UI
+embedded.
 
 ## First run
 

@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l cmd internal)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt needed on:" && echo "$unformatted" && exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      # The race detector needs cgo, which the Windows dev box lacks —
+      # this job is the authoritative race run and a release blocker.
+      - name: tests (race detector)
+        run: go test -race ./...
+      - name: filter benchmarks compile
+        run: go test ./internal/filter -bench . -benchmem -benchtime=1x -run '^$'
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-fund --no-audit
+      - name: type check
+        run: npm run check
+      - name: build
+        run: npm run build
+
+  lint:
+    runs-on: ubuntu-latest
+    # Advisory until the golangci-lint baseline is verified clean; the
+    # blocking checks are gofmt + vet + race tests above.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest

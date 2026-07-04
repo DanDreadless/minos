@@ -57,6 +57,23 @@ no appeals (well, except pardons).
 
 ## Quick start
 
+On a Raspberry Pi or any Linux box (amd64/arm64), one line installs the
+latest release and the systemd unit:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/DanDreadless/minos/main/deploy/install.sh | sudo sh
+sudo systemctl enable --now minos
+```
+
+Prefer Docker? Multi-arch images are on GHCR:
+
+```sh
+docker run -d --name minos -p 53:53/udp -p 53:53/tcp -p 8080:8080 \
+  -v minos-data:/data ghcr.io/dandreadless/minos:latest
+```
+
+Or build from source (Go 1.22+, Node 20+):
+
 ```sh
 make build          # builds web UI + single binary into bin/minos
 ./bin/minos serve   # starts DNS on :53 and the web UI on :8080
@@ -79,13 +96,10 @@ and test with `dig @127.0.0.1 -p 5353 doubleclick.net`.
 
 ## Deploying on a Raspberry Pi (or any Linux box)
 
-Run Minos as a systemd service so it starts on every boot:
-
-```sh
-sudo install -m 755 bin/minos /usr/local/bin/minos
-sudo cp deploy/minos.service /etc/systemd/system/
-sudo systemctl enable --now minos
-```
+The install script above puts the binary in `/usr/local/bin` and installs
+the hardened systemd unit (built from source instead? `sudo install -m 755
+bin/minos /usr/local/bin/minos && sudo cp deploy/minos.service
+/etc/systemd/system/`).
 
 Before first start, free port 53 (disable the `systemd-resolved` stub
 listener or `dnsmasq`), give the machine a fixed IP, and firewall ports
