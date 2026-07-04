@@ -272,6 +272,11 @@ This is security software; hold it to that standard.
   dns.ResponseWriter — so device policies, local records, Safe Search,
   cache, and the docket apply unchanged over DoT/DoH. Don't fork the
   pipeline for new transports.
+- **Private reverse zones are a backstop** (RFC 6303 + RFC 7793 CGNAT):
+  matched after local records and only when no route covers the name, so
+  auto-PTR and router forwarding always win. Applies to bypass devices
+  (resolver correctness, not filtering). Opt out with
+  `dns.forward_private_reverse: true`.
 - **Upstream breaker semantics** (fixed decisions): only transport errors
   count (SERVFAIL is an answer); 3 consecutive failures sidestep an
   upstream for 30 s; a lapsed cooldown admits exactly one CAS-elected

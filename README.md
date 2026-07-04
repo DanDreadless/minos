@@ -42,6 +42,8 @@ no appeals (well, except pardons).
 
 - Local DNS records for your LAN (`nas.home.lab`, wildcards, CNAMEs, PTR)
 - Conditional forwarding: route `lan` or your reverse zone to the router
+- Private reverse zones answered locally (RFC 6303) — `192.168.x.x`
+  lookups never leak to public resolvers
 - Serves encrypted DNS to clients: DoT for Android Private DNS, DoH at
   `/dns-query` — bring a certificate, filtering follows your devices
 

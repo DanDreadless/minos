@@ -318,6 +318,10 @@ dns:
       upstream:             # e.g. your router, which knows DHCP hostnames
         address: 192.168.1.1:53
         protocol: udp
+  # Private reverse zones (192.168.x.x PTR etc.) answer NXDOMAIN locally
+  # per RFC 6303 instead of leaking to upstreams. Local records and routes
+  # take precedence; set true only if your upstreams know these zones.
+  forward_private_reverse: false
   tls:                      # serve DoT/DoH to clients (file-only: restart to change)
     cert_file: /var/lib/minos/fullchain.pem
     key_file: /var/lib/minos/privkey.pem

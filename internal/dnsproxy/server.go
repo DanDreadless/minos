@@ -61,6 +61,9 @@ type Server struct {
 	// safeSearch is the global blocking.safe_search flag; per-group
 	// enforcement rides the client policy.
 	safeSearch atomic.Bool
+	// forwardPrivateArpa opts out of answering RFC 6303 private reverse
+	// zones locally (dns.forward_private_reverse).
+	forwardPrivateArpa atomic.Bool
 
 	// upstreamStats accumulates per-upstream counters for /metrics,
 	// keyed by upstream name so they survive config swaps.
@@ -204,6 +207,7 @@ func (s *Server) ApplyConfig(cfg *config.Config) error {
 	})
 	s.local.Store(buildLocalZone(cfg))
 	s.safeSearch.Store(cfg.Blocking.SafeSearch)
+	s.forwardPrivateArpa.Store(cfg.DNS.ForwardPrivateReverse)
 	// A fresh cache on every config change doubles as the flush that keeps
 	// cached answers consistent with new upstreams or blocking settings.
 	if cfg.DNS.Cache.Enabled {
@@ -334,6 +338,22 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 			entry.Verdict = querylog.VerdictAllowed
 			entry.List = "local"
 			entry.Rule = rule
+			entry.Upstream = "local"
+			s.record(entry, start)
+			return
+		}
+	}
+
+	// Private reverse zones (RFC 6303) stay on the network: without a
+	// covering local record (above) or conditional route, answer the
+	// empty zone here. Applies to bypass devices too — this is resolver
+	// correctness, not content filtering; upstreams can't know your LAN.
+	if !s.forwardPrivateArpa.Load() {
+		if zone := matchPrivateArpa(qname); zone != "" && s.fwd.Load().route(qname) == nil {
+			_ = w.WriteMsg(privateArpaAnswer(req, q, qname, zone))
+			entry.Verdict = querylog.VerdictAllowed
+			entry.List = "local"
+			entry.Rule = "private reverse zone"
 			entry.Upstream = "local"
 			s.record(entry, start)
 			return

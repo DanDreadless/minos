@@ -68,6 +68,11 @@ type DNSConfig struct {
 	// listen addresses, these settings are file-only: changing them
 	// requires a restart.
 	TLS TLSListeners `yaml:"tls,omitempty"`
+	// ForwardPrivateReverse disables the RFC 6303 default of answering
+	// private reverse zones (192.168.x.x PTR and friends) locally with
+	// NXDOMAIN. Only useful when the default upstreams are internal
+	// resolvers that know those zones; routes are the finer-grained tool.
+	ForwardPrivateReverse bool `yaml:"forward_private_reverse,omitempty"`
 }
 
 // TLSListeners configures client-facing encrypted DNS. Both listeners are
