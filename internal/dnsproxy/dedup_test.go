@@ -144,8 +144,9 @@ func TestServeStaleRefreshes(t *testing.T) {
 	})
 	addr := srv.UDPAddr().String()
 
-	// Prime the cache, then force the entry to expire by rewinding its
-	// stored time (the cache instance is live on the server).
+	// Prime the cache, then swap in an already-expired replacement entry.
+	// (Entries are immutable once stored — mutating the live one would be
+	// a data race with concurrent get()s; Store is the synchronized path.)
 	query(t, addr, "blinky.example.org", dns.TypeA)
 	cache := srv.cache.Load()
 	key := cacheKey("blinky.example.org", dns.TypeA, new(dns.Msg))
@@ -153,8 +154,12 @@ func TestServeStaleRefreshes(t *testing.T) {
 	if !ok {
 		t.Fatal("primed entry not found")
 	}
-	e := v.(*cacheEntry)
-	e.expires = time.Now().Add(-time.Minute) // expired, within stale window
+	old := v.(*cacheEntry)
+	cache.entries.Store(key, &cacheEntry{
+		msg:      old.msg, // immutable, safe to share
+		storedAt: time.Now().Add(-2 * time.Minute),
+		expires:  time.Now().Add(-time.Minute), // expired, within stale window
+	})
 
 	resp := query(t, addr, "blinky.example.org", dns.TypeA)
 	if len(resp.Answer) != 1 || resp.Answer[0].Header().Ttl != staleTTL {
