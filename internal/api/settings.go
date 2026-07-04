@@ -24,6 +24,7 @@ type configView struct {
 		Cache        config.CacheConfig   `json:"cache"`
 		LocalRecords []config.LocalRecord `json:"local_records"`
 		LocalTTL     uint32               `json:"local_ttl"`
+		Routes       []config.Route       `json:"routes"`
 	} `json:"dns"`
 	Blocking struct {
 		Mode string `json:"mode"`
@@ -54,6 +55,10 @@ func viewOf(c *config.Config) configView {
 		v.DNS.LocalRecords = []config.LocalRecord{}
 	}
 	v.DNS.LocalTTL = c.DNS.LocalTTL
+	v.DNS.Routes = c.DNS.Routes
+	if v.DNS.Routes == nil {
+		v.DNS.Routes = []config.Route{}
+	}
 	v.Blocking.Mode = c.Blocking.Mode
 	v.Lists.RefreshInterval = c.Lists.RefreshInterval.Std().String()
 	v.QueryLog.Ephemeral = c.QueryLog.Ephemeral
@@ -84,6 +89,7 @@ type settingsUpdate struct {
 		} `json:"cache"`
 		LocalRecords *[]config.LocalRecord `json:"local_records"`
 		LocalTTL     *uint32               `json:"local_ttl"`
+		Routes       *[]config.Route       `json:"routes"`
 	} `json:"dns"`
 	Blocking *struct {
 		Mode *string `json:"mode"`
@@ -145,6 +151,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			if upd.DNS.LocalTTL != nil {
 				c.DNS.LocalTTL = *upd.DNS.LocalTTL
+			}
+			if upd.DNS.Routes != nil {
+				c.DNS.Routes = *upd.DNS.Routes
 			}
 		}
 		if upd.Blocking != nil && upd.Blocking.Mode != nil {

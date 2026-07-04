@@ -59,6 +59,17 @@ type DNSConfig struct {
 	// upstream. LocalTTL is the TTL (seconds) on those answers.
 	LocalRecords []LocalRecord `yaml:"local_records,omitempty"`
 	LocalTTL     uint32        `yaml:"local_ttl"`
+	// Routes send matching domains (and their subdomains) to a specific
+	// upstream instead of the default ones — conditional forwarding.
+	Routes []Route `yaml:"routes,omitempty"`
+}
+
+// Route is one conditional-forwarding rule. A route is authoritative for
+// its domains: if its upstream fails, the query fails (no fallback to the
+// default upstreams).
+type Route struct {
+	Domains  []string `yaml:"domains" json:"domains"`
+	Upstream Upstream `yaml:"upstream" json:"upstream"`
 }
 
 // LocalRecord is one locally-answered DNS name: address records, or a CNAME
@@ -210,6 +221,11 @@ func (c *Config) Clone() *Config {
 		out.DNS.LocalRecords[i].A = append([]string(nil), r.A...)
 		out.DNS.LocalRecords[i].AAAA = append([]string(nil), r.AAAA...)
 	}
+	out.DNS.Routes = make([]Route, len(c.DNS.Routes))
+	for i, r := range c.DNS.Routes {
+		out.DNS.Routes[i] = r
+		out.DNS.Routes[i].Domains = append([]string(nil), r.Domains...)
+	}
 	return &out
 }
 
@@ -222,18 +238,26 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("dns.upstreams: at least one upstream is required")
 	}
 	for i, u := range c.DNS.Upstreams {
-		switch u.Protocol {
-		case "udp", "tcp", "dot":
-			if err := validateHostPort(u.Address); err != nil {
-				return fmt.Errorf("dns.upstreams[%d].address: %w", i, err)
+		if err := validateUpstream(u); err != nil {
+			return fmt.Errorf("dns.upstreams[%d]: %w", i, err)
+		}
+	}
+	routed := make(map[string]bool)
+	for i, r := range c.DNS.Routes {
+		if len(r.Domains) == 0 {
+			return fmt.Errorf("dns.routes[%d].domains: must not be empty", i)
+		}
+		for _, d := range r.Domains {
+			if !validDomain(d) {
+				return fmt.Errorf("dns.routes[%d].domains: %q is not a valid domain", i, d)
 			}
-		case "doh":
-			parsed, err := url.Parse(u.Address)
-			if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
-				return fmt.Errorf("dns.upstreams[%d].address: doh requires an https URL, got %q", i, u.Address)
+			if routed[d] {
+				return fmt.Errorf("dns.routes[%d].domains: %q appears in more than one route", i, d)
 			}
-		default:
-			return fmt.Errorf("dns.upstreams[%d].protocol: must be udp, tcp, dot, or doh, got %q", i, u.Protocol)
+			routed[d] = true
+		}
+		if err := validateUpstream(r.Upstream); err != nil {
+			return fmt.Errorf("dns.routes[%d].upstream: %w", i, err)
 		}
 	}
 	if c.DNS.Cache.Enabled {
@@ -352,6 +376,23 @@ func (c *Config) Validate() error {
 	}
 	if err := validateHostPort(c.API.Listen); err != nil {
 		return fmt.Errorf("api.listen: %w", err)
+	}
+	return nil
+}
+
+func validateUpstream(u Upstream) error {
+	switch u.Protocol {
+	case "udp", "tcp", "dot":
+		if err := validateHostPort(u.Address); err != nil {
+			return fmt.Errorf("address: %w", err)
+		}
+	case "doh":
+		parsed, err := url.Parse(u.Address)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+			return fmt.Errorf("address: doh requires an https URL, got %q", u.Address)
+		}
+	default:
+		return fmt.Errorf("protocol: must be udp, tcp, dot, or doh, got %q", u.Protocol)
 	}
 	return nil
 }

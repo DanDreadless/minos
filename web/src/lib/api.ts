@@ -62,6 +62,11 @@ export interface CacheSettings {
   max_ttl: number;
 }
 
+export interface Route {
+  domains: string[];
+  upstream: Upstream;
+}
+
 export interface LocalRecord {
   name: string;
   a?: string[];
@@ -77,6 +82,7 @@ export interface ConfigView {
     cache: CacheSettings;
     local_records: LocalRecord[];
     local_ttl: number;
+    routes: Route[];
   };
   blocking: { mode: 'zero_ip' | 'nxdomain' };
   lists: { refresh_interval: string };
@@ -92,6 +98,7 @@ export interface SettingsUpdate {
     cache?: Partial<CacheSettings>;
     local_records?: LocalRecord[];
     local_ttl?: number;
+    routes?: Route[];
   };
   blocking?: { mode?: string };
   lists?: { refresh_interval?: string };

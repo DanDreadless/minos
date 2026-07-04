@@ -25,6 +25,13 @@
   let cacheMinTTL = 10;
   let cacheMaxTTL = 3600;
 
+  interface RouteRow {
+    domains: string;
+    address: string;
+    protocol: Upstream['protocol'];
+  }
+  let routeRows: RouteRow[] = [];
+
   function initFrom(c: ConfigView): void {
     cfg = c;
     upstreams = c.dns.upstreams.map((u) => ({ ...u }));
@@ -37,6 +44,11 @@
     cacheMaxEntries = c.dns.cache.max_entries;
     cacheMinTTL = c.dns.cache.min_ttl;
     cacheMaxTTL = c.dns.cache.max_ttl;
+    routeRows = c.dns.routes.map((r) => ({
+      domains: r.domains.join(', '),
+      address: r.upstream.address,
+      protocol: r.upstream.protocol,
+    }));
   }
 
   async function load(): Promise<void> {
@@ -75,6 +87,27 @@
 
   function addUpstream(): void {
     upstreams = [...upstreams, { address: '', protocol: 'doh' }];
+  }
+
+  const saveRoutes = () =>
+    save({
+      dns: {
+        routes: routeRows.map((r) => ({
+          domains: r.domains
+            .split(/[\s,]+/)
+            .map((s) => s.trim())
+            .filter(Boolean),
+          upstream: { address: r.address.trim(), protocol: r.protocol },
+        })),
+      },
+    });
+
+  function addRoute(): void {
+    routeRows = [...routeRows, { domains: '', address: '', protocol: 'udp' }];
+  }
+
+  function removeRoute(i: number): void {
+    routeRows = routeRows.filter((_, idx) => idx !== i);
   }
 
   function removeUpstream(i: number): void {
@@ -177,6 +210,40 @@
     </label>
     <div class="section-actions">
       <button class="primary" on:click={saveBlocking}>{copy.settings.save}</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>{copy.settings.routesTitle} <small>{copy.settings.routesHint}</small></h2>
+    {#if routeRows.length === 0}
+      <p class="note">{copy.settings.routesEmpty}</p>
+    {/if}
+    {#each routeRows as r, i (i)}
+      <div class="upstream-row">
+        <input
+          class="grow"
+          placeholder={copy.settings.routesDomainsPlaceholder}
+          title={copy.settings.routesDomains}
+          bind:value={r.domains}
+        />
+        <span class="route-arrow" aria-hidden="true">→</span>
+        <input
+          placeholder={r.protocol === 'doh' ? 'https://resolver/dns-query' : 'host:port'}
+          bind:value={r.address}
+        />
+        <select bind:value={r.protocol} title="protocol">
+          <option value="udp">UDP</option>
+          <option value="tcp">TCP</option>
+          <option value="dot">DoT</option>
+          <option value="doh">DoH</option>
+        </select>
+        <button class="danger" title="remove route" on:click={() => removeRoute(i)}>✕</button>
+      </div>
+    {/each}
+    <p class="note">{copy.settings.routesNote}</p>
+    <div class="section-actions">
+      <button on:click={addRoute}>{copy.settings.routesAdd}</button>
+      <button class="primary" on:click={saveRoutes}>{copy.settings.save}</button>
     </div>
   </section>
 
@@ -323,6 +390,10 @@
   .note {
     color: var(--text-dim);
     font-size: 0.85rem;
+  }
+
+  .route-arrow {
+    color: var(--text-dim);
   }
 
   .token-row {

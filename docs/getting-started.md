@@ -161,10 +161,12 @@ Open `http://<host>:8080`. Five pages, one per concern:
   answers itself — they beat the blocklists, never leave your network, and
   address records answer reverse (PTR) lookups automatically.
 - **Settings** — everything below is editable here and applies immediately,
-  no restart: upstream resolvers and their order, blocking mode and TTL,
-  the response cache (repeat queries answered from memory — the dashboard
-  shows the hit rate), list refresh interval, query-log retention and
-  buffer size, the API token, and a one-click YAML config backup.
+  no restart: upstream resolvers and their order, conditional forwarding
+  (send `lan` or your reverse zone to the router so DHCP hostnames keep
+  resolving), the response cache (repeat queries answered from memory —
+  the dashboard shows the hit rate), blocking mode and TTL, list refresh
+  interval, query-log retention and buffer size, the API token, and a
+  one-click YAML config backup.
 
 If you set `api.token` (in the config file or from Settings), the UI and
 CLI require it.
@@ -195,6 +197,11 @@ dns:
       a: [192.168.1.10]
     - name: media.home.lab
       cname: nas.home.lab   # alias; cname and a/aaaa are mutually exclusive
+  routes:                   # conditional forwarding (split DNS)
+    - domains: [lan, home.arpa, 1.168.192.in-addr.arpa]
+      upstream:             # e.g. your router, which knows DHCP hostnames
+        address: 192.168.1.1:53
+        protocol: udp
 blocking:
   mode: zero_ip             # or nxdomain
   allowlist: []             # pardons: always allowed

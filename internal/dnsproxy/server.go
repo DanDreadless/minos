@@ -33,13 +33,13 @@ type Server struct {
 	qlog    *querylog.Log
 	clients *clients.Registry
 
-	listen    string
-	udp       *dns.Server
-	tcp       *dns.Server
-	udpAddr   net.Addr
-	policy    atomic.Pointer[blockingPolicy]
-	upstreams atomic.Pointer[[]Upstream]
-	local     atomic.Pointer[localZone] // nil when no local records
+	listen  string
+	udp     *dns.Server
+	tcp     *dns.Server
+	udpAddr net.Addr
+	policy  atomic.Pointer[blockingPolicy]
+	fwd     atomic.Pointer[forwardTable]
+	local   atomic.Pointer[localZone] // nil when no local records
 
 	// cache is nil when disabled. Hit/miss counters live on the Server so
 	// they survive the cache flush that every config change performs.
@@ -66,15 +66,27 @@ func New(cfg *config.Config, engine *filter.Engine, qlog *querylog.Log, reg *cli
 // (The listen address is the one exception: changing it requires a restart,
 // and the API rejects that edit.)
 func (s *Server) ApplyConfig(cfg *config.Config) error {
-	ups := make([]Upstream, 0, len(cfg.DNS.Upstreams))
+	ft := &forwardTable{}
 	for _, u := range cfg.DNS.Upstreams {
 		built, err := NewUpstream(u)
 		if err != nil {
 			return fmt.Errorf("build upstream: %w", err)
 		}
-		ups = append(ups, built)
+		ft.defaults = append(ft.defaults, built)
 	}
-	s.upstreams.Store(&ups)
+	if len(cfg.DNS.Routes) > 0 {
+		ft.routes = make(map[string]Upstream)
+		for _, r := range cfg.DNS.Routes {
+			built, err := NewUpstream(r.Upstream)
+			if err != nil {
+				return fmt.Errorf("build route upstream: %w", err)
+			}
+			for _, d := range r.Domains {
+				ft.routes[filter.NormalizeDomain(d)] = built
+			}
+		}
+	}
+	s.fwd.Store(ft)
 	s.policy.Store(&blockingPolicy{
 		nxdomain: cfg.Blocking.Mode == "nxdomain",
 		blockTTL: cfg.DNS.BlockTTL,
@@ -262,7 +274,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*upstreamTimeout)
 	defer cancel()
-	resp, upstreamName, err := s.forward(ctx, req)
+	resp, upstreamName, routed, err := s.forward(ctx, req, qname)
 	if err != nil {
 		if slog.Default().Enabled(ctx, slog.LevelDebug) {
 			slog.Debug("forward failed", "qname", qname, "err", err)
@@ -276,7 +288,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		return
 	}
 	resp.Id = req.Id
-	if cache != nil {
+	if cache != nil && !routed {
 		cache.put(key, resp)
 	}
 	_ = w.WriteMsg(resp)
@@ -292,15 +304,51 @@ func (s *Server) record(e querylog.Entry, start time.Time) {
 	s.clients.Touch(e.Client, e.Verdict == querylog.VerdictBlocked, e.Time)
 }
 
-// forward tries each upstream in order until one answers.
-func (s *Server) forward(ctx context.Context, req *dns.Msg) (*dns.Msg, string, error) {
-	ups := *s.upstreams.Load()
+// forwardTable is the per-swap snapshot of where queries go: the default
+// upstream order plus conditional routes keyed by domain.
+type forwardTable struct {
+	defaults []Upstream
+	routes   map[string]Upstream // nil when no routes configured
+}
+
+// route returns the upstream owning qname or a parent of it, walking label
+// suffixes so "printer.lan" matches a route for "lan".
+func (ft *forwardTable) route(qname string) Upstream {
+	if ft.routes == nil {
+		return nil
+	}
+	if up, ok := ft.routes[qname]; ok {
+		return up
+	}
+	for i := 0; i < len(qname); i++ {
+		if qname[i] == '.' {
+			if up, ok := ft.routes[qname[i+1:]]; ok {
+				return up
+			}
+		}
+	}
+	return nil
+}
+
+// forward resolves req: a matching route is authoritative for its domains
+// (no fallback — a failing router answers SERVFAIL); everything else tries
+// the default upstreams in order. routed answers are reported so the caller
+// can skip caching them: LAN records are fast anyway and change often.
+func (s *Server) forward(ctx context.Context, req *dns.Msg, qname string) (resp *dns.Msg, upstream string, routed bool, err error) {
+	ft := s.fwd.Load()
+	if up := ft.route(qname); up != nil {
+		resp, err := up.Exchange(ctx, req)
+		if err != nil {
+			return nil, up.Name(), true, fmt.Errorf("routed upstream failed: %w", err)
+		}
+		return resp, up.Name(), true, nil
+	}
 	var lastErr error
 	var lastName string
-	for _, up := range ups {
+	for _, up := range ft.defaults {
 		resp, err := up.Exchange(ctx, req)
 		if err == nil {
-			return resp, up.Name(), nil
+			return resp, up.Name(), false, nil
 		}
 		lastErr = err
 		lastName = up.Name()
@@ -311,7 +359,7 @@ func (s *Server) forward(ctx context.Context, req *dns.Msg) (*dns.Msg, string, e
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no upstreams configured")
 	}
-	return nil, lastName, fmt.Errorf("all upstreams failed: %w", lastErr)
+	return nil, lastName, false, fmt.Errorf("all upstreams failed: %w", lastErr)
 }
 
 // blockedResponse synthesizes the condemned answer per policy: NXDOMAIN,

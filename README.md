@@ -20,6 +20,7 @@ no appeals (well, except pardons).
 - Allowed queries are forwarded upstream over DoH or DoT (plaintext optional)
 - Repeat queries answered from a built-in response cache — no upstream trip
 - Local DNS records for your LAN (`nas.home.lab`, wildcards, CNAMEs, PTR)
+- Conditional forwarding: route `lan` or your reverse zone to the router
 - Web dashboard with query charts, top blocked domains, and busiest clients
 - Live query log streamed to the UI, with one-click allow/block from any row
 - Device tracking (IP, MAC, hostname) with per-device groups: extra rules,
