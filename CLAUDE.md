@@ -272,3 +272,10 @@ This is security software; hold it to that standard.
   dns.ResponseWriter — so device policies, local records, Safe Search,
   cache, and the docket apply unchanged over DoT/DoH. Don't fork the
   pipeline for new transports.
+- **Upstream breaker semantics** (fixed decisions): only transport errors
+  count (SERVFAIL is an answer); 3 consecutive failures sidestep an
+  upstream for 30 s; a lapsed cooldown admits exactly one CAS-elected
+  probe query; sick upstreams are still tried as a last resort (a breaker
+  must never refuse to try everything); routes are exempt (authoritative,
+  no alternative). Health lives on the same name-keyed counters as
+  /metrics so it survives config swaps.

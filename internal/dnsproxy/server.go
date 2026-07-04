@@ -67,12 +67,26 @@ type Server struct {
 	upstreamStats sync.Map // string → *upstreamCounters
 }
 
+// Failover health: an upstream that fails failThreshold consecutive
+// exchanges is sidestepped for failoverCooldown — healthy upstreams answer
+// first and the sick one becomes a last resort. When the cooldown lapses,
+// exactly one query (CAS-elected) probes it; success resets the breaker.
+// Only transport errors count — SERVFAIL is an answer, not a failure.
+const failThreshold = 3
+
+// failoverCooldown is a variable so tests can shrink it.
+var failoverCooldown = 30 * time.Second
+
 type upstreamCounters struct {
 	requests atomic.Uint64
 	failures atomic.Uint64
 	// durationNs sums exchange time (successes and failures alike) so a
 	// scraper can derive average latency from sum/count.
 	durationNs atomic.Int64
+	// consecutiveFails trips the breaker at failThreshold; sickUntil is
+	// unix nanos until which the upstream is sidestepped (0 = healthy).
+	consecutiveFails atomic.Int32
+	sickUntil        atomic.Int64
 }
 
 // UpstreamStat is one upstream's counters, for the metrics endpoint.
@@ -81,32 +95,62 @@ type UpstreamStat struct {
 	Requests        uint64
 	Failures        uint64
 	DurationSeconds float64
+	Sick            bool
 }
 
-// trackUpstream records one exchange attempt against an upstream.
-func (s *Server) trackUpstream(name string, took time.Duration, err error) {
+func (s *Server) counters(name string) *upstreamCounters {
 	v, ok := s.upstreamStats.Load(name)
 	if !ok {
 		v, _ = s.upstreamStats.LoadOrStore(name, &upstreamCounters{})
 	}
-	c := v.(*upstreamCounters)
+	return v.(*upstreamCounters)
+}
+
+// trackUpstream records one exchange attempt against an upstream.
+func (s *Server) trackUpstream(name string, took time.Duration, err error) {
+	c := s.counters(name)
 	c.requests.Add(1)
+	c.durationNs.Add(took.Nanoseconds())
 	if err != nil {
 		c.failures.Add(1)
+		if c.consecutiveFails.Add(1) >= failThreshold {
+			c.sickUntil.Store(time.Now().Add(failoverCooldown).UnixNano())
+		}
+		return
 	}
-	c.durationNs.Add(took.Nanoseconds())
+	c.consecutiveFails.Store(0)
+	c.sickUntil.Store(0)
+}
+
+// available reports whether an upstream should be tried in the first pass.
+// A sick upstream whose cooldown has lapsed admits exactly one caller (the
+// CAS winner) as the half-open probe; everyone else keeps sidestepping it.
+func (s *Server) available(name string, now time.Time) bool {
+	c := s.counters(name)
+	until := c.sickUntil.Load()
+	if until == 0 {
+		return true
+	}
+	if now.UnixNano() < until {
+		return false
+	}
+	// Cooldown lapsed: winner probes, losers wait out a fresh cooldown.
+	return c.sickUntil.CompareAndSwap(until, now.Add(failoverCooldown).UnixNano())
 }
 
 // UpstreamStats snapshots the per-upstream counters, sorted by name.
 func (s *Server) UpstreamStats() []UpstreamStat {
+	now := time.Now().UnixNano()
 	var out []UpstreamStat
 	s.upstreamStats.Range(func(k, v any) bool {
 		c := v.(*upstreamCounters)
+		until := c.sickUntil.Load()
 		out = append(out, UpstreamStat{
 			Name:            k.(string),
 			Requests:        c.requests.Load(),
 			Failures:        c.failures.Load(),
 			DurationSeconds: float64(c.durationNs.Load()) / 1e9,
+			Sick:            until != 0 && now < until,
 		})
 		return true
 	})
@@ -436,19 +480,38 @@ func (s *Server) forward(ctx context.Context, req *dns.Msg, qname string) (resp 
 		}
 		return resp, up.Name(), true, nil
 	}
+	// Two passes: available upstreams in config order first, then any
+	// sidestepped (sick) ones as a last resort — a tripped breaker must
+	// never turn "primary is down" into "refuse to try the secondary",
+	// nor "everything is sick" into "refuse to try at all".
+	now := time.Now()
 	var lastErr error
 	var lastName string
-	for _, up := range ft.defaults {
-		began := time.Now()
-		resp, err := up.Exchange(ctx, req)
-		s.trackUpstream(up.Name(), time.Since(began), err)
-		if err == nil {
-			return resp, up.Name(), false, nil
-		}
-		lastErr = err
-		lastName = up.Name()
-		if ctx.Err() != nil {
-			break
+	var tried uint64 // bitmask over ft.defaults indices (pass 0 attempts)
+	for pass := 0; pass < 2; pass++ {
+		for i, up := range ft.defaults {
+			if pass == 0 {
+				if !s.available(up.Name(), now) {
+					continue
+				}
+				if i < 64 {
+					tried |= 1 << i
+				}
+			} else if i < 64 && tried&(1<<i) != 0 {
+				continue // already attempted this query
+			}
+			began := time.Now()
+			resp, err := up.Exchange(ctx, req)
+			s.trackUpstream(up.Name(), time.Since(began), err)
+			if err == nil {
+				return resp, up.Name(), false, nil
+			}
+			lastErr = err
+			lastName = up.Name()
+			if ctx.Err() != nil {
+				pass = 2 // context gone: no second pass
+				break
+			}
 		}
 	}
 	if lastErr == nil {

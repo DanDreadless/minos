@@ -72,6 +72,10 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 				sample("minos_upstream_duration_seconds_total",
 					fmt.Sprintf("%.6f", u.DurationSeconds), "upstream", u.Name)
 			}
+			fmt.Fprintf(&b, "# HELP minos_upstream_sick 1 while the upstream is sidestepped after consecutive failures.\n# TYPE minos_upstream_sick gauge\n")
+			for _, u := range ups {
+				sample("minos_upstream_sick", boolVal(u.Sick), "upstream", u.Name)
+			}
 		}
 	}
 

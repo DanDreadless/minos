@@ -26,6 +26,8 @@ no appeals (well, except pardons).
   one-click pardon from the live log — never more than two clicks from
   seeing a block to allowing it
 - Repeat queries answered from a built-in response cache — no upstream trip
+- A failing upstream is sidestepped automatically and re-probed until it
+  recovers — one dead resolver never slows the whole network
 
 **For the household**
 

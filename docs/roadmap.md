@@ -29,6 +29,9 @@ At or beyond parity with the field:
 - **Release pipeline** — CI with the race detector, tag-triggered releases
   (linux/macOS/windows binaries + checksums, multi-arch Docker on GHCR),
   and a checksum-verifying install script *(shipped)*
+- **Upstream failover health** — per-upstream circuit breaker: 3 transport
+  failures sidestep it, half-open probe every 30 s, always tried as last
+  resort *(shipped)*
 - Every setting applies live — no restart, ever, except the two listen
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry
@@ -38,18 +41,14 @@ At or beyond parity with the field:
 The headline roadmap is shipped. The candidates below are what a July 2026
 review flagged as the highest-impact remaining work, roughly in order:
 
-1. **Upstream failover health** — failover is currently serial with a 3 s
-   timeout per upstream, so a dead first upstream slows every query until
-   it recovers. Track failures, sidestep a sick upstream for a cooldown,
-   probe it in the background.
-2. **Answer private reverse zones locally** (RFC 6303) — today a PTR query
+1. **Answer private reverse zones locally** (RFC 6303) — today a PTR query
    for `192.168.x.x` forwards upstream unless a route covers it: a wasted
    WAN round trip and a privacy leak. Answer locally by default; routes
    and local records keep precedence.
-3. **Query deduplication + serve-stale** — collapse concurrent identical
+2. **Query deduplication + serve-stale** — collapse concurrent identical
    upstream queries, and answer from expired cache while refreshing in the
    background (RFC 8767) so upstream blips are invisible.
-4. **Verify the 2M-domain memory budget** — the 150 MB RSS budget is
+3. **Verify the 2M-domain memory budget** — the 150 MB RSS budget is
    untested at Hagezi-Pro++ scale; measure and compact the matcher if it
    falls short.
 
