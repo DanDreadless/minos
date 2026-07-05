@@ -77,7 +77,8 @@ type DNSConfig struct {
 
 // TLSListeners configures client-facing encrypted DNS. Both listeners are
 // optional; enabling either requires a certificate whose hostname the
-// clients will validate (Android Private DNS is hostname-based).
+// clients will validate (Android Private DNS is hostname-based) — either
+// files you provide, or ACME automation.
 type TLSListeners struct {
 	CertFile string `yaml:"cert_file,omitempty"`
 	KeyFile  string `yaml:"key_file,omitempty"`
@@ -86,6 +87,32 @@ type TLSListeners struct {
 	// DoHListen serves DNS-over-HTTPS at /dns-query (usually ":443");
 	// empty disables.
 	DoHListen string `yaml:"doh_listen,omitempty"`
+	// ACME obtains and renews the certificate automatically (mutually
+	// exclusive with CertFile/KeyFile). File-only like the listeners.
+	ACME *ACMEConfig `yaml:"acme,omitempty"`
+}
+
+// ACMEConfig drives automatic certificate issuance via the DNS-01
+// challenge — the only ACME challenge a LAN-only host can complete.
+type ACMEConfig struct {
+	Email  string `yaml:"email"`
+	Domain string `yaml:"domain"`
+	// Provider fulfils the DNS-01 TXT record:
+	// cloudflare | desec | duckdns | rfc2136.
+	Provider string `yaml:"provider"`
+	// APIToken authenticates cloudflare/desec/duckdns.
+	APIToken string `yaml:"api_token,omitempty"`
+	// RFC 2136 (nsupdate) settings.
+	Server        string `yaml:"server,omitempty"`
+	TSIGName      string `yaml:"tsig_name,omitempty"`
+	TSIGSecret    string `yaml:"tsig_secret,omitempty"`
+	TSIGAlgorithm string `yaml:"tsig_algorithm,omitempty"` // default hmac-sha256
+	// DirectoryURL overrides the CA (default: Let's Encrypt production;
+	// point at the staging directory while testing).
+	DirectoryURL string `yaml:"directory_url,omitempty"`
+	// CacheDir holds the account key and issued certificate
+	// (default: acme/ next to the config file).
+	CacheDir string `yaml:"cache_dir,omitempty"`
 }
 
 // Enabled reports whether any encrypted listener is configured.
@@ -336,6 +363,10 @@ func (c *Config) Clone() *Config {
 		out.DNS.Routes[i] = r
 		out.DNS.Routes[i].Domains = append([]string(nil), r.Domains...)
 	}
+	if c.DNS.TLS.ACME != nil {
+		a := *c.DNS.TLS.ACME
+		out.DNS.TLS.ACME = &a
+	}
 	return &out
 }
 
@@ -371,8 +402,12 @@ func (c *Config) Validate() error {
 		}
 	}
 	if t := c.DNS.TLS; t.Enabled() {
-		if t.CertFile == "" || t.KeyFile == "" {
-			return fmt.Errorf("dns.tls: cert_file and key_file are required when dot_listen or doh_listen is set")
+		hasFiles := t.CertFile != "" || t.KeyFile != ""
+		switch {
+		case t.ACME != nil && hasFiles:
+			return fmt.Errorf("dns.tls: acme and cert_file/key_file are mutually exclusive")
+		case t.ACME == nil && (t.CertFile == "" || t.KeyFile == ""):
+			return fmt.Errorf("dns.tls: cert_file+key_file or an acme block is required when dot_listen or doh_listen is set")
 		}
 		if t.DoTListen != "" {
 			if err := validateHostPort(t.DoTListen); err != nil {
@@ -382,6 +417,35 @@ func (c *Config) Validate() error {
 		if t.DoHListen != "" {
 			if err := validateHostPort(t.DoHListen); err != nil {
 				return fmt.Errorf("dns.tls.doh_listen: %w", err)
+			}
+		}
+		if a := t.ACME; a != nil {
+			if a.Email == "" || !strings.Contains(a.Email, "@") {
+				return fmt.Errorf("dns.tls.acme.email: a contact email is required")
+			}
+			if !validDomain(a.Domain) {
+				return fmt.Errorf("dns.tls.acme.domain: %q is not a valid domain", a.Domain)
+			}
+			switch a.Provider {
+			case "cloudflare", "desec", "duckdns":
+				if a.APIToken == "" {
+					return fmt.Errorf("dns.tls.acme.api_token: required for provider %q", a.Provider)
+				}
+			case "rfc2136":
+				if err := validateHostPort(a.Server); err != nil {
+					return fmt.Errorf("dns.tls.acme.server: %w", err)
+				}
+				if a.TSIGName == "" || a.TSIGSecret == "" {
+					return fmt.Errorf("dns.tls.acme: tsig_name and tsig_secret are required for rfc2136")
+				}
+			default:
+				return fmt.Errorf("dns.tls.acme.provider: must be cloudflare, desec, duckdns, or rfc2136, got %q", a.Provider)
+			}
+			if a.DirectoryURL != "" {
+				parsed, err := url.Parse(a.DirectoryURL)
+				if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+					return fmt.Errorf("dns.tls.acme.directory_url: must be an https URL, got %q", a.DirectoryURL)
+				}
 			}
 		}
 	}

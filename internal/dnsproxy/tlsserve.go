@@ -19,6 +19,13 @@ import (
 // resolver exposed beyond plain UDP.
 const maxDoHRequest = 64 << 10
 
+// SetCertSource plugs in a dynamic certificate callback (the ACME manager)
+// instead of static cert/key files. Call before Start. Because every
+// handshake consults the source, renewals apply live — no restart.
+func (s *Server) SetCertSource(fn func(*tls.ClientHelloInfo) (*tls.Certificate, error)) {
+	s.getCert = fn
+}
+
 // startEncrypted brings up the configured DoT/DoH listeners. Both feed the
 // exact same handler as the plaintext listeners, so device policies, local
 // records, Safe Search, the cache, and the query log all apply unchanged.
@@ -27,13 +34,19 @@ func (s *Server) startEncrypted(handler dns.Handler) error {
 	if !t.Enabled() {
 		return nil
 	}
-	cert, err := tls.LoadX509KeyPair(t.CertFile, t.KeyFile)
-	if err != nil {
-		return fmt.Errorf("load dns.tls certificate: %w", err)
+	getCert := s.getCert
+	if getCert == nil {
+		cert, err := tls.LoadX509KeyPair(t.CertFile, t.KeyFile)
+		if err != nil {
+			return fmt.Errorf("load dns.tls certificate: %w", err)
+		}
+		getCert = func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			return &cert, nil
+		}
 	}
 	tcfg := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
+		GetCertificate: getCert,
+		MinVersion:     tls.VersionTLS12,
 	}
 
 	if t.DoTListen != "" {

@@ -17,6 +17,7 @@ import (
 	"os/signal"
 	"time"
 
+	"minos/internal/acme"
 	"minos/internal/api"
 	"minos/internal/clients"
 	"minos/internal/config"
@@ -133,6 +134,22 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
+	// ACME: dynamic certificates for the DoT/DoH listeners. Wired before
+	// Start so the listeners consult the manager on every handshake; the
+	// renewal loop starts once the shutdown context exists below.
+	var acmeMgr *acme.Manager
+	if a := cfg.DNS.TLS.ACME; a != nil {
+		acmeMgr, err = acme.NewManager(*a, *cfgPath)
+		if err != nil {
+			return fmt.Errorf("acme: %w", err)
+		}
+		acmeMgr.OnFailure(func(err error) {
+			notifier.Publish("acme_renewal_failed", "Certificate issuance failing",
+				"ACME for "+a.Domain+" is failing and will keep retrying hourly: "+err.Error())
+		})
+		proxy.SetCertSource(acmeMgr.GetCertificate)
+	}
+
 	proxy.OnUpstreamEvent(func(name string, sick bool) {
 		if sick {
 			notifier.Publish("upstream_sick", "Upstream resolver failing",
@@ -166,6 +183,9 @@ func serve(args []string) error {
 	})
 	go checker.Run(ctx)
 	go notifier.Run(ctx)
+	if acmeMgr != nil {
+		go acmeMgr.Run(ctx)
+	}
 
 	static, err := iofs.Sub(web.Dist, "dist")
 	if err != nil {

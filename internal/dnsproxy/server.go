@@ -6,6 +6,7 @@ package dnsproxy
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
@@ -45,13 +46,16 @@ type Server struct {
 	// Client-facing encrypted DNS; nil when dns.tls is not configured.
 	// File-only settings like the plain listen address: restart to change.
 	tlsListeners config.TLSListeners
-	dot          *dns.Server
-	doh          *http.Server
-	dotAddr      net.Addr
-	dohAddr      net.Addr
-	policy       atomic.Pointer[blockingPolicy]
-	fwd          atomic.Pointer[forwardTable]
-	local        atomic.Pointer[localZone] // nil when no local records
+	// getCert, when set (before Start), supplies certificates dynamically
+	// (ACME) instead of the static cert/key files.
+	getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error)
+	dot     *dns.Server
+	doh     *http.Server
+	dotAddr net.Addr
+	dohAddr net.Addr
+	policy  atomic.Pointer[blockingPolicy]
+	fwd     atomic.Pointer[forwardTable]
+	local   atomic.Pointer[localZone] // nil when no local records
 
 	// cache is nil when disabled. Hit/miss counters live on the Server so
 	// they survive the cache flush that every config change performs.
