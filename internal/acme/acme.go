@@ -168,7 +168,18 @@ func (m *Manager) issue(ctx context.Context) error {
 	}
 	chainDER, _, err := client.CreateOrderCert(ctx, order.FinalizeURL, csr, true)
 	if err != nil {
-		return fmt.Errorf("finalize order: %w", err)
+		// Some CAs (Pebble among them) answer the finalize POST with the
+		// order in "processing" and no Location header, which trips
+		// CreateOrderCert's internal wait (it polls an empty URL). We hold
+		// the real order URI, so poll it ourselves and fetch the cert.
+		o, werr := client.WaitOrder(ctx, order.URI)
+		if werr != nil || o.CertURL == "" {
+			return fmt.Errorf("finalize order: %w", err)
+		}
+		chainDER, err = client.FetchCert(ctx, o.CertURL, true)
+		if err != nil {
+			return fmt.Errorf("fetch certificate: %w", err)
+		}
 	}
 
 	cert, err := assembleCert(chainDER, leafKey)

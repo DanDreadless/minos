@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -256,7 +257,8 @@ func TestCloudflareZoneWalk(t *testing.T) {
 
 func TestWaitForTXT(t *testing.T) {
 	// A local DNS server that starts answering the TXT after two queries.
-	var served int
+	// (Atomic: written on the handler goroutine, read by the test.)
+	var served atomic.Int32
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -264,10 +266,9 @@ func TestWaitForTXT(t *testing.T) {
 	srv := &dns.Server{
 		PacketConn: pc,
 		Handler: dns.HandlerFunc(func(w dns.ResponseWriter, req *dns.Msg) {
-			served++
 			reply := new(dns.Msg)
 			reply.SetReply(req)
-			if served > 2 {
+			if served.Add(1) > 2 {
 				reply.Answer = []dns.RR{&dns.TXT{
 					Hdr: dns.RR_Header{
 						Name: req.Question[0].Name, Rrtype: dns.TypeTXT,
@@ -292,7 +293,7 @@ func TestWaitForTXT(t *testing.T) {
 	if err := waitForTXT(ctx, "_acme-challenge.dns.example.com", "expected-value"); err != nil {
 		t.Fatalf("waitForTXT: %v", err)
 	}
-	if served < 3 {
-		t.Errorf("resolver served %d queries, want at least 3 (polled until visible)", served)
+	if served.Load() < 3 {
+		t.Errorf("resolver served %d queries, want at least 3 (polled until visible)", served.Load())
 	}
 }
