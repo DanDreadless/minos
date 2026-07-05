@@ -205,6 +205,49 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
+export interface ImportReport {
+  lists: number;
+  allow: number;
+  deny: number;
+  local_records: number;
+  services: number;
+  skipped: string[];
+}
+
+// upload posts multipart form data (file uploads) with auth.
+async function upload<T>(path: string, form: FormData): Promise<T> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers['X-Api-Token'] = token;
+  const resp = await fetch(path, { method: 'POST', headers, body: form });
+  const data: unknown = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const msg =
+      typeof data === 'object' && data !== null && 'error' in data
+        ? String((data as { error: unknown }).error)
+        : resp.statusText;
+    throw new ApiError(resp.status, msg);
+  }
+  return data as T;
+}
+
+// uploadRaw posts a raw body (a config YAML) with auth.
+async function uploadRaw<T>(path: string, body: Blob): Promise<T> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers['X-Api-Token'] = token;
+  const resp = await fetch(path, { method: 'POST', headers, body });
+  const data: unknown = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const msg =
+      typeof data === 'object' && data !== null && 'error' in data
+        ? String((data as { error: unknown }).error)
+        : resp.statusText;
+    throw new ApiError(resp.status, msg);
+  }
+  return data as T;
+}
+
 export const api = {
   status: () => request<Status>('GET', '/api/status'),
   stats: (hours = 24) => request<Stats>('GET', `/api/stats?hours=${hours}`),
@@ -214,6 +257,19 @@ export const api = {
 
   getConfig: () => request<ConfigView>('GET', '/api/config'),
   updateConfig: (upd: SettingsUpdate) => request<ConfigView>('PUT', '/api/config', upd),
+
+  importPihole: (gravity: File, customList?: File) => {
+    const form = new FormData();
+    form.append('gravity', gravity);
+    if (customList) form.append('custom_list', customList);
+    return upload<ImportReport>('/api/import/pihole', form);
+  },
+  importAdGuard: (config: File) => {
+    const form = new FormData();
+    form.append('config', config);
+    return upload<ImportReport>('/api/import/adguard', form);
+  },
+  importConfig: (file: File) => uploadRaw<ConfigView>('/api/config/import', file),
 
   lists: () => request<ListStatus[]>('GET', '/api/lists'),
   addList: (l: { name: string; url: string; format: string; enabled: boolean }) =>

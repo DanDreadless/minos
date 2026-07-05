@@ -5,6 +5,7 @@
     exportConfig,
     setToken,
     type ConfigView,
+    type ImportReport,
     type Upstream,
   } from '../lib/api';
   import { copy } from '../lib/copy';
@@ -170,6 +171,63 @@
       await exportConfig();
     } catch (e) {
       notifyError(e);
+    }
+  }
+
+  // --- migration & restore uploads ---
+  let piholeGravity: FileList | null = null;
+  let piholeCustom: FileList | null = null;
+  let adguardFile: FileList | null = null;
+  let restoreFile: FileList | null = null;
+  let importReport: ImportReport | null = null;
+  let importing = false;
+
+  function describeReport(r: ImportReport): string {
+    return `Imported ${r.lists} blocklists, ${r.allow} allowed, ${r.deny} blocked, ${r.local_records} local records, ${r.services} services.`;
+  }
+
+  async function doImportPihole(): Promise<void> {
+    if (!piholeGravity?.[0]) return;
+    importing = true;
+    importReport = null;
+    try {
+      importReport = await api.importPihole(piholeGravity[0], piholeCustom?.[0]);
+      notify(describeReport(importReport));
+      await load();
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      importing = false;
+    }
+  }
+
+  async function doImportAdGuard(): Promise<void> {
+    if (!adguardFile?.[0]) return;
+    importing = true;
+    importReport = null;
+    try {
+      importReport = await api.importAdGuard(adguardFile[0]);
+      notify(describeReport(importReport));
+      await load();
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      importing = false;
+    }
+  }
+
+  async function doRestore(): Promise<void> {
+    if (!restoreFile?.[0]) return;
+    if (!window.confirm(copy.settings.restoreConfirm)) return;
+    importing = true;
+    try {
+      initFrom(await api.importConfig(restoreFile[0]));
+      restoreFile = null;
+      notify(copy.settings.restoreDone);
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      importing = false;
     }
   }
 
@@ -403,7 +461,64 @@
 
   <section class="card">
     <h2>{copy.settings.backupTitle} <small>{copy.settings.backupHint}</small></h2>
-    <button on:click={doExport}>{copy.settings.backupButton}</button>
+    <div class="section-actions">
+      <button on:click={doExport}>{copy.settings.backupButton}</button>
+    </div>
+    <label class="field wide">
+      <span>{copy.settings.restoreLabel} <small>{copy.settings.restoreHint}</small></span>
+      <input type="file" accept=".yaml,.yml" bind:files={restoreFile} />
+    </label>
+    <div class="section-actions">
+      <button class="danger" disabled={importing || !restoreFile?.[0]} on:click={doRestore}>
+        {copy.settings.restoreButton}
+      </button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>{copy.settings.importTitle} <small>{copy.settings.importHint}</small></h2>
+    <div class="import-grid">
+      <div class="import-source">
+        <h3>Pi-hole</h3>
+        <label class="field wide">
+          <span>{copy.settings.importGravity}</span>
+          <input type="file" accept=".db,.sqlite,.sqlite3" bind:files={piholeGravity} />
+        </label>
+        <label class="field wide">
+          <span>{copy.settings.importCustomList} <small>{copy.settings.importOptional}</small></span>
+          <input type="file" accept=".list,.txt" bind:files={piholeCustom} />
+        </label>
+        <button class="primary" disabled={importing || !piholeGravity?.[0]} on:click={doImportPihole}>
+          {copy.settings.importButton}
+        </button>
+      </div>
+      <div class="import-source">
+        <h3>AdGuard Home</h3>
+        <label class="field wide">
+          <span>{copy.settings.importAdguard}</span>
+          <input type="file" accept=".yaml,.yml" bind:files={adguardFile} />
+        </label>
+        <button class="primary" disabled={importing || !adguardFile?.[0]} on:click={doImportAdGuard}>
+          {copy.settings.importButton}
+        </button>
+      </div>
+    </div>
+    <p class="note">{copy.settings.importNote}</p>
+    {#if importReport}
+      <div class="import-report">
+        <p>{describeReport(importReport)}</p>
+        {#if importReport.skipped.length}
+          <details>
+            <summary>{importReport.skipped.length} item(s) skipped</summary>
+            <ul>
+              {#each importReport.skipped as reason}
+                <li>{reason}</li>
+              {/each}
+            </ul>
+          </details>
+        {/if}
+      </div>
+    {/if}
   </section>
 {/if}
 
@@ -417,6 +532,36 @@
 
   section {
     margin-bottom: 1.25rem;
+  }
+
+  .import-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 1.5rem;
+  }
+
+  .import-source h3 {
+    margin: 0 0 0.6rem;
+    font-size: 0.95rem;
+  }
+
+  .import-report {
+    margin-top: 1rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .import-report ul {
+    margin: 0.4rem 0 0;
+    padding-left: 1.2rem;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  .import-report summary {
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 0.82rem;
   }
 
   .upstream-row {

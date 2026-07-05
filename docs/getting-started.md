@@ -66,6 +66,13 @@ What doesn't: regex rules and AdBlock rules with options (Minos matches
 whole domains only), allowlist subscriptions, and upstream/DHCP settings.
 Every skipped item is printed with a reason so nothing vanishes silently.
 
+Prefer the web UI? **Settings → Import from Pi-hole or AdGuard Home** takes
+the same files as an upload (`gravity.db`, an optional `custom.list`, or
+`AdGuardHome.yaml`) and shows the same add-only report — no shell needed.
+The **Backup & restore** card there also restores a `minos.yaml` you
+exported earlier (listen addresses and query-log storage are kept from the
+running instance, since those need a restart to change).
+
 ## Prepare the host (Raspberry Pi / Linux)
 
 Do these once before first start so port 53 is free and DNS flows to Minos

@@ -696,15 +696,25 @@ func load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Start from defaults so new fields get sane values on old config files.
+	c, err := Parse(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return c, nil
+}
+
+// Parse decodes and validates a YAML config from raw bytes, starting from
+// defaults so a partial or older file still fills in sane values. Used to
+// restore an uploaded backup.
+func Parse(data []byte) (*Config, error) {
 	c := Default()
 	dec := yaml.NewDecoder(strings.NewReader(string(data)))
 	dec.KnownFields(true)
 	if err := dec.Decode(c); err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
+		return nil, fmt.Errorf("parse config: %w", err)
 	}
 	if err := c.Validate(); err != nil {
-		return nil, fmt.Errorf("validate %s: %w", path, err)
+		return nil, fmt.Errorf("validate config: %w", err)
 	}
 	return c, nil
 }

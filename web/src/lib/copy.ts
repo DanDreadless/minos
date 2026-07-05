@@ -212,9 +212,24 @@ export const copy = {
     updateCheckHint:
       'Asks GitHub for the latest release tag — nothing about you or your network is sent, only the request itself. Off unless you turn it on.',
     updateAvailable: (v: string) => `v${v} available`,
-    backupTitle: 'Backup',
-    backupHint: 'download the full configuration as YAML',
+    backupTitle: 'Backup & restore',
+    backupHint: 'download or restore the full configuration',
     backupButton: 'Export configuration',
+    restoreLabel: 'Restore from a backup',
+    restoreHint: 'upload a minos.yaml exported earlier',
+    restoreButton: 'Restore configuration',
+    restoreConfirm:
+      'Replace the entire running configuration with this backup? Listen addresses and query-log storage are kept from the current setup; everything else is overwritten.',
+    restoreDone: 'Configuration restored and applied.',
+    importTitle: 'Import from Pi-hole or AdGuard Home',
+    importHint: 'bring your existing setup across',
+    importGravity: 'Pi-hole gravity.db',
+    importCustomList: 'custom.list (Local DNS Records)',
+    importAdguard: 'AdGuardHome.yaml',
+    importOptional: 'optional',
+    importButton: 'Import',
+    importNote:
+      'Imports only add — nothing already configured is removed, and duplicates are dropped. Regex rules and other unsupported entries are listed as skipped. Find gravity.db in /etc/pihole; AdGuardHome.yaml alongside the AdGuardHome binary.',
   },
 
   token: {
