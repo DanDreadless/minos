@@ -69,8 +69,9 @@ no appeals (well, except pardons).
 
 ## Quick start
 
-On a Raspberry Pi or any Linux box (amd64/arm64), one line installs the
-latest release and the systemd unit:
+On a Raspberry Pi or any Linux box — amd64, arm64, or 32-bit ARM (Pi
+Zero through Pi 4 on 32-bit Pi OS) — one line installs the latest
+release and the systemd unit:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/DanDreadless/minos/main/deploy/install.sh | sudo sh

@@ -1,8 +1,8 @@
 #!/bin/sh
 # Minos installer: downloads the latest release binary for this machine,
 # verifies its checksum, and installs it to /usr/local/bin. Optionally
-# installs the systemd unit. Linux only (amd64/arm64); for other platforms
-# grab an archive from the releases page.
+# installs the systemd unit. Linux only (amd64/arm64/armv7/armv6); for
+# other platforms grab an archive from the releases page.
 #
 #   curl -fsSL https://raw.githubusercontent.com/DanDreadless/minos/main/deploy/install.sh | sudo sh
 #
@@ -22,7 +22,9 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 case "$(uname -m)" in
   x86_64 | amd64) ARCH="amd64" ;;
   aarch64 | arm64) ARCH="arm64" ;;
-  *) die "unsupported architecture $(uname -m) (amd64 and arm64 builds are published)" ;;
+  armv7l | armv8l) ARCH="armv7" ;; # 32-bit Pi OS on Pi 2/3/4
+  armv6l) ARCH="armv6" ;;          # Pi Zero / Pi 1
+  *) die "unsupported architecture $(uname -m) (amd64, arm64, armv7, and armv6 builds are published)" ;;
 esac
 
 command -v curl >/dev/null || die "curl is required"

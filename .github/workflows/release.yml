@@ -40,11 +40,21 @@ jobs:
           set -eu
           VERSION="${GITHUB_REF_NAME#v}"
           mkdir -p dist
-          for target in linux/amd64 linux/arm64 windows/amd64 darwin/amd64 darwin/arm64; do
-            export GOOS="${target%/*}" GOARCH="${target#*/}"
+          # linux/arm/7 and /6 are 32-bit Pi OS (Pi 2/3 and Zero/1).
+          for target in linux/amd64 linux/arm64 linux/arm/7 linux/arm/6 \
+                        windows/amd64 darwin/amd64 darwin/arm64; do
+            export GOOS="${target%%/*}"
+            rest="${target#*/}"
+            export GOARCH="${rest%%/*}"
+            arch_label="$GOARCH"
+            unset GOARM || true
+            case "$rest" in */*)
+              export GOARM="${rest#*/}"
+              arch_label="armv${GOARM}"
+            esac
             ext=""
             [ "$GOOS" = "windows" ] && ext=".exe"
-            name="minos_${VERSION}_${GOOS}_${GOARCH}"
+            name="minos_${VERSION}_${GOOS}_${arch_label}"
             stage="dist/${name}"
             mkdir -p "$stage"
             CGO_ENABLED=0 go build -trimpath \
@@ -98,7 +108,7 @@ jobs:
         with:
           context: .
           file: deploy/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}

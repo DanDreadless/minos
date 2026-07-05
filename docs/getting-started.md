@@ -2,7 +2,7 @@
 
 ## Install
 
-**Install script (Linux amd64/arm64)** — downloads the latest release,
+**Install script (Linux amd64/arm64/armv7/armv6)** — downloads the latest release,
 verifies its checksum, installs to `/usr/local/bin`, and sets up the
 systemd unit:
 

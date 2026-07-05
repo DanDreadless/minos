@@ -8,13 +8,15 @@ RUN npm run build
 
 # Keep the Go tag in step with go.mod, or go mod download refuses.
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS gobuild
-ARG TARGETOS TARGETARCH VERSION=docker
+ARG TARGETOS TARGETARCH TARGETVARIANT VERSION=docker
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=webbuild /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+# GOARM comes from the platform variant (linux/arm/v7 → 7); it is ignored
+# by every arch except 32-bit arm.
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GOARM=${TARGETVARIANT#v} \
     go build -ldflags "-s -w -X main.version=$VERSION" -o /minos ./cmd/minos
 
 FROM scratch

@@ -48,6 +48,9 @@ At or beyond parity with the field:
 - **Notifications** — webhook + ntfy delivery for new-device, upstream
   sick/recovered, and update events; nothing sent unless configured
   *(shipped)*
+- **Homelab kit** — full REST API reference, Home Assistant recipes, a
+  ready-made Grafana dashboard, and 32-bit ARM builds (armv7/armv6 +
+  arm/v7 Docker) for drawer Pis *(shipped)*
 - Every setting applies live — no restart, ever, except the two listen
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry
