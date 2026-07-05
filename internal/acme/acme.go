@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -46,6 +47,9 @@ type Manager struct {
 	cacheDir string
 	provider Provider
 	cert     atomic.Pointer[tls.Certificate]
+	// httpClient overrides the ACME transport in tests (Pebble's
+	// directory serves a self-signed certificate).
+	httpClient *http.Client
 
 	// onFailure, when set (before Run), fires once per failure streak so
 	// a notification can go out without spamming on every hourly retry.
@@ -241,6 +245,9 @@ func (m *Manager) client(ctx context.Context) (*xacme.Client, error) {
 		dir = letsEncryptURL
 	}
 	client := &xacme.Client{Key: key, DirectoryURL: dir, UserAgent: "minos-dns"}
+	if m.httpClient != nil {
+		client.HTTPClient = m.httpClient
+	}
 	_, err = client.Register(ctx, &xacme.Account{
 		Contact: []string{"mailto:" + m.cfg.Email},
 	}, xacme.AcceptTOS)

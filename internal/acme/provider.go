@@ -24,6 +24,12 @@ func newProvider(cfg config.ACMEConfig) (Provider, error) {
 	switch cfg.Provider {
 	case "cloudflare":
 		return &cloudflareProvider{token: cfg.APIToken}, nil
+	case "desec":
+		return &desecProvider{token: cfg.APIToken}, nil
+	case "duckdns":
+		return &duckdnsProvider{token: cfg.APIToken, domain: cfg.Domain}, nil
+	case "rfc2136":
+		return newRFC2136Provider(cfg)
 	default:
 		return nil, fmt.Errorf("unknown acme provider %q", cfg.Provider)
 	}

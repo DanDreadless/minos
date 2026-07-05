@@ -46,6 +46,40 @@ jobs:
       - name: build
         run: npm run build
 
+  # Full ACME issuance against Pebble (Let's Encrypt's test CA), with
+  # pebble-challtestsrv as the mock DNS provider.
+  acme-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: start pebble + challtestsrv
+        run: |
+          docker run -d --name challtestsrv --network host \
+            ghcr.io/letsencrypt/pebble-challtestsrv:latest \
+            -defaultIPv4 127.0.0.1
+          docker run -d --name pebble --network host \
+            -e PEBBLE_VA_NOSLEEP=1 \
+            ghcr.io/letsencrypt/pebble:latest \
+            -config test/config/pebble-config.json -dnsserver 127.0.0.1:8053
+          # Wait for the directory to answer.
+          for i in $(seq 1 30); do
+            curl -sk https://localhost:14000/dir >/dev/null && exit 0
+            sleep 1
+          done
+          echo "pebble never came up" && docker logs pebble && exit 1
+      - name: e2e issuance
+        env:
+          PEBBLE_DIR_URL: https://localhost:14000/dir
+          CHALLTESTSRV_URL: http://localhost:8055
+          CHALLTESTSRV_DNS: 127.0.0.1:8053
+        run: go test -tags acme_e2e -count=1 -v -run TestE2E ./internal/acme
+      - name: service logs on failure
+        if: failure()
+        run: docker logs pebble; docker logs challtestsrv
+
   lint:
     runs-on: ubuntu-latest
     steps:

@@ -100,7 +100,9 @@ Rules:
 - New third-party deps require justification in the PR description. The
   blessed set: `miekg/dns`, `go-chi/chi`, `modernc.org/sqlite`,
   `gopkg.in/yaml.v3`, `github.com/coder/websocket` (the maintained home
-  of nhooyr.io/websocket — migrated July 2026).
+  of nhooyr.io/websocket — migrated July 2026), `golang.org/x/crypto`
+  (the acme package only — Go-team maintained; chosen over lego's
+  ~100-module tree).
 
 ## Dev environment & commands
 
@@ -270,6 +272,14 @@ This is security software; hold it to that standard.
   (go install, so it always matches the local toolchain); CI runs it
   blocking, installed the same way for the same reason — prebuilt lint
   binaries can lag go.mod's Go version and refuse to run.
+- **ACME semantics** (fixed decisions): DNS-01 only (LAN hosts can't do
+  HTTP-01); providers are small hand-written clients, never lego. The
+  TLS config uses GetCertificate against an atomic pointer, so renewals
+  rotate live — dns.tls stays file-only but certs don't need restarts.
+  Cached certs with >30 days left are reused (LE rate limits); the
+  propagation poll must see the TXT on public resolvers before Accept.
+  Credentials live only in the config file, never in the API. E2E runs
+  against Pebble in CI (build tag acme_e2e).
 - **Encrypted listeners reuse handle()**: DoT is the same dns.Handler on
   a tls.Listen socket; DoH adapts RFC 8484 GET/POST onto a captured
   dns.ResponseWriter — so device policies, local records, Safe Search,

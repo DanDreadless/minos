@@ -51,6 +51,9 @@ At or beyond parity with the field:
 - **Homelab kit** — full REST API reference, Home Assistant recipes, a
   ready-made Grafana dashboard, and 32-bit ARM builds (armv7/armv6 +
   arm/v7 Docker) for drawer Pis *(shipped)*
+- **ACME automation** — Let's Encrypt certificates for DoT/DoH via the
+  DNS-01 challenge (Cloudflare, deSEC, DuckDNS, RFC 2136), renewed and
+  rotated live; e2e-tested against Pebble in CI *(shipped)*
 - Every setting applies live — no restart, ever, except the two listen
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry
@@ -62,8 +65,6 @@ next comes from the list below as real-world usage decides:
 
 ## Under consideration
 
-- ACME/Let's Encrypt automation for the DoT/DoH certificate (manual
-  certs work today)
 - Import through the UI (upload a gravity.db/AdGuardHome.yaml on Settings —
   the CLI importer ships today)
 - Config restore (import the YAML backup through the UI)

@@ -252,11 +252,56 @@ Everything applies unchanged over the encrypted listeners: device
 policies, local records, Safe Search, the cache, and the query log.
 
 **The certificate must match a real hostname** that clients validate —
-Android Private DNS takes a hostname, not an IP. The usual home setup:
-a DNS-01 Let's Encrypt certificate for a name like `dns.example.com`
-(issued without exposing anything to the internet), plus a local record
-in Minos pointing that name at the server's LAN IP. A self-signed CA
-works too if you install it on the devices.
+Android Private DNS takes a hostname, not an IP. A self-signed CA works
+if you install it on every device, but the good path is a real
+certificate — and Minos can fetch and renew one itself.
+
+### Automatic certificates (ACME)
+
+Replace `cert_file`/`key_file` with an `acme` block and Minos obtains a
+Let's Encrypt certificate via the DNS-01 challenge (the only ACME
+challenge a LAN-only host can complete), renews it 30 days before
+expiry, and rotates it into the live listeners without a restart:
+
+```yaml
+dns:
+  tls:
+    dot_listen: ":853"
+    doh_listen: ":8443"
+    acme:
+      email: you@example.com
+      domain: dns.example.com
+      provider: cloudflare      # cloudflare | desec | duckdns | rfc2136
+      api_token: "..."          # a scoped token (Zone read + DNS edit)
+```
+
+Provider notes:
+
+- **cloudflare** — create an API token scoped to the zone with
+  `Zone.Zone: Read` and `Zone.DNS: Edit`.
+- **desec** — a [deSEC.io](https://desec.io) token; free and built for
+  exactly this.
+- **duckdns** — `domain` must be your `something.duckdns.org` name;
+  `api_token` is your DuckDNS token.
+- **rfc2136** — dynamic updates to your own DNS server:
+
+  ```yaml
+      provider: rfc2136
+      server: 192.168.1.5:53
+      tsig_name: minos-key
+      tsig_secret: "base64=="
+      tsig_algorithm: hmac-sha256   # default
+  ```
+
+Details worth knowing: the account key and issued certificate live in
+`acme/` next to the config file (override with `cache_dir`); a cached
+certificate with more than 30 days left is reused on restart (Let's
+Encrypt rate limits are real); while testing, point `directory_url` at
+the staging CA (`https://acme-staging-v02.api.letsencrypt.org/directory`)
+so failed experiments don't burn production quota; and if issuance
+fails, Minos retries hourly and sends one notification per failure
+streak. Don't forget the **local record** mapping `dns.example.com` to
+the server's LAN IP so clients can actually reach it.
 
 Point Android at it: Settings → Network → Private DNS → the hostname on
 the certificate. iOS/macOS take DoH/DoT via a configuration profile.

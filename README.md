@@ -47,7 +47,8 @@ no appeals (well, except pardons).
 - Private reverse zones answered locally (RFC 6303) — `192.168.x.x`
   lookups never leak to public resolvers
 - Serves encrypted DNS to clients: DoT for Android Private DNS, DoH at
-  `/dns-query` — bring a certificate, filtering follows your devices
+  `/dns-query` — bring a certificate, or let Minos fetch and renew one
+  automatically (Let's Encrypt via Cloudflare, deSEC, DuckDNS, or RFC 2136)
 
 **Running it**
 
