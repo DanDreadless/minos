@@ -142,6 +142,9 @@ func (m *Manager) issue(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("authorize order: %w", err)
 	}
+	// Only the new-order response carries the Location header that
+	// populates URI; orders returned by WaitOrder have it empty. Keep it.
+	orderURI := order.URI
 
 	for _, authzURL := range order.AuthzURLs {
 		if err := m.fulfil(ctx, client, authzURL); err != nil {
@@ -149,7 +152,7 @@ func (m *Manager) issue(ctx context.Context) error {
 		}
 	}
 
-	order, err = client.WaitOrder(ctx, order.URI)
+	order, err = client.WaitOrder(ctx, orderURI)
 	if err != nil {
 		return fmt.Errorf("wait order: %w", err)
 	}
@@ -172,7 +175,7 @@ func (m *Manager) issue(ctx context.Context) error {
 		// order in "processing" and no Location header, which trips
 		// CreateOrderCert's internal wait (it polls an empty URL). We hold
 		// the real order URI, so poll it ourselves and fetch the cert.
-		o, werr := client.WaitOrder(ctx, order.URI)
+		o, werr := client.WaitOrder(ctx, orderURI)
 		if werr != nil || o.CertURL == "" {
 			return fmt.Errorf("finalize order: %w", err)
 		}
