@@ -122,12 +122,18 @@ func (m *Manager) ensure(ctx context.Context) error {
 }
 
 // needsRenewal reports whether the certificate is inside the renewal
-// window (or already expired / unparsed).
+// window (or already expired / unparsed). The window is a third of the
+// certificate's lifetime, capped at renewBefore — 30 days for a standard
+// 90-day certificate, proportionally less for short-lived profiles.
 func needsRenewal(leaf *x509.Certificate, now time.Time) bool {
 	if leaf == nil {
 		return true
 	}
-	return now.After(leaf.NotAfter.Add(-renewBefore))
+	window := renewBefore
+	if lifetime := leaf.NotAfter.Sub(leaf.NotBefore); lifetime > 0 && lifetime/3 < window {
+		window = lifetime / 3
+	}
+	return now.After(leaf.NotAfter.Add(-window))
 }
 
 // issue runs one full ACME order and swaps the result in on success.

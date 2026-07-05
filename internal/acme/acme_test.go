@@ -28,17 +28,23 @@ import (
 func TestNeedsRenewal(t *testing.T) {
 	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
 	cases := []struct {
-		name     string
-		notAfter time.Time
-		want     bool
+		name      string
+		notBefore time.Time
+		notAfter  time.Time
+		want      bool
 	}{
-		{"plenty of validity", now.Add(60 * 24 * time.Hour), false},
-		{"just outside window", now.Add(31 * 24 * time.Hour), false},
-		{"inside window", now.Add(29 * 24 * time.Hour), true},
-		{"expired", now.Add(-time.Hour), true},
+		{"plenty of validity", now.Add(-30 * 24 * time.Hour), now.Add(60 * 24 * time.Hour), false},
+		{"just outside window", now.Add(-59 * 24 * time.Hour), now.Add(31 * 24 * time.Hour), false},
+		{"inside window", now.Add(-61 * 24 * time.Hour), now.Add(29 * 24 * time.Hour), true},
+		{"expired", now.Add(-90 * 24 * time.Hour), now.Add(-time.Hour), true},
+		// Short-lived certs scale the window to a third of their lifetime:
+		// a fresh 6-day cert must NOT need renewal...
+		{"short-lived fresh", now.Add(-time.Hour), now.Add(6 * 24 * time.Hour), false},
+		// ...but with under 2 of its 6 days left, it must.
+		{"short-lived aging", now.Add(-108 * time.Hour), now.Add(36 * time.Hour), true},
 	}
 	for _, tc := range cases {
-		leaf := &x509.Certificate{NotAfter: tc.notAfter}
+		leaf := &x509.Certificate{NotBefore: tc.notBefore, NotAfter: tc.notAfter}
 		if got := needsRenewal(leaf, now); got != tc.want {
 			t.Errorf("%s: needsRenewal = %v, want %v", tc.name, got, tc.want)
 		}
