@@ -64,6 +64,8 @@ no appeals (well, except pardons).
   does, your automations can do
 - Webhook / [ntfy](https://ntfy.sh) notifications: a new device on your
   network, an upstream failing or recovering, a new release
+- Opt-in update check — a "vX.Y.Z available" link in the sidebar; off by
+  default, and nothing is sent beyond the request itself
 - Batched SQLite persistence that respects SD cards
 - No telemetry. Ever.
 
@@ -124,13 +126,23 @@ machine and every device follows.
 `deploy/` also has a multi-arch Dockerfile and compose example
 (`restart: unless-stopped` gives the same boot behavior).
 
+## Documentation
+
+- [Getting started](docs/getting-started.md) — install, host prep,
+  systemd, encrypted DNS, monitoring, and the full config reference
+- [REST API reference](docs/api.md) — every endpoint, with examples
+- [Home Assistant recipes](docs/home-assistant.md) — blocking switch,
+  sensors, bedtime automations, events on your phone
+- [Roadmap](docs/roadmap.md) — what shipped, what's under consideration
+
 ## Roadmap
 
-The headline roadmap — response cache, local DNS records, conditional
-forwarding, family controls, the Pi-hole/AdGuard importer, Prometheus
-metrics, and client-facing DoT/DoH — has shipped. What's under
-consideration next (release binaries, smarter upstream failover, ACME,
-serve-stale) lives in [docs/roadmap.md](docs/roadmap.md).
+Everything from the July 2026 competitive review has shipped — the
+resolver core (cache, dedup, serve-stale, failover health, private
+reverse zones), family controls, the Pi-hole/AdGuard importer,
+client-facing DoT/DoH, metrics, notifications, and the release
+pipeline. What's under consideration next (ACME automation, UI import,
+DNSSEC validation) lives in [docs/roadmap.md](docs/roadmap.md).
 
 ## Developing
 
