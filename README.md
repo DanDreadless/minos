@@ -57,7 +57,11 @@ no appeals (well, except pardons).
   blocking mode, retention, API token — all applied live, no restarts
 - One-command migration: `minos import pihole /etc/pihole` or
   `minos import adguard AdGuardHome.yaml`
-- Prometheus `/metrics` for Grafana dashboards — scrape-only, never pushes
+- Prometheus `/metrics` with a ready-made [Grafana dashboard](deploy/grafana-dashboard.json)
+  — scrape-only, never pushes
+- A fully [documented REST API](docs/api.md) with
+  [Home Assistant recipes](docs/home-assistant.md) — everything the UI
+  does, your automations can do
 - Webhook / [ntfy](https://ntfy.sh) notifications: a new device on your
   network, an upstream failing or recovering, a new release
 - Batched SQLite persistence that respects SD cards

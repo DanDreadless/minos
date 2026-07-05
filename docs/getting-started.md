@@ -289,6 +289,16 @@ scrape_configs:
 Mean upstream latency in PromQL:
 `rate(minos_upstream_duration_seconds_total[5m]) / rate(minos_upstream_requests_total[5m])`
 
+A ready-made Grafana dashboard ships in `deploy/grafana-dashboard.json` —
+import it (Dashboards → New → Import), pick your Prometheus datasource,
+and you get block rate, cache behaviour, per-upstream latency and health,
+and per-list rule counts out of the box.
+
+Scripting Minos instead of watching it? The full REST surface is in
+[api.md](api.md), and [home-assistant.md](home-assistant.md) has
+copy-paste recipes: a blocking switch, sensors, bedtime device blocks,
+and Minos events on your phone.
+
 ## Configuration
 
 Everything lives in one YAML file and every setting can be changed through
