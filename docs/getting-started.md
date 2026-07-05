@@ -381,7 +381,9 @@ api:
   listen: 0.0.0.0:8080
   token: ""                 # set one if the LAN isn't fully trusted
 update_check: false         # opt-in: ask GitHub for the latest release once
-                            # a day; nothing is sent beyond the request itself
+                            # a day; nothing is sent beyond the request
+                            # itself. Release builds only — a -dev build
+                            # never checks.
 notifications:              # optional; nothing is sent unless a URL is set
   webhook_url: ""           # each event POSTed as JSON
   ntfy_url: ""              # e.g. https://ntfy.sh/my-topic (or self-hosted)

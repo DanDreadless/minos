@@ -89,6 +89,27 @@ func TestCheckSameVersionNotAvailable(t *testing.T) {
 	}
 }
 
+// TestDevBuildsNeverCheck: a -dev build makes no requests and reports no
+// updates, even with update_check enabled — prompts are for releases.
+func TestDevBuildsNeverCheck(t *testing.T) {
+	var hits atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte(`{"tag_name": "v9.9.9"}`))
+	}))
+	defer ts.Close()
+
+	c := NewChecker("0.1.0-dev", testStore(t, true))
+	c.url = ts.URL
+	c.check(context.Background())
+	if hits.Load() != 0 {
+		t.Errorf("dev build made %d requests, want 0", hits.Load())
+	}
+	if v, avail := c.Latest(); v != "" || avail {
+		t.Errorf("dev build Latest() = (%q, %v), want empty", v, avail)
+	}
+}
+
 func TestCheckSurvivesGarbage(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`not json at all`))

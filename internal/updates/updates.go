@@ -60,7 +60,12 @@ func NewChecker(version string, store *config.Store) *Checker {
 
 // Latest returns the newest known release version and whether it is newer
 // than the running one. Empty until an enabled check has succeeded.
+// Dev builds (any non-release version like "0.1.0-dev") never report:
+// update prompts are for people running releases, not people running code.
 func (c *Checker) Latest() (version string, available bool) {
+	if !isRelease(c.version) {
+		return "", false
+	}
 	v := c.latest.Load()
 	if v == nil {
 		return "", false
@@ -69,8 +74,13 @@ func (c *Checker) Latest() (version string, available bool) {
 }
 
 // Run polls until ctx ends. The enabled flag is re-read every tick, so no
-// request is ever made while update_check is off.
+// request is ever made while update_check is off — and never at all from
+// a dev build.
 func (c *Checker) Run(ctx context.Context) {
+	if !isRelease(c.version) {
+		slog.Debug("update check disabled: not a release build", "version", c.version)
+		return
+	}
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
 	for {
@@ -93,6 +103,9 @@ func (c *Checker) Run(ctx context.Context) {
 // check fetches the latest release tag; failures are logged quietly and
 // retried on the next daily cycle.
 func (c *Checker) check(ctx context.Context) {
+	if !isRelease(c.version) {
+		return // defense in depth; Run already refuses to get here
+	}
 	c.lastCheck.Store(time.Now().UnixNano())
 	reqCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
@@ -150,6 +163,17 @@ func IsNewer(latest, current string) bool {
 		}
 	}
 	return false
+}
+
+// isRelease reports whether v is a clean release version ("0.4.0" or
+// "v0.4.0") — no -dev or other suffix.
+func isRelease(v string) bool {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
+	if strings.ContainsAny(v, "-+") {
+		return false
+	}
+	_, ok := parseVersion(v)
+	return ok
 }
 
 func parseVersion(v string) ([3]int, bool) {
