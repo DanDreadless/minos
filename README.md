@@ -58,6 +58,8 @@ no appeals (well, except pardons).
 - One-command migration: `minos import pihole /etc/pihole` or
   `minos import adguard AdGuardHome.yaml`
 - Prometheus `/metrics` for Grafana dashboards — scrape-only, never pushes
+- Webhook / [ntfy](https://ntfy.sh) notifications: a new device on your
+  network, an upstream failing or recovering, a new release
 - Batched SQLite persistence that respects SD cards
 - No telemetry. Ever.
 

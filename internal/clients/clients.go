@@ -53,6 +53,9 @@ type device struct {
 	blocked   atomic.Uint64
 	mac       atomic.Pointer[string] // from ARP enrichment
 	hostname  atomic.Pointer[string] // from reverse DNS
+	// fresh marks a device first discovered by live traffic (not seeded
+	// from history); consumed once by the new-device notification.
+	fresh atomic.Bool
 }
 
 // Device is the merged API view of a client: live traffic state plus any
@@ -77,6 +80,36 @@ type Registry struct {
 	policies atomic.Pointer[map[string]*Policy]
 	cfg      atomic.Pointer[config.Config] // snapshot for scheduled rebuilds
 	enrichCh chan string                   // newly seen IPs awaiting enrichment
+	// onNewDevice, when set (before Run), is called from the enrichment
+	// worker for devices first seen via live traffic — after enrichment,
+	// so MAC/hostname are included when available.
+	onNewDevice func(ip, mac, hostname string)
+}
+
+// OnNewDevice registers the new-device callback. Call before Run.
+func (r *Registry) OnNewDevice(fn func(ip, mac, hostname string)) { r.onNewDevice = fn }
+
+// emitNew fires the callback exactly once per live-discovered device.
+func (r *Registry) emitNew(ip string) {
+	if r.onNewDevice == nil {
+		return
+	}
+	v, ok := r.seen.Load(ip)
+	if !ok {
+		return
+	}
+	d := v.(*device)
+	if !d.fresh.CompareAndSwap(true, false) {
+		return
+	}
+	var mac, hostname string
+	if m := d.mac.Load(); m != nil {
+		mac = *m
+	}
+	if h := d.hostname.Load(); h != nil {
+		hostname = *h
+	}
+	r.onNewDevice(ip, mac, hostname)
 }
 
 func NewRegistry() *Registry {
@@ -94,6 +127,7 @@ func (r *Registry) Touch(ip string, blocked bool, at time.Time) {
 	} else {
 		fresh := &device{}
 		fresh.firstSeen.Store(at.UnixNano())
+		fresh.fresh.Store(true) // live discovery, eligible for notification
 		if v, loaded := r.seen.LoadOrStore(ip, fresh); loaded {
 			d = v.(*device)
 		} else {

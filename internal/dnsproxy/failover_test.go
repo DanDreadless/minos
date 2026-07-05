@@ -1,6 +1,7 @@
 package dnsproxy
 
 import (
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -133,6 +134,36 @@ func TestFailoverRecovers(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatal("primary never resumed answering after recovery")
 		}
+	}
+}
+
+// TestBreakerEventsFireOnTransitions: the sick event fires once at the
+// trip (not per failure), recovered fires once on the first success.
+func TestBreakerEventsFireOnTransitions(t *testing.T) {
+	oldCooldown := failoverCooldown
+	failoverCooldown = time.Hour
+	defer func() { failoverCooldown = oldCooldown }()
+
+	srv := &Server{}
+	var events []string
+	srv.OnUpstreamEvent(func(name string, sick bool) {
+		if sick {
+			events = append(events, name+":sick")
+		} else {
+			events = append(events, name+":ok")
+		}
+	})
+
+	fail := fmt.Errorf("boom")
+	for i := 0; i < failThreshold+2; i++ { // extra failures re-arm silently
+		srv.trackUpstream("up1", time.Millisecond, fail)
+	}
+	srv.trackUpstream("up1", time.Millisecond, nil) // recovery
+	srv.trackUpstream("up1", time.Millisecond, nil) // steady state: silent
+
+	want := []string{"up1:sick", "up1:ok"}
+	if len(events) != len(want) || events[0] != want[0] || events[1] != want[1] {
+		t.Errorf("events = %v, want %v", events, want)
 	}
 }
 

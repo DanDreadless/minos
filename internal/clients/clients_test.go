@@ -153,6 +153,27 @@ func TestScheduleValidation(t *testing.T) {
 	}
 }
 
+func TestNewDeviceCallback(t *testing.T) {
+	r := NewRegistry()
+	var got []string
+	r.OnNewDevice(func(ip, mac, hostname string) { got = append(got, ip) })
+
+	// Seeded (hydrated) devices never notify.
+	r.Seed("10.0.0.1", 5, 1, time.Now().Add(-time.Hour), time.Now())
+	r.emitNew("10.0.0.1")
+
+	// Live-discovered devices notify exactly once.
+	r.Touch("10.0.0.2", false, time.Now())
+	r.emitNew("10.0.0.2")
+	r.emitNew("10.0.0.2") // duplicate emit (e.g. re-enrichment) is a no-op
+	r.Touch("10.0.0.2", false, time.Now())
+	r.emitNew("10.0.0.2") // subsequent traffic is not "new"
+
+	if len(got) != 1 || got[0] != "10.0.0.2" {
+		t.Errorf("callbacks = %v, want exactly [10.0.0.2]", got)
+	}
+}
+
 func TestGroupBlockedServices(t *testing.T) {
 	cfg := testConfig()
 	cfg.Groups[0].Services = []string{"youtube"}

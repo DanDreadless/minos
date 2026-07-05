@@ -24,6 +24,7 @@ import (
 	"minos/internal/filter"
 	"minos/internal/importer"
 	"minos/internal/lists"
+	"minos/internal/notify"
 	"minos/internal/querylog"
 	"minos/internal/updates"
 	"minos/web"
@@ -98,8 +99,27 @@ func serve(args []string) error {
 	engine := filter.NewEngine()
 	mgr := lists.NewManager(engine, store)
 
+	notifier := notify.New(store)
+	started := time.Now()
+
 	reg := clients.NewRegistry()
 	reg.ApplyConfig(cfg)
+	reg.OnNewDevice(func(ip, mac, hostname string) {
+		// Grace period: on a first boot (or after history loss) every
+		// existing device looks new — don't flood the topic.
+		if time.Since(started) < 5*time.Minute {
+			return
+		}
+		detail := ip
+		if hostname != "" {
+			detail += " (" + hostname + ")"
+		}
+		if mac != "" {
+			detail += " [" + mac + "]"
+		}
+		notifier.Publish("device_new", "New device on your network",
+			detail+" made its first DNS query through Minos.")
+	})
 	// Rehydrate the device list from persisted history (best effort).
 	if summaries, err := qlog.ClientsSummary(context.Background()); err != nil {
 		slog.Warn("device history hydration failed", "err", err)
@@ -113,6 +133,15 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
+	proxy.OnUpstreamEvent(func(name string, sick bool) {
+		if sick {
+			notifier.Publish("upstream_sick", "Upstream resolver failing",
+				name+" stopped answering; queries are using the remaining upstreams.")
+			return
+		}
+		notifier.Publish("upstream_recovered", "Upstream resolver recovered",
+			name+" is answering again.")
+	})
 	store.OnChange(func(c *config.Config) {
 		if err := proxy.ApplyConfig(c); err != nil {
 			slog.Error("apply config to dns proxy failed", "err", err)
@@ -131,7 +160,12 @@ func serve(args []string) error {
 	go reg.Run(ctx)
 
 	checker := updates.NewChecker(version, store)
+	checker.OnUpdate(func(v string) {
+		notifier.Publish("update_available", "Minos update available",
+			"v"+v+" is out — https://github.com/DanDreadless/minos/releases")
+	})
 	go checker.Run(ctx)
+	go notifier.Run(ctx)
 
 	static, err := iofs.Sub(web.Dist, "dist")
 	if err != nil {

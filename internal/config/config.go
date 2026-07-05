@@ -237,14 +237,27 @@ type APIConfig struct {
 	Token  string `yaml:"token"`
 }
 
+// NotificationsConfig points events (new device, upstream sick/recovered,
+// update available) at user-chosen destinations. Nothing is sent unless a
+// URL is configured.
+type NotificationsConfig struct {
+	// WebhookURL receives each event as a JSON POST.
+	WebhookURL string `yaml:"webhook_url,omitempty" json:"webhook_url"`
+	// NtfyURL is a full topic URL (https://ntfy.sh/my-topic or self-hosted).
+	NtfyURL string `yaml:"ntfy_url,omitempty" json:"ntfy_url"`
+	// NtfyToken is sent as a bearer token for protected topics.
+	NtfyToken string `yaml:"ntfy_token,omitempty" json:"-"`
+}
+
 type Config struct {
-	DNS      DNSConfig      `yaml:"dns"`
-	Blocking BlockingConfig `yaml:"blocking"`
-	Groups   []Group        `yaml:"groups,omitempty"`
-	Clients  []Client       `yaml:"clients,omitempty"`
-	Lists    ListsConfig    `yaml:"lists"`
-	QueryLog QueryLogConfig `yaml:"querylog"`
-	API      APIConfig      `yaml:"api"`
+	DNS           DNSConfig           `yaml:"dns"`
+	Blocking      BlockingConfig      `yaml:"blocking"`
+	Groups        []Group             `yaml:"groups,omitempty"`
+	Clients       []Client            `yaml:"clients,omitempty"`
+	Lists         ListsConfig         `yaml:"lists"`
+	QueryLog      QueryLogConfig      `yaml:"querylog"`
+	API           APIConfig           `yaml:"api"`
+	Notifications NotificationsConfig `yaml:"notifications,omitempty"`
 	// UpdateCheck, when true, asks the GitHub releases API for the latest
 	// version once a day. Strictly opt-in (default false): nothing is
 	// sent beyond the request itself, and nothing is sent at all unless
@@ -515,6 +528,18 @@ func (c *Config) Validate() error {
 	}
 	if err := validateHostPort(c.API.Listen); err != nil {
 		return fmt.Errorf("api.listen: %w", err)
+	}
+	for name, u := range map[string]string{
+		"notifications.webhook_url": c.Notifications.WebhookURL,
+		"notifications.ntfy_url":    c.Notifications.NtfyURL,
+	} {
+		if u == "" {
+			continue
+		}
+		parsed, err := url.Parse(u)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+			return fmt.Errorf("%s: must be an http(s) URL, got %q", name, u)
+		}
 	}
 	return nil
 }

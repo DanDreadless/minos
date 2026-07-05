@@ -39,7 +39,15 @@ type Checker struct {
 
 	latest    atomic.Pointer[string] // trimmed tag, e.g. "0.3.0"
 	lastCheck atomic.Int64           // unix nanos of the last fetch attempt
+
+	// onUpdate, when set (before Run), fires once per newly seen newer
+	// version — not on every daily re-confirmation.
+	onUpdate     func(version string)
+	lastNotified string
 }
+
+// OnUpdate registers the new-release callback. Call before Run.
+func (c *Checker) OnUpdate(fn func(version string)) { c.onUpdate = fn }
 
 func NewChecker(version string, store *config.Store) *Checker {
 	return &Checker{
@@ -119,6 +127,11 @@ func (c *Checker) check(ctx context.Context) {
 	if IsNewer(tag, c.version) {
 		slog.Info("a newer minos release is available",
 			"running", c.version, "latest", tag)
+		// check runs only on the Run goroutine, so lastNotified needs no lock.
+		if c.onUpdate != nil && tag != c.lastNotified {
+			c.lastNotified = tag
+			c.onUpdate(tag)
+		}
 	}
 }
 

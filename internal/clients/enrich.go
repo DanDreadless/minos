@@ -31,6 +31,7 @@ func (r *Registry) Run(ctx context.Context) {
 			return
 		case ip := <-r.enrichCh:
 			r.enrichOne(ctx, ip)
+			r.emitNew(ip) // after enrichment so MAC/hostname ride along
 		case <-ticker.C:
 			r.refreshMACs()
 		case now := <-schedTicker.C:

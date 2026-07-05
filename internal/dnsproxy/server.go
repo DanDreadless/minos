@@ -73,7 +73,14 @@ type Server struct {
 	// inflight collapses concurrent identical forwards (and stale
 	// refreshes) into one upstream exchange, keyed like the cache.
 	inflight sync.Map // string → *inflightCall
+
+	// onUpstreamEvent, when set (before Start), fires on breaker
+	// transitions only — never per query.
+	onUpstreamEvent func(name string, sick bool)
 }
+
+// OnUpstreamEvent registers the breaker-transition callback. Call before Start.
+func (s *Server) OnUpstreamEvent(fn func(name string, sick bool)) { s.onUpstreamEvent = fn }
 
 // inflightCall is one in-progress upstream exchange; followers wait on
 // done and copy the leader's result.
@@ -185,13 +192,21 @@ func (s *Server) trackUpstream(name string, took time.Duration, err error) {
 	c.durationNs.Add(took.Nanoseconds())
 	if err != nil {
 		c.failures.Add(1)
-		if c.consecutiveFails.Add(1) >= failThreshold {
+		if fails := c.consecutiveFails.Add(1); fails >= failThreshold {
 			c.sickUntil.Store(time.Now().Add(failoverCooldown).UnixNano())
+			// Notify on the trip itself, not every re-arm.
+			if fails == failThreshold && s.onUpstreamEvent != nil {
+				s.onUpstreamEvent(name, true)
+			}
 		}
 		return
 	}
+	wasSick := c.sickUntil.Load() != 0
 	c.consecutiveFails.Store(0)
 	c.sickUntil.Store(0)
+	if wasSick && s.onUpstreamEvent != nil {
+		s.onUpstreamEvent(name, false)
+	}
 }
 
 // available reports whether an upstream should be tried in the first pass.

@@ -45,6 +45,9 @@ At or beyond parity with the field:
 - **Opt-in update check** — off by default; when enabled, one daily GET to
   the GitHub releases API surfaces "vX.Y.Z available" in the UI and CLI
   *(shipped)*
+- **Notifications** — webhook + ntfy delivery for new-device, upstream
+  sick/recovered, and update events; nothing sent unless configured
+  *(shipped)*
 - Every setting applies live — no restart, ever, except the two listen
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry

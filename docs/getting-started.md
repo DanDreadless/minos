@@ -372,6 +372,22 @@ api:
   token: ""                 # set one if the LAN isn't fully trusted
 update_check: false         # opt-in: ask GitHub for the latest release once
                             # a day; nothing is sent beyond the request itself
+notifications:              # optional; nothing is sent unless a URL is set
+  webhook_url: ""           # each event POSTed as JSON
+  ntfy_url: ""              # e.g. https://ntfy.sh/my-topic (or self-hosted)
+  ntfy_token: ""            # bearer token for protected topics
+```
+
+Notifications cover three low-volume events: a **new device** makes its
+first DNS query (suppressed for the first five minutes after startup so a
+fresh install doesn't flood you), an **upstream resolver** trips the
+failure breaker or recovers, and — with the update check enabled — a
+**new release**. Webhook payloads look like:
+
+```json
+{"type":"device_new","title":"New device on your network",
+ "message":"192.168.1.77 (androids-phone.lan) [aa:bb:cc:dd:ee:ff] made its first DNS query through Minos.",
+ "time":"2026-07-05T10:12:03Z"}
 ```
 
 ## CLI

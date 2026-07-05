@@ -197,6 +197,16 @@ export const copy = {
     tokenConfirmClear: 'Remove the API token? Anyone on the LAN will be able to manage Minos.',
     listenNote: (dns: string, api: string) =>
       `DNS listens on ${dns}, this interface on ${api}. Listen addresses are set in the config file and need a restart.`,
+    notificationsTitle: 'Notifications',
+    notificationsHint: 'get told when something on your network changes',
+    notificationsNote:
+      'Three events, all low-volume: a device makes its first DNS query, an upstream resolver fails or recovers, and (with the update check on) a new release. Nothing is sent unless a destination is set.',
+    webhookURL: 'Webhook URL',
+    webhookHint: 'each event is POSTed as JSON',
+    ntfyURL: 'ntfy topic URL',
+    ntfyHint: 'e.g. https://ntfy.sh/my-minos-topic, or your self-hosted ntfy',
+    ntfyToken: 'ntfy access token',
+    ntfyTokenHint: 'only for protected topics; leave blank otherwise',
     updatesTitle: 'Updates',
     updateCheck: 'Check for new releases once a day',
     updateCheckHint:

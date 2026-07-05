@@ -27,6 +27,10 @@
   let cacheMaxTTL = 3600;
   let cacheServeStale = true;
   let updateCheck = false;
+  let webhookURL = '';
+  let ntfyURL = '';
+  let ntfyToken = '';
+  let ntfyTokenSet = false;
 
   interface RouteRow {
     domains: string;
@@ -50,6 +54,10 @@
     cacheMaxTTL = c.dns.cache.max_ttl;
     cacheServeStale = c.dns.cache.serve_stale;
     updateCheck = c.update_check;
+    webhookURL = c.notifications.webhook_url;
+    ntfyURL = c.notifications.ntfy_url;
+    ntfyTokenSet = c.notifications.ntfy_token_set;
+    ntfyToken = '';
     routeRows = c.dns.routes.map((r) => ({
       domains: r.domains.join(', '),
       address: r.upstream.address,
@@ -342,6 +350,45 @@
   </section>
 
   <section class="card">
+    <h2>{copy.settings.notificationsTitle} <small>{copy.settings.notificationsHint}</small></h2>
+    <label class="field wide">
+      <span>{copy.settings.webhookURL} <small>{copy.settings.webhookHint}</small></span>
+      <input placeholder="https://…" bind:value={webhookURL} />
+    </label>
+    <label class="field wide">
+      <span>{copy.settings.ntfyURL} <small>{copy.settings.ntfyHint}</small></span>
+      <input placeholder="https://ntfy.sh/my-topic" bind:value={ntfyURL} />
+    </label>
+    <label class="field wide">
+      <span>{copy.settings.ntfyToken} <small>{copy.settings.ntfyTokenHint}</small></span>
+      <input
+        type="password"
+        placeholder={ntfyTokenSet ? '(token set — type to replace)' : ''}
+        bind:value={ntfyToken}
+        autocomplete="new-password"
+      />
+    </label>
+    <p class="note">{copy.settings.notificationsNote}</p>
+    <div class="section-actions">
+      <button
+        class="primary"
+        on:click={() =>
+          void save({
+            notifications: {
+              webhook_url: webhookURL.trim(),
+              ntfy_url: ntfyURL.trim(),
+              // Only send a typed token; an untouched field never clobbers
+              // the stored one. Clearing ntfy_url makes any token inert.
+              ...(ntfyToken.trim() ? { ntfy_token: ntfyToken.trim() } : {}),
+            },
+          })}
+      >
+        {copy.settings.save}
+      </button>
+    </div>
+  </section>
+
+  <section class="card">
     <h2>{copy.settings.updatesTitle}</h2>
     <label class="radio">
       <input
@@ -416,6 +463,17 @@
 
   .field input {
     width: 8rem;
+  }
+
+  .field.wide {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .field.wide input {
+    width: 100%;
+    max-width: 26rem;
   }
 
   .note {
