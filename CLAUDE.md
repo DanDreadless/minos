@@ -84,6 +84,9 @@ internal/filter/       blocklist engine: parsing, compilation, matching
 internal/lists/        blocklist fetching, refresh scheduling, format parsers
 internal/services/     curated blocked-services catalog (static data, leaf pkg)
 internal/importer/     Pi-hole / AdGuard Home migration (append-only merges)
+internal/acme/         DNS-01 certificate issuance/renewal for DoT/DoH
+internal/notify/       webhook/ntfy event delivery (off the query path)
+internal/updates/      opt-in GitHub release check (release builds only)
 internal/querylog/     ring buffer + batched SQLite flush
 internal/api/          REST + WebSocket handlers (chi router)
 internal/config/       config load/validate/persist (YAML)

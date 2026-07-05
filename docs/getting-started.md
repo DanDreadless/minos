@@ -389,7 +389,7 @@ dns:
   # take precedence; set true only if your upstreams know these zones.
   forward_private_reverse: false
   tls:                      # serve DoT/DoH to clients (file-only: restart to change)
-    cert_file: /var/lib/minos/fullchain.pem
+    cert_file: /var/lib/minos/fullchain.pem   # or an acme: block — see above
     key_file: /var/lib/minos/privkey.pem
     dot_listen: ":853"      # DNS-over-TLS (Android Private DNS); empty = off
     doh_listen: ":8443"     # DNS-over-HTTPS at /dns-query; empty = off

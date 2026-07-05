@@ -56,8 +56,9 @@ no appeals (well, except pardons).
   cache hit rate, and a live query log streamed over WebSocket
 - Full management from the UI: blocklists, allow/deny domains, upstreams,
   blocking mode, retention, API token — all applied live, no restarts
-- One-command migration: `minos import pihole /etc/pihole` or
-  `minos import adguard AdGuardHome.yaml`
+- Migrate in one command (`minos import pihole /etc/pihole`) or by
+  uploading `gravity.db`/`AdGuardHome.yaml` in the UI; export and restore
+  the whole config as YAML
 - Prometheus `/metrics` with a ready-made [Grafana dashboard](deploy/grafana-dashboard.json)
   — scrape-only, never pushes
 - A fully [documented REST API](docs/api.md) with
@@ -140,10 +141,11 @@ machine and every device follows.
 
 Everything from the July 2026 competitive review has shipped — the
 resolver core (cache, dedup, serve-stale, failover health, private
-reverse zones), family controls, the Pi-hole/AdGuard importer,
-client-facing DoT/DoH, metrics, notifications, and the release
-pipeline. What's under consideration next (ACME automation, UI import,
-DNSSEC validation) lives in [docs/roadmap.md](docs/roadmap.md).
+reverse zones), family controls, the Pi-hole/AdGuard importer with a UI
+uploader, client-facing DoT/DoH with automatic ACME certificates,
+metrics, notifications, an opt-in update check, and the release pipeline.
+The only item still under consideration is DNSSEC validation; details are
+in [docs/roadmap.md](docs/roadmap.md).
 
 ## Developing
 

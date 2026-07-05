@@ -25,7 +25,7 @@ Counters and state, cheap enough to poll:
 
 ```json
 {
-  "version": "0.3.0",
+  "version": "0.6.0",
   "uptime_seconds": 86400,
   "paused": false,
   "queries_total": 48210,
@@ -145,6 +145,25 @@ always beats deny.
   [getting-started.md](getting-started.md) for the full field reference.
 - `GET /api/config/export` — the live config as downloadable YAML
   (includes secrets; it is a backup)
+- `POST /api/config/import` — restore a config from an uploaded YAML body
+  (the export above). The whole config is replaced, except the file-only
+  listen addresses, `dns.tls`, and query-log storage, which are kept from
+  the running instance. Returns the resulting config view.
+
+## Import from Pi-hole / AdGuard Home
+
+Append-only uploads (multipart form, 64 MB cap) — existing settings are
+never removed, duplicates are dropped, and the response reports what was
+added plus a `skipped` list of anything that couldn't map:
+
+- `POST /api/import/pihole` — form fields `gravity` (a `gravity.db`,
+  required) and `custom_list` (a `custom.list`, optional)
+- `POST /api/import/adguard` — form field `config` (an `AdGuardHome.yaml`)
+
+```json
+{"lists": 3, "allow": 2, "deny": 41, "local_records": 5, "services": 0,
+ "skipped": ["regex rule \"^ads\\.\": Minos does not support regex rules"]}
+```
 
 ## Monitoring
 
