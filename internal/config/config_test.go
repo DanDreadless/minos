@@ -112,7 +112,7 @@ func TestDefaultUpstreamsAreBootstrapFree(t *testing.T) {
 		t.Fatal("default config has no upstreams")
 	}
 	for _, u := range ups {
-		host := u.Address
+		var host string
 		if u.Protocol == "doh" {
 			parsed, err := url.Parse(u.Address)
 			if err != nil {
