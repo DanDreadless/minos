@@ -89,17 +89,20 @@ Svelte 5 / Vite 6, clearing all open Dependabot alerts.
   ingestion is moot when the router (not Minos) is the DHCP server — the lease
   file isn't on the Pi. Real names have to come from the devices themselves.
   **Hard constraint: all of this stays on the enrichment worker and must never
-  add latency to a DNS request** — the query hot path is untouched. Next slice:
+  add latency to a DNS request** — the query hot path is untouched.
   - **MAC → vendor labels (OUI)** — a small embedded OUI-prefix table turns
     the ARP-derived MAC into a vendor (Apple, Google, Amazon, Raspberry Pi,
     Espressif…). Add a **Vendor column** to the Devices table so every device
     is identifiable even when no hostname resolves; works for 100% of devices
     with a known MAC, needs no network cooperation. The universal baseline.
-  - **mDNS reverse lookup** — query `224.0.0.251:5353` for each device's
-    `.local` name; picks up Apple / Google / Chromecast / printer / IoT
-    devices that answer multicast DNS. Partial coverage, LAN-local, no router
-    needed.
+    *(shipped)*
+  - **mDNS reverse lookup** — reverse PTR to `224.0.0.251:5353` (unicast-
+    response bit) resolves `.local` names for Apple / Fire TV / LG / printer /
+    IoT devices, and is the one source that works when the router won't do
+    PTR. Sent on every interface, so multi-homed hosts still reach the LAN.
+    *(shipped)*
   - **NetBIOS / NBSTAT** — a later layer for Windows / Samba machine names.
+    *(planned)*
 
   All best-effort and layered (first hit wins for the hostname; the vendor
   label is always computed from the MAC); a device with none simply shows its
