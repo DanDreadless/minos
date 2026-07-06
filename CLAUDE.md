@@ -257,6 +257,16 @@ This is security software; hold it to that standard.
   now), hostname from a reverse-DNS lookup. Both run on the enrichment
   worker, never on the query path. Windows reads `arp -a`; Linux reads
   /proc/net/arp.
+- **PTR enrichment targets the gateway first** (fixed decision): a bare
+  `net.DefaultResolver.LookupAddr` in production goes to the system
+  resolver — usually Minos itself — which answers private reverse zones
+  with NXDOMAIN (RFC 6303 backstop), so LAN hostnames never resolve. The
+  enrichment worker instead tries the default gateway (Linux
+  /proc/net/route → `resolverAt(gw:53)`), which knows the DHCP names,
+  then falls back to the system resolver. Off the hot path; Windows
+  (dev-only) skips gateway detection and uses the system resolver, which
+  there is not Minos. Other identity sources (DHCP-lease ingestion, OUI
+  vendor labels) are roadmapped but not yet built.
 - **Response cache semantics** (fixed decisions): the cache sits *after*
   the filter — verdicts always reflect live rules and blocked answers are
   never cached. Any config change swaps in a fresh cache (that IS the

@@ -8,6 +8,7 @@
 package clients
 
 import (
+	"net"
 	"net/netip"
 	"sort"
 	"sync"
@@ -81,6 +82,9 @@ type Registry struct {
 	policies atomic.Pointer[map[string]*Policy]
 	cfg      atomic.Pointer[config.Config] // snapshot for scheduled rebuilds
 	enrichCh chan string                   // newly seen IPs awaiting enrichment
+	// revResolvers is the ordered list of resolvers used for PTR enrichment
+	// (gateway first, then system); built once when Run starts.
+	revResolvers []*net.Resolver
 	// onNewDevice, when set (before Run), is called from the enrichment
 	// worker for devices first seen via live traffic — after enrichment,
 	// so MAC/hostname are included when available.

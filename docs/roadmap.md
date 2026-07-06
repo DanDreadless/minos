@@ -75,9 +75,11 @@ outside the repo (`../.claude/minos-improvements-plan.md`); highlights:
   OpenDNS — all IP-literal DoH/DoT), custom entries still allowed. *(planned)*
 - **Better device identity** — hostnames don't resolve in production because
   PTR lookups loop back into Minos's own private-reverse backstop (NXDOMAIN).
-  Fix with layered, off-hot-path enrichment: DHCP lease-file ingestion
-  (read-only — still no DHCP server), router-directed PTR, mDNS/NetBIOS
-  fallbacks, and a MAC-OUI vendor label so every device is identifiable.
+  **Router-directed PTR** now sends reverse lookups to the LAN gateway (which
+  knows DHCP names) before the system resolver, off the hot path *(shipped)*.
+  Further layers remain, all off-hot-path: DHCP lease-file ingestion
+  (read-only — still no DHCP server), mDNS/NetBIOS fallbacks, and a MAC-OUI
+  vendor label so every device is identifiable even without a name.
   *(planned)*
 - **Tribunal drill-downs** — click the Condemned tile to jump to the blocked
   Docket; click a busiest client to see its allowed/condemned domains.
