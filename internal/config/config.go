@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/url"
 	"os"
@@ -670,11 +671,17 @@ func validateHostPort(addr string) error {
 	return nil
 }
 
-// save writes the config atomically: temp file in the same directory, then rename.
+// save writes the config atomically: temp file in the same directory, then
+// rename. Before overwriting an existing file it keeps a one-step-back copy at
+// <path>.bak, so a bad settings change — or a config first rewritten after a
+// version upgrade — always has a recovery point.
 func save(path string, c *Config) error {
 	data, err := yaml.Marshal(c)
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
+	}
+	if err := backupExisting(path); err != nil {
+		return err
 	}
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".minos-config-*.yaml")
@@ -696,16 +703,64 @@ func save(path string, c *Config) error {
 	return nil
 }
 
+// backupExisting copies path to <path>.bak when path already exists; a missing
+// file (first run) is not an error.
+func backupExisting(path string) error {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read config for backup: %w", err)
+	}
+	if err := os.WriteFile(path+".bak", data, 0o600); err != nil {
+		return fmt.Errorf("write config backup: %w", err)
+	}
+	return nil
+}
+
 func load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	c, err := Parse(data)
+	c, err := parseTolerant(data)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return c, nil
+}
+
+// parseTolerant decodes the on-disk config, ignoring (but logging) unknown
+// fields, so a config written by a newer Minos still loads after a downgrade
+// and settings survive the round trip even when the older binary can't model
+// every key. Strict parsing (Parse) is reserved for user-uploaded restores,
+// where an unrecognised key is more likely a typo worth rejecting outright.
+func parseTolerant(data []byte) (*Config, error) {
+	if detail := unknownFields(data); detail != "" {
+		slog.Warn("config has unrecognised fields; ignoring them "+
+			"(written by a newer Minos?)", "detail", detail)
+	}
+	c := Default()
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	if err := dec.Decode(c); err != nil && !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("parse config: %w", err)
+	}
+	if err := c.Validate(); err != nil {
+		return nil, fmt.Errorf("validate config: %w", err)
+	}
+	return c, nil
+}
+
+// unknownFields reports the decoder's complaint about the first unrecognised
+// field, or "" when the file contains only known keys.
+func unknownFields(data []byte) string {
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	dec.KnownFields(true)
+	if err := dec.Decode(Default()); err != nil && strings.Contains(err.Error(), "not found in type") {
+		return err.Error()
+	}
+	return ""
 }
 
 // Parse decodes and validates a YAML config from raw bytes, starting from

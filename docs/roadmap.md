@@ -96,15 +96,18 @@ outside the repo (`../.claude/minos-improvements-plan.md`); highlights:
   actionable without ever losing settings, and keep the installer's "no
   self-updates, deliberately boring" promise: Minos never replaces its own
   binary. Config and history already live outside the binary (StateDirectory
-  / Docker volume), so an upgrade preserves them; the work is making rollback
-  safe (today an older binary refuses a newer config's unknown fields), taking
-  a pre-change config backup, and adding a config version/migration seam. The
-  notice then shows the **right upgrade command for how this instance was
-  installed** — quick-install/binary (re-run the checksum-verified installer
-  + `systemctl restart`), Docker (`compose pull && up -d`), or build-from-
-  source (`git checkout` the tag + rebuild) — detected from a build-time stamp
-  refined by runtime Docker/systemd checks, with a "What's new" link.
-  Display-only guidance; Minos runs nothing itself. *(planned)*
+  / Docker volume), so an upgrade preserves them. **Rollback-safe config
+  loading now tolerates (and logs) unknown fields on the on-disk path so an
+  older binary can still start on a newer config, while uploaded restores
+  stay strict; every overwrite also leaves a `minos.yaml.bak` recovery
+  point** *(shipped)*. Still planned: install-method-aware upgrade guidance —
+  the notice showing the **right command for how this instance was installed**
+  (quick-install/binary → re-run the checksum-verified installer +
+  `systemctl restart`; Docker → `compose pull && up -d`; build-from-source →
+  `git checkout` the tag + rebuild), detected from a build-time stamp refined
+  by runtime Docker/systemd checks, with a "What's new" link. Display-only;
+  Minos runs nothing itself. A config schema-version + migration seam is
+  deferred until a real migration needs it. *(planned)*
 
 What gets promoted after that comes from the list below as real-world usage
 decides:

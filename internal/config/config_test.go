@@ -160,14 +160,57 @@ func TestValidateCatchesBadValues(t *testing.T) {
 	}
 }
 
-func TestUnknownFieldRejected(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "minos.yaml")
+// On disk, an unknown field is tolerated (so a config written by a newer
+// Minos still loads after a downgrade); an uploaded restore stays strict.
+func TestUnknownFieldToleratedOnDiskStrictOnRestore(t *testing.T) {
 	yaml := "dns:\n  listen: \":53\"\n  fate: condemned\n"
+
+	// On-disk load: tolerated, config still opens.
+	path := filepath.Join(t.TempDir(), "minos.yaml")
 	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Open(path)
-	if err == nil || !strings.Contains(err.Error(), "fate") {
-		t.Errorf("unknown field should be rejected with its name, got: %v", err)
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open should tolerate an unknown on-disk field, got: %v", err)
+	}
+	if s.Get().DNS.Listen != ":53" {
+		t.Errorf("known fields should still load: listen = %q", s.Get().DNS.Listen)
+	}
+
+	// Uploaded restore: rejected with the field name.
+	if _, err := Parse([]byte(yaml)); err == nil || !strings.Contains(err.Error(), "fate") {
+		t.Errorf("Parse (restore) should reject the unknown field, got: %v", err)
+	}
+}
+
+// Overwriting an existing config leaves a .bak recovery point with the prior
+// contents; the first-ever write (no file yet) creates no spurious backup.
+func TestSaveBacksUpPriorConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "minos.yaml")
+	bak := path + ".bak"
+
+	s, err := Open(path) // creates the default; nothing to back up yet
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(bak); !os.IsNotExist(err) {
+		t.Fatalf("no backup expected on first write, stat err = %v", err)
+	}
+
+	if err := s.Update(func(c *Config) error { c.DNS.BlockTTL = 120; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(bak)
+	if err != nil {
+		t.Fatalf("expected a backup after overwrite: %v", err)
+	}
+	// The backup holds the pre-change config (default BlockTTL 60), not the new one.
+	prior, err := Parse(data)
+	if err != nil {
+		t.Fatalf("backup should be a valid config: %v", err)
+	}
+	if prior.DNS.BlockTTL != 60 {
+		t.Errorf("backup should hold the prior config (BlockTTL 60), got %d", prior.DNS.BlockTTL)
 	}
 }

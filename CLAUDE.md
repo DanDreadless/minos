@@ -242,6 +242,17 @@ This is security software; hold it to that standard.
   a restart — are `dns.listen`, `api.listen`, `dns.tls` (DoT/DoH
   listeners + certificate), and query-log storage (`ephemeral`/
   `db_path`). Don't expose those as editable in the UI.
+- **Config load is rollback-safe** (fixed decision): the on-disk load
+  path (`parseTolerant`) *ignores* unknown fields (logging a warning), so
+  a config written by a newer Minos still loads after a downgrade instead
+  of failing on a key the older binary can't model. Strict `KnownFields`
+  parsing is kept only for user-uploaded restores (`config.Parse`), where
+  an unrecognised key is likely a typo. `save` also copies the prior file
+  to `<path>.bak` before every overwrite — a recovery point for a bad
+  edit or a post-upgrade rewrite. A config *schema-version* field +
+  migration seam is deliberately deferred: adding a new YAML key now would
+  itself break rollback to already-frozen strict versions; add it later
+  alongside a real migration, once tolerant loading is in the field.
 - **Dashboard aggregates read SQLite** (or the ring in ephemeral mode),
   so entries buffered but not yet flushed (≤30s/500) are missing from
   charts. Accepted skew — do not "fix" it by flushing per query.
