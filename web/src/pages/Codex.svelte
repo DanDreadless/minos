@@ -177,7 +177,10 @@
       </label>
     {/each}
   </div>
-  <p class="note">{copy.lists.servicesNote}</p>
+  <p class="note">
+    {copy.lists.servicesNote}
+    <a href="#/devices">{copy.lists.servicesNoteLink}</a>
+  </p>
 </section>
 
 <section class="card add">
@@ -264,6 +267,15 @@
     color: var(--text-dim);
     font-size: 0.78rem;
     margin: 0.8rem 0 0;
+  }
+
+  .note a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .note a:hover {
+    text-decoration: underline;
   }
 
   .add form {

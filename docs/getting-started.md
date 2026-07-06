@@ -216,8 +216,10 @@ Open `http://<host>:8080`. Six pages, one per concern:
 - **The Codex** (blocklists) — add, enable/disable, or remove list
   subscriptions and refresh them on demand, with per-list rule counts and
   fetch errors. The **Blocked services** card blocks a whole service
-  (TikTok, YouTube, Discord…) with one checkbox — for every device, or
-  per group from the Devices page.
+  (TikTok, YouTube, Discord…) with one checkbox for every device. To block
+  a service only for some devices, or only at certain times, set it on a
+  **group** on the Devices page instead — a group's blocked services apply
+  to its members and obey the group's schedule.
 - **Pardons & Sentences** (allow/deny domains) — manage both lists, plus a
   "judge a domain" tool that shows exactly which rule decides any name's
   fate before you ever query it. The **Local DNS** card lives here too:

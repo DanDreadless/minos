@@ -83,7 +83,8 @@ export const copy = {
     servicesTitle: 'Blocked services',
     servicesHint: 'one click blocks a whole service for every device',
     servicesNote:
-      'Applies to everyone. To block a service only for some devices, use a group on the Devices page.',
+      'Blocking a service here applies to everyone. To block one only for certain devices, or only at certain times of day, set the service on a group instead — groups can carry a schedule and are assigned to devices on the',
+    servicesNoteLink: 'Devices page.',
     serviceDomains: (n: number) => `${n} domain${n === 1 ? '' : 's'}`,
   },
 
