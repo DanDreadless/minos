@@ -534,15 +534,40 @@
     margin-bottom: 1.25rem;
   }
 
+  /* Pi-hole on top, AdGuard underneath — each a single inline row with its
+     file fields and the import button lined up along the input baseline, the
+     button pushed to the far end so it never crowds the inputs. */
   .import-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-    gap: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .import-source {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem 1.25rem;
   }
 
   .import-source h3 {
-    margin: 0 0 0.6rem;
+    margin: 0;
     font-size: 0.95rem;
+    flex: 0 0 6.5rem;
+    align-self: flex-end;
+    padding-bottom: 0.4rem;
+  }
+
+  .import-source .field {
+    margin-top: 0;
+  }
+
+  .import-source .field.wide input {
+    max-width: 18rem;
+  }
+
+  .import-source .primary {
+    align-self: flex-end;
   }
 
   .import-report {

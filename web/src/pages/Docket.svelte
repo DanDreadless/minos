@@ -189,6 +189,22 @@
     font-style: italic;
   }
 
+  /* Fill the height main.fill hands us and scroll the rows internally, so
+     the page itself never grows as queries stream in. */
+  .table-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  /* Keep the column headers visible while the body scrolls. th already
+     carries an opaque background in app.css. */
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
   .row-action {
     padding: 0.1rem 0.6rem;
     font-size: 0.78rem;
