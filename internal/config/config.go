@@ -298,8 +298,13 @@ func Default() *Config {
 		DNS: DNSConfig{
 			Listen: ":53",
 			Upstreams: []Upstream{
-				{Address: "https://cloudflare-dns.com/dns-query", Protocol: "doh"},
-				{Address: "1.1.1.1:853", Protocol: "dot"},
+				// IP-literal DoH URL, not cloudflare-dns.com: a DNS server
+				// must not have to resolve its own resolver's hostname before
+				// it can forward anything. Cloudflare's certificate carries
+				// 1.1.1.1 as an IP SAN, so TLS validation still succeeds and
+				// no bootstrap resolver is needed.
+				{Address: "https://1.1.1.1/dns-query", Protocol: "doh"},
+				{Address: "1.0.0.1:853", Protocol: "dot"},
 			},
 			BlockTTL: 60,
 			Cache: CacheConfig{

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,6 +99,40 @@ func TestOnChangeFires(t *testing.T) {
 	}
 	if fired != 1 {
 		t.Errorf("onChange fired %d times, want 1", fired)
+	}
+}
+
+// TestDefaultUpstreamsAreBootstrapFree guards the circular-dependency fix: a
+// DNS server must not need to resolve its own upstream's hostname before it
+// can forward anything, so every default upstream must address an IP literal,
+// never a domain name.
+func TestDefaultUpstreamsAreBootstrapFree(t *testing.T) {
+	ups := Default().DNS.Upstreams
+	if len(ups) == 0 {
+		t.Fatal("default config has no upstreams")
+	}
+	for _, u := range ups {
+		host := u.Address
+		if u.Protocol == "doh" {
+			parsed, err := url.Parse(u.Address)
+			if err != nil {
+				t.Errorf("default doh upstream %q: unparseable: %v", u.Address, err)
+				continue
+			}
+			host = parsed.Hostname()
+		} else {
+			h, _, err := net.SplitHostPort(u.Address)
+			if err != nil {
+				t.Errorf("default upstream %q: not host:port: %v", u.Address, err)
+				continue
+			}
+			host = h
+		}
+		if net.ParseIP(host) == nil {
+			t.Errorf("default upstream %q resolves to hostname %q — a fresh "+
+				"install can't resolve it before DNS is up; use an IP literal",
+				u.Address, host)
+		}
 	}
 }
 

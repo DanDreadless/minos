@@ -362,8 +362,12 @@ exceptions; those are file-only). Key sections:
 dns:
   listen: ":53"
   upstreams:                # tried in order — "the ferrymen"
-    - address: https://cloudflare-dns.com/dns-query
-      protocol: doh         # udp | tcp | dot | doh
+    - address: https://1.1.1.1/dns-query   # IP-literal URL, not a hostname:
+      protocol: doh         # a resolver shouldn't have to resolve its own
+                            # resolver first. Cloudflare's cert lists 1.1.1.1
+                            # as an IP SAN, so TLS still validates.
+    - address: 1.0.0.1:853  # DoT fallback
+      protocol: dot         # udp | tcp | dot | doh
   cache:                    # answer repeat queries from memory
     enabled: true
     max_entries: 10000      # ~500 B per entry
