@@ -20,6 +20,7 @@ const (
 // Everything here is best-effort — a home network with no PTR records or an
 // off-subnet client simply yields blank fields.
 func (r *Registry) Run(ctx context.Context) {
+	r.revResolvers = reverseResolvers(defaultGateway())
 	r.refreshMACs()
 	ticker := time.NewTicker(arpRefreshInterval)
 	defer ticker.Stop()
@@ -46,11 +47,47 @@ func (r *Registry) enrichOne(ctx context.Context, ip string) {
 	if mac, ok := readARPTable()[ip]; ok {
 		r.setMAC(ip, mac)
 	}
-	lookupCtx, cancel := context.WithTimeout(ctx, ptrTimeout)
-	defer cancel()
-	names, err := net.DefaultResolver.LookupAddr(lookupCtx, ip)
-	if err == nil && len(names) > 0 {
-		r.setHostname(ip, strings.TrimSuffix(names[0], "."))
+	if name := r.lookupHostname(ctx, ip); name != "" {
+		r.setHostname(ip, name)
+	}
+}
+
+// lookupHostname reverse-resolves ip, trying each resolver in turn (gateway
+// first, then the system resolver) and taking the first non-empty answer.
+func (r *Registry) lookupHostname(ctx context.Context, ip string) string {
+	for _, res := range r.revResolvers {
+		lookupCtx, cancel := context.WithTimeout(ctx, ptrTimeout)
+		names, err := res.LookupAddr(lookupCtx, ip)
+		cancel()
+		if err == nil && len(names) > 0 {
+			return strings.TrimSuffix(names[0], ".")
+		}
+	}
+	return ""
+}
+
+// reverseResolvers returns the resolvers to try for PTR lookups, in order:
+// the LAN gateway (which knows DHCP device names) when one is known, then the
+// system resolver as a fallback. Aiming PTR at the gateway avoids looping the
+// query back into Minos's own private-reverse backstop, which is why home
+// deployments otherwise see blank hostnames.
+func reverseResolvers(gateway string) []*net.Resolver {
+	var out []*net.Resolver
+	if gateway != "" {
+		out = append(out, resolverAt(net.JoinHostPort(gateway, "53")))
+	}
+	return append(out, net.DefaultResolver)
+}
+
+// resolverAt builds a Go resolver that sends its queries to addr rather than
+// the system-configured servers.
+func resolverAt(addr string) *net.Resolver {
+	return &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			d := net.Dialer{Timeout: ptrTimeout}
+			return d.DialContext(ctx, network, addr)
+		},
 	}
 }
 

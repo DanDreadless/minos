@@ -242,6 +242,17 @@ This is security software; hold it to that standard.
   a restart — are `dns.listen`, `api.listen`, `dns.tls` (DoT/DoH
   listeners + certificate), and query-log storage (`ephemeral`/
   `db_path`). Don't expose those as editable in the UI.
+- **Config load is rollback-safe** (fixed decision): the on-disk load
+  path (`parseTolerant`) *ignores* unknown fields (logging a warning), so
+  a config written by a newer Minos still loads after a downgrade instead
+  of failing on a key the older binary can't model. Strict `KnownFields`
+  parsing is kept only for user-uploaded restores (`config.Parse`), where
+  an unrecognised key is likely a typo. `save` also copies the prior file
+  to `<path>.bak` before every overwrite — a recovery point for a bad
+  edit or a post-upgrade rewrite. A config *schema-version* field +
+  migration seam is deliberately deferred: adding a new YAML key now would
+  itself break rollback to already-frozen strict versions; add it later
+  alongside a real migration, once tolerant loading is in the field.
 - **Dashboard aggregates read SQLite** (or the ring in ephemeral mode),
   so entries buffered but not yet flushed (≤30s/500) are missing from
   charts. Accepted skew — do not "fix" it by flushing per query.
@@ -257,6 +268,16 @@ This is security software; hold it to that standard.
   now), hostname from a reverse-DNS lookup. Both run on the enrichment
   worker, never on the query path. Windows reads `arp -a`; Linux reads
   /proc/net/arp.
+- **PTR enrichment targets the gateway first** (fixed decision): a bare
+  `net.DefaultResolver.LookupAddr` in production goes to the system
+  resolver — usually Minos itself — which answers private reverse zones
+  with NXDOMAIN (RFC 6303 backstop), so LAN hostnames never resolve. The
+  enrichment worker instead tries the default gateway (Linux
+  /proc/net/route → `resolverAt(gw:53)`), which knows the DHCP names,
+  then falls back to the system resolver. Off the hot path; Windows
+  (dev-only) skips gateway detection and uses the system resolver, which
+  there is not Minos. Other identity sources (DHCP-lease ingestion, OUI
+  vendor labels) are roadmapped but not yet built.
 - **Response cache semantics** (fixed decisions): the cache sits *after*
   the filter — verdicts always reflect live rules and blocked answers are
   never cached. Any config change swaps in a fresh cache (that IS the

@@ -8,6 +8,8 @@
 package clients
 
 import (
+	"net"
+	"net/netip"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -80,6 +82,9 @@ type Registry struct {
 	policies atomic.Pointer[map[string]*Policy]
 	cfg      atomic.Pointer[config.Config] // snapshot for scheduled rebuilds
 	enrichCh chan string                   // newly seen IPs awaiting enrichment
+	// revResolvers is the ordered list of resolvers used for PTR enrichment
+	// (gateway first, then system); built once when Run starts.
+	revResolvers []*net.Resolver
 	// onNewDevice, when set (before Run), is called from the enrichment
 	// worker for devices first seen via live traffic — after enrichment,
 	// so MAC/hostname are included when available.
@@ -273,8 +278,9 @@ func (r *Registry) Seed(ip string, total, blocked uint64, first, last time.Time)
 }
 
 // Devices returns the merged view: every IP that has queried, plus every
-// configured client (even if never seen). Sorted most-recently-active first,
-// then unseen entries by IP.
+// configured client (even if never seen). Sorted by numeric IP address so
+// the list is stable — rows don't reorder as live traffic updates last-seen
+// times (192.168.1.9 sorts before 192.168.1.10, and v4 before v6).
 func (r *Registry) Devices(cfg *config.Config) []Device {
 	byIP := make(map[string]*Device)
 	r.seen.Range(func(k, v any) bool {
@@ -320,15 +326,27 @@ func (r *Registry) Devices(cfg *config.Config) []Device {
 		out = append(out, *d)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Seen != out[j].Seen {
-			return out[i].Seen
-		}
-		if out[i].Seen && !out[i].LastSeen.Equal(*out[j].LastSeen) {
-			return out[i].LastSeen.After(*out[j].LastSeen)
-		}
-		return out[i].IP < out[j].IP
+		return lessIP(out[i].IP, out[j].IP)
 	})
 	return out
+}
+
+// lessIP orders two device keys by numeric IP address. Unparseable keys sort
+// after valid ones (and among themselves by byte order), so a malformed key
+// never panics or hides real devices.
+func lessIP(a, b string) bool {
+	ipA, errA := netip.ParseAddr(a)
+	ipB, errB := netip.ParseAddr(b)
+	switch {
+	case errA != nil && errB != nil:
+		return a < b
+	case errA != nil:
+		return false
+	case errB != nil:
+		return true
+	default:
+		return ipA.Compare(ipB) < 0
+	}
 }
 
 // SeenCount reports how many distinct client IPs have queried.

@@ -52,7 +52,7 @@
   <aside>
     <Nav {status} />
   </aside>
-  <main>
+  <main class:fill={!needsToken && $route === 'querylog'}>
     {#if needsToken}
       <section class="token-gate">
         <img class="gate-logo" src="/logo.png" alt="" />
@@ -99,19 +99,28 @@
   .shell {
     display: grid;
     grid-template-columns: 230px 1fr;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
   }
 
   aside {
-    position: sticky;
-    top: 0;
     height: 100vh;
   }
 
   main {
     padding: 1.75rem 2rem 4rem;
     min-width: 0;
-    max-width: 1200px;
+    overflow-y: auto;
+  }
+
+  /* The Docket fills the viewport and scrolls its table internally instead
+     of growing the page (see Docket.svelte); every other page scrolls
+     normally within main. */
+  main.fill {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding-bottom: 1.75rem;
   }
 
   .token-gate {
@@ -170,15 +179,24 @@
   @media (max-width: 800px) {
     .shell {
       grid-template-columns: 1fr;
+      height: auto;
+      overflow: visible;
     }
 
     aside {
-      position: static;
       height: auto;
     }
 
     main {
       padding: 1.25rem 1rem 3rem;
+    }
+
+    /* On mobile the whole page scrolls (nav stacks on top); don't trap
+       scroll inside the Docket table on a short screen. */
+    main.fill {
+      display: block;
+      overflow: visible;
+      padding-bottom: 3rem;
     }
   }
 </style>

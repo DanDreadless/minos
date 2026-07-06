@@ -228,9 +228,34 @@ func TestTouchAndDevices(t *testing.T) {
 	if cam.Seen || cam.Queries != 0 || cam.Name != "camera" {
 		t.Errorf("configured-unseen = %+v", cam)
 	}
-	// Seen devices sort before unseen, newest first.
-	if devs[0].IP != "10.0.0.10" || !devs[0].Seen {
-		t.Errorf("first device = %+v, want most recently seen", devs[0])
+	// Sorted by numeric IP, seen and unseen interleaved by address.
+	gotOrder := make([]string, len(devs))
+	for i, d := range devs {
+		gotOrder[i] = d.IP
+	}
+	wantOrder := []string{"10.0.0.10", "10.0.0.20", "10.0.0.30", "10.0.0.40", "10.0.0.50", "10.0.0.99"}
+	if fmt.Sprint(gotOrder) != fmt.Sprint(wantOrder) {
+		t.Errorf("device order = %v, want %v", gotOrder, wantOrder)
+	}
+}
+
+func TestDevicesSortedByIP(t *testing.T) {
+	r := NewRegistry()
+	now := time.Now()
+	// Insert in a deliberately scrambled order, including the classic
+	// string-vs-numeric trap (.9 vs .10 vs .100) and an IPv6 address.
+	for _, ip := range []string{"192.168.1.100", "192.168.1.9", "192.168.1.10", "fe80::1", "192.168.1.2"} {
+		r.Touch(ip, false, now)
+	}
+	devs := r.Devices(config.Default())
+	got := make([]string, len(devs))
+	for i, d := range devs {
+		got[i] = d.IP
+	}
+	// Numeric v4 order first (.2 < .9 < .10 < .100), then v6.
+	want := []string{"192.168.1.2", "192.168.1.9", "192.168.1.10", "192.168.1.100", "fe80::1"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("order = %v, want %v", got, want)
 	}
 }
 

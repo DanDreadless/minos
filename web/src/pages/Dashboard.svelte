@@ -5,6 +5,7 @@
   import StatTile from '../lib/components/StatTile.svelte';
   import TimelineChart from '../lib/components/TimelineChart.svelte';
   import { copy } from '../lib/copy';
+  import { docketHref } from '../lib/router';
   import { notifyError } from '../lib/toast';
 
   export let status: Status | null;
@@ -96,6 +97,7 @@
       label={copy.stats.condemned}
       hint={copy.stats.condemnedHint}
       tone="blocked"
+      href={docketHref({ verdict: 'blocked' })}
     />
     <StatTile
       value={fmtPercent(status.queries_total, status.queries_blocked)}
@@ -137,7 +139,11 @@
       <BarList
         tone="blocked"
         empty={copy.dashboard.noData}
-        items={stats.top_blocked.map((d) => ({ label: d.qname, count: d.count }))}
+        items={stats.top_blocked.map((d) => ({
+          label: d.qname,
+          count: d.count,
+          href: docketHref({ verdict: 'blocked', qname: d.qname }),
+        }))}
       />
     </div>
     <div class="card">
@@ -149,6 +155,7 @@
           label: c.client,
           count: c.total,
           sub: `${c.blocked} blocked`,
+          href: docketHref({ client: c.client }),
         }))}
       />
     </div>

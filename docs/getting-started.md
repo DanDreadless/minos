@@ -216,8 +216,10 @@ Open `http://<host>:8080`. Six pages, one per concern:
 - **The Codex** (blocklists) — add, enable/disable, or remove list
   subscriptions and refresh them on demand, with per-list rule counts and
   fetch errors. The **Blocked services** card blocks a whole service
-  (TikTok, YouTube, Discord…) with one checkbox — for every device, or
-  per group from the Devices page.
+  (TikTok, YouTube, Discord…) with one checkbox for every device. To block
+  a service only for some devices, or only at certain times, set it on a
+  **group** on the Devices page instead — a group's blocked services apply
+  to its members and obey the group's schedule.
 - **Pardons & Sentences** (allow/deny domains) — manage both lists, plus a
   "judge a domain" tool that shows exactly which rule decides any name's
   fate before you ever query it. The **Local DNS** card lives here too:
@@ -362,8 +364,12 @@ exceptions; those are file-only). Key sections:
 dns:
   listen: ":53"
   upstreams:                # tried in order — "the ferrymen"
-    - address: https://cloudflare-dns.com/dns-query
-      protocol: doh         # udp | tcp | dot | doh
+    - address: https://1.1.1.1/dns-query   # IP-literal URL, not a hostname:
+      protocol: doh         # a resolver shouldn't have to resolve its own
+                            # resolver first. Cloudflare's cert lists 1.1.1.1
+                            # as an IP SAN, so TLS still validates.
+    - address: 1.0.0.1:853  # DoT fallback
+      protocol: dot         # udp | tcp | dot | doh
   cache:                    # answer repeat queries from memory
     enabled: true
     max_entries: 10000      # ~500 B per entry

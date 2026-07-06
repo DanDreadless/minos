@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { api, openStream, type LogEntry } from '../lib/api';
   import { copy } from '../lib/copy';
+  import { currentParams } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
   const MAX_ROWS = 500;
@@ -62,6 +63,15 @@
   }
 
   onMount(async () => {
+    // Honour a deep link from the dashboard, e.g.
+    // #/querylog?verdict=blocked&client=192.168.1.5
+    const params = currentParams();
+    if (params.verdict === 'blocked' || params.verdict === 'allowed') {
+      verdictFilter = params.verdict;
+    }
+    if (params.client) search = params.client;
+    else if (params.qname) search = params.qname;
+
     try {
       entries = await api.querylog(MAX_ROWS);
     } catch (e) {
@@ -187,6 +197,22 @@
   .empty {
     color: var(--text-dim);
     font-style: italic;
+  }
+
+  /* Fill the height main.fill hands us and scroll the rows internally, so
+     the page itself never grows as queries stream in. */
+  .table-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  /* Keep the column headers visible while the body scrolls. th already
+     carries an opaque background in app.css. */
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
   }
 
   .row-action {
