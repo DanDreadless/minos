@@ -60,10 +60,52 @@ At or beyond parity with the field:
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry
 
-## Next up
+## Next up — usability & enrichment round (planned July 2026)
 
-Everything the July 2026 review flagged has shipped. What gets promoted
-next comes from the list below as real-world usage decides:
+A second July 2026 pass from real-world use. Detailed engineering plan lives
+outside the repo (`../.claude/minos-improvements-plan.md`); highlights:
+
+- **Bootstrap-free default upstream** — ship `https://1.1.1.1/dns-query`
+  instead of `cloudflare-dns.com`, removing the circular dependency where a
+  DNS server must resolve its own resolver's hostname first. Cloudflare's
+  cert carries the IP as a SAN, so TLS validation still passes with zero
+  bootstrap code. *(planned)*
+- **Curated Ferrymen picker** — choose primary/secondary upstreams from a
+  known-good resolver list (Cloudflare, Quad9, Google, Mullvad, AdGuard,
+  OpenDNS — all IP-literal DoH/DoT), custom entries still allowed. *(planned)*
+- **Better device identity** — hostnames don't resolve in production because
+  PTR lookups loop back into Minos's own private-reverse backstop (NXDOMAIN).
+  Fix with layered, off-hot-path enrichment: DHCP lease-file ingestion
+  (read-only — still no DHCP server), router-directed PTR, mDNS/NetBIOS
+  fallbacks, and a MAC-OUI vendor label so every device is identifiable.
+  *(planned)*
+- **Tribunal drill-downs** — click the Condemned tile to jump to the blocked
+  Docket; click a busiest client to see its allowed/condemned domains.
+  *(planned)*
+- **UI polish** — content fills the full width beside the sidebar on every
+  page (mobile-aware); the Docket table scrolls internally instead of the
+  whole page; devices sorted by IP so rows stop jumping. *(planned)*
+- **Codex/family-controls reconciliation** — per-group service blocking and
+  schedules already exist (via groups on the Devices page); align the Codex
+  page copy and docs with that model instead of implying per-device/per-time
+  controls live on the Codex page. Global service schedules and group-less
+  per-device blocks are separate, maintainer-gated follow-ups. *(planned)*
+- **Settings-safe upgrades** — make the opt-in "new version available" notice
+  actionable without ever losing settings, and keep the installer's "no
+  self-updates, deliberately boring" promise: Minos never replaces its own
+  binary. Config and history already live outside the binary (StateDirectory
+  / Docker volume), so an upgrade preserves them; the work is making rollback
+  safe (today an older binary refuses a newer config's unknown fields), taking
+  a pre-change config backup, and adding a config version/migration seam. The
+  notice then shows the **right upgrade command for how this instance was
+  installed** — quick-install/binary (re-run the checksum-verified installer
+  + `systemctl restart`), Docker (`compose pull && up -d`), or build-from-
+  source (`git checkout` the tag + rebuild) — detected from a build-time stamp
+  refined by runtime Docker/systemd checks, with a "What's new" link.
+  Display-only guidance; Minos runs nothing itself. *(planned)*
+
+What gets promoted after that comes from the list below as real-world usage
+decides:
 
 ## Under consideration
 
