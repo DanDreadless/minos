@@ -21,13 +21,15 @@
       title: `${new Date(b.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${b.total} queries, ${b.blocked} blocked`,
     };
   });
-  // A few x-axis time labels, roughly every quarter of the window.
+  // A few x-axis time labels, roughly every quarter of the window. The first
+  // and last are anchored start/end so they don't get clipped at the edges.
   $: ticks =
     data.length > 4
-      ? [0, 0.25, 0.5, 0.75, 1].map((f) => {
+      ? [0, 0.25, 0.5, 0.75, 1].map((f, idx, arr) => {
           const i = Math.min(data.length - 1, Math.round(f * (data.length - 1)));
           return {
             x: i * barW + barW / 2,
+            anchor: idx === 0 ? 'start' : idx === arr.length - 1 ? 'end' : 'middle',
             label: new Date(data[i].time).toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
@@ -53,7 +55,7 @@
   {/each}
   <line x1="0" y1={H - PAD_BOTTOM} x2={W} y2={H - PAD_BOTTOM} class="axis" />
   {#each ticks as t (t.x)}
-    <text x={t.x} y={H - 4} text-anchor="middle" class="tick">{t.label}</text>
+    <text x={t.x} y={H - 4} text-anchor={t.anchor} class="tick">{t.label}</text>
   {/each}
 </svg>
 
