@@ -74,6 +74,22 @@ Svelte 5 / Vite 6, clearing all open Dependabot alerts.
 
 ### Still planned (carried over from the round)
 
+- **Drill-downs read persisted history (Docket history)** — *known bug in the
+  v0.7.0 drill-downs.* The Docket's data source (`GET /api/querylog` →
+  `querylog.Recent()`) reads only the in-memory ring buffer, which is empty
+  after a restart and refills from live traffic; the dashboard aggregates
+  (busiest clients, top blocked) read SQLite, i.e. the full 90-day history. So
+  clicking a busiest client that shows 3000+ condemned lands on a Docket
+  showing only events since the last restart — a mismatch that *looks* like
+  data loss after an upgrade but isn't (SQLite keeps everything; don't reset
+  the aggregates). Fix: wire persisted history with server-side filters.
+  `querylog.QueryHistory()` already reads SQLite paginated by timestamp but is
+  unused by the API — extend it to accept `client` / `qname` / `verdict`
+  filters, add `GET /api/querylog/history?client=&qname=&verdict=&before=&limit=`,
+  and have the Docket load from it when opened via a drill-down or a search
+  (with "load older" pagination), keeping the live WebSocket stream prepending
+  new matches on top. SQLite reads stay off the query hot path (as the
+  aggregates already are); never flush per query. *(planned, next)*
 - **In-app upgrade guidance** — the "new version available" notice currently
   only links to the GitHub release; it should show the **exact upgrade
   command for how this instance was installed**: quick-install/binary →
