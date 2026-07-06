@@ -83,12 +83,27 @@ Svelte 5 / Vite 6, clearing all open Dependabot alerts.
   Docker/systemd checks, with a "What's new" link. Display-only — Minos never
   replaces its own binary (the installer's deliberate "no self-updates" stance
   stands). Manual steps are documented in `getting-started.md` meanwhile.
-- **Further device identity** — gateway-directed PTR only helps when the
-  router answers PTR for LAN clients; where it doesn't, hostnames stay blank.
-  Remaining off-hot-path layers: DHCP lease-file ingestion (read-only — still
-  no DHCP server), mDNS/NetBIOS fallbacks, and a MAC-OUI vendor label so every
-  device is identifiable even without a name. Which lands next depends on
-  production results.
+- **Further device identity** *(next up)* — a production check settled the
+  direction: the LAN router returns NXDOMAIN for reverse (PTR) lookups, so
+  gateway-directed PTR yields nothing on networks like it, and DHCP lease-file
+  ingestion is moot when the router (not Minos) is the DHCP server — the lease
+  file isn't on the Pi. Real names have to come from the devices themselves.
+  **Hard constraint: all of this stays on the enrichment worker and must never
+  add latency to a DNS request** — the query hot path is untouched. Next slice:
+  - **MAC → vendor labels (OUI)** — a small embedded OUI-prefix table turns
+    the ARP-derived MAC into a vendor (Apple, Google, Amazon, Raspberry Pi,
+    Espressif…). Add a **Vendor column** to the Devices table so every device
+    is identifiable even when no hostname resolves; works for 100% of devices
+    with a known MAC, needs no network cooperation. The universal baseline.
+  - **mDNS reverse lookup** — query `224.0.0.251:5353` for each device's
+    `.local` name; picks up Apple / Google / Chromecast / printer / IoT
+    devices that answer multicast DNS. Partial coverage, LAN-local, no router
+    needed.
+  - **NetBIOS / NBSTAT** — a later layer for Windows / Samba machine names.
+
+  All best-effort and layered (first hit wins for the hostname; the vendor
+  label is always computed from the MAC); a device with none simply shows its
+  vendor or bare IP.
 - **Config schema-version + migration seam** — deferred until a real
   migration needs it, so it ships with tolerant loading already in the field.
 
