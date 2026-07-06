@@ -9,6 +9,7 @@
     type Upstream,
   } from '../lib/api';
   import { copy } from '../lib/copy';
+  import { resolverPresets, matchPreset } from '../lib/resolvers';
   import { notify, notifyError } from '../lib/toast';
 
   let cfg: ConfigView | null = null;
@@ -104,6 +105,25 @@
 
   function addUpstream(): void {
     upstreams = [...upstreams, { address: '', protocol: 'doh' }];
+  }
+
+  // applyPreset fills a row from a chosen known resolver; picking "Custom"
+  // leaves the row untouched so it can be typed by hand.
+  function applyPreset(i: number, ev: Event): void {
+    const id = (ev.target as HTMLSelectElement).value;
+    const preset = resolverPresets.find((p) => p.id === id);
+    if (!preset) return;
+    const next = [...upstreams];
+    next[i] = { ...preset.upstream };
+    upstreams = next;
+  }
+
+  // The first two rows are the primary and secondary resolvers; the rest are
+  // ordered fallbacks.
+  function orderLabel(i: number): string {
+    if (i === 0) return 'Primary';
+    if (i === 1) return 'Secondary';
+    return `${i + 1}.`;
   }
 
   const saveRoutes = () =>
@@ -241,7 +261,18 @@
     <h2>{copy.settings.upstreamsTitle} <small>{copy.settings.upstreamsHint}</small></h2>
     {#each upstreams as u, i (i)}
       <div class="upstream-row">
-        <span class="order">{i + 1}.</span>
+        <span class="order">{orderLabel(i)}</span>
+        <select
+          class="preset"
+          title="pick a known resolver"
+          value={matchPreset(u)}
+          on:change={(e) => applyPreset(i, e)}
+        >
+          <option value="">{copy.settings.upstreamCustom}</option>
+          {#each resolverPresets as p (p.id)}
+            <option value={p.id}>{p.label}</option>
+          {/each}
+        </select>
         <input
           class="grow"
           placeholder={u.protocol === 'doh' ? 'https://resolver/dns-query' : 'host:port'}
@@ -593,12 +624,17 @@
     display: flex;
     gap: 0.5rem;
     align-items: center;
+    flex-wrap: wrap;
     margin-bottom: 0.5rem;
+  }
+
+  .upstream-row .preset {
+    max-width: 15rem;
   }
 
   .order {
     color: var(--text-dim);
-    width: 1.2rem;
+    width: 4.5rem;
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
