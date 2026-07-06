@@ -60,57 +60,40 @@ At or beyond parity with the field:
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry
 
-## Next up — usability & enrichment round (planned July 2026)
+## Usability & enrichment round — shipped in v0.7.0 (July 2026)
 
-A second July 2026 pass from real-world use. Detailed engineering plan lives
-outside the repo (`../.claude/minos-improvements-plan.md`); highlights:
+A second July 2026 pass from real-world use, released as **v0.7.0**. Detailed
+engineering plan lives outside the repo
+(`../.claude/minos-improvements-plan.md`). Shipped: bootstrap-free default
+upstream (IP-literal DoH), curated Ferrymen picker (cert-verified known-good
+resolvers), full-width layout + internal Docket scroll, Tribunal drill-downs,
+device list sorted by IP, tidier import UI, gateway-directed PTR enrichment,
+Codex/family-controls doc reconciliation, and rollback-safe config loading
+with a `minos.yaml.bak` backup. The frontend toolchain also moved to
+Svelte 5 / Vite 6, clearing all open Dependabot alerts.
 
-- **Bootstrap-free default upstream** — ship `https://1.1.1.1/dns-query`
-  instead of `cloudflare-dns.com`, removing the circular dependency where a
-  DNS server must resolve its own resolver's hostname first. Cloudflare's
-  cert carries the IP as a SAN, so TLS validation still passes with zero
-  bootstrap code. *(planned)*
-- **Curated Ferrymen picker** — choose primary/secondary upstreams from a
-  known-good resolver list (Cloudflare, Quad9, Google, Mullvad, AdGuard,
-  OpenDNS — all IP-literal DoH/DoT), custom entries still allowed. *(planned)*
-- **Better device identity** — hostnames don't resolve in production because
-  PTR lookups loop back into Minos's own private-reverse backstop (NXDOMAIN).
-  **Router-directed PTR** now sends reverse lookups to the LAN gateway (which
-  knows DHCP names) before the system resolver, off the hot path *(shipped)*.
-  Further layers remain, all off-hot-path: DHCP lease-file ingestion
-  (read-only — still no DHCP server), mDNS/NetBIOS fallbacks, and a MAC-OUI
-  vendor label so every device is identifiable even without a name.
-  *(planned)*
-- **Tribunal drill-downs** — click the Condemned tile to jump to the blocked
-  Docket; click a busiest client to see its allowed/condemned domains.
-  *(planned)*
-- **UI polish** — content fills the full width beside the sidebar on every
-  page (mobile-aware); the Docket table scrolls internally instead of the
-  whole page; devices sorted by IP so rows stop jumping. *(planned)*
-- **Codex/family-controls reconciliation** — per-group service blocking and
-  schedules already exist (via groups on the Devices page); align the Codex
-  page copy and docs with that model instead of implying per-device/per-time
-  controls live on the Codex page. Global service schedules and group-less
-  per-device blocks are separate, maintainer-gated follow-ups. *(planned)*
-- **Settings-safe upgrades** — make the opt-in "new version available" notice
-  actionable without ever losing settings, and keep the installer's "no
-  self-updates, deliberately boring" promise: Minos never replaces its own
-  binary. Config and history already live outside the binary (StateDirectory
-  / Docker volume), so an upgrade preserves them. **Rollback-safe config
-  loading now tolerates (and logs) unknown fields on the on-disk path so an
-  older binary can still start on a newer config, while uploaded restores
-  stay strict; every overwrite also leaves a `minos.yaml.bak` recovery
-  point** *(shipped)*. Still planned: install-method-aware upgrade guidance —
-  the notice showing the **right command for how this instance was installed**
-  (quick-install/binary → re-run the checksum-verified installer +
-  `systemctl restart`; Docker → `compose pull && up -d`; build-from-source →
-  `git checkout` the tag + rebuild), detected from a build-time stamp refined
-  by runtime Docker/systemd checks, with a "What's new" link. Display-only;
-  Minos runs nothing itself. A config schema-version + migration seam is
-  deferred until a real migration needs it. *(planned)*
+### Still planned (carried over from the round)
 
-What gets promoted after that comes from the list below as real-world usage
-decides:
+- **In-app upgrade guidance** — the "new version available" notice currently
+  only links to the GitHub release; it should show the **exact upgrade
+  command for how this instance was installed**: quick-install/binary →
+  re-run the checksum-verified installer + `systemctl restart`; Docker →
+  `compose pull && up -d`; build-from-source → `git checkout` the tag +
+  rebuild. Detect the method from a build-time stamp refined by runtime
+  Docker/systemd checks, with a "What's new" link. Display-only — Minos never
+  replaces its own binary (the installer's deliberate "no self-updates" stance
+  stands). Manual steps are documented in `getting-started.md` meanwhile.
+- **Further device identity** — gateway-directed PTR only helps when the
+  router answers PTR for LAN clients; where it doesn't, hostnames stay blank.
+  Remaining off-hot-path layers: DHCP lease-file ingestion (read-only — still
+  no DHCP server), mDNS/NetBIOS fallbacks, and a MAC-OUI vendor label so every
+  device is identifiable even without a name. Which lands next depends on
+  production results.
+- **Config schema-version + migration seam** — deferred until a real
+  migration needs it, so it ships with tolerant loading already in the field.
+
+Beyond these, what gets promoted comes from the list below as real-world
+usage decides:
 
 ## Under consideration
 

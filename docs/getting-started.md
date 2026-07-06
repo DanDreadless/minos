@@ -180,6 +180,48 @@ all filtering whenever a client feels like using it.
 Prefer Docker? `deploy/docker-compose.yaml` has an equivalent setup with
 `restart: unless-stopped` for the same auto-start behavior.
 
+## Upgrading
+
+Your settings are never in the binary — configuration and query history live
+in `/var/lib/minos/` (systemd `StateDirectory`) or a mounted Docker volume,
+which upgrades leave untouched. So every upgrade below is just "replace the
+program, restart"; blocklists, allow/deny rules, devices, groups, local
+records, and history all carry over. Minos also keeps a `minos.yaml.bak`
+recovery point beside the config.
+
+Upgrade the way you installed:
+
+**Quick-install script (binary + systemd — the Raspberry Pi default):**
+re-run the installer. It fetches the latest release, verifies its checksum,
+and replaces `/usr/local/bin/minos`; it leaves your systemd unit and state
+alone. It does *not* restart the service, so restart it yourself:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/DanDreadless/minos/main/deploy/install.sh | sudo sh
+sudo systemctl restart minos
+minos version                             # confirm the new version
+```
+
+Replacing a running binary is safe — the live process keeps the old file
+open until the restart loads the new one.
+
+**Docker:** pull the new image and recreate the container; the config volume
+is preserved:
+
+```sh
+docker compose pull && docker compose up -d
+```
+
+**Built from source:** fetch the release tag and rebuild, then restart
+however you run it:
+
+```sh
+git fetch --tags && git checkout v0.7.0 && make build
+```
+
+After restarting, the sidebar footer shows the running version and the
+"update available" notice clears.
+
 ## The web interface
 
 Open `http://<host>:8080`. Six pages, one per concern:
