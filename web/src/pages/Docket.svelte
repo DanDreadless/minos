@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { api, openStream, type LogEntry } from '../lib/api';
   import { copy } from '../lib/copy';
+  import { currentParams } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
   const MAX_ROWS = 500;
@@ -62,6 +63,15 @@
   }
 
   onMount(async () => {
+    // Honour a deep link from the dashboard, e.g.
+    // #/querylog?verdict=blocked&client=192.168.1.5
+    const params = currentParams();
+    if (params.verdict === 'blocked' || params.verdict === 'allowed') {
+      verdictFilter = params.verdict;
+    }
+    if (params.client) search = params.client;
+    else if (params.qname) search = params.qname;
+
     try {
       entries = await api.querylog(MAX_ROWS);
     } catch (e) {

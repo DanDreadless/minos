@@ -1,10 +1,18 @@
-// Minimal hash router: '#/docket' → 'docket'. No dependency needed.
+// Minimal hash router: '#/docket' → 'docket', with an optional query string
+// ('#/querylog?client=1.2.3.4&verdict=blocked') for deep links. No dependency.
 import { readable } from 'svelte/store';
 
 export type Route = 'dashboard' | 'querylog' | 'devices' | 'lists' | 'domains' | 'settings';
 
+// The hash without its query string, e.g. '#/querylog?client=x' → '#/querylog'.
+function hashPath(): string {
+  const h = location.hash || '#/';
+  const q = h.indexOf('?');
+  return q === -1 ? h : h.slice(0, q);
+}
+
 function parse(): Route {
-  switch (location.hash) {
+  switch (hashPath()) {
     case '#/querylog':
       return 'querylog';
     case '#/devices':
@@ -25,6 +33,27 @@ export const route = readable<Route>(parse(), (set) => {
   window.addEventListener('hashchange', onChange);
   return () => window.removeEventListener('hashchange', onChange);
 });
+
+// currentParams reads the hash query string live at call time — used by the
+// Docket on mount to pick up a deep link. (A readable store would only track
+// changes while it had a persistent subscriber, which the one-shot read on
+// mount does not provide.)
+export function currentParams(): Record<string, string> {
+  const q = location.hash.indexOf('?');
+  if (q === -1) return {};
+  return Object.fromEntries(new URLSearchParams(location.hash.slice(q + 1)).entries());
+}
+
+// docketHref builds a deep link into the Docket pre-filtered by verdict and/or
+// a client or domain substring — the target of the dashboard drill-downs.
+export function docketHref(params: { verdict?: string; client?: string; qname?: string }): string {
+  const sp = new URLSearchParams();
+  if (params.verdict) sp.set('verdict', params.verdict);
+  if (params.client) sp.set('client', params.client);
+  if (params.qname) sp.set('qname', params.qname);
+  const qs = sp.toString();
+  return qs ? `#/querylog?${qs}` : '#/querylog';
+}
 
 export const hrefFor: Record<Route, string> = {
   dashboard: '#/',

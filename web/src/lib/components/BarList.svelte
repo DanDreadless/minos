@@ -1,5 +1,5 @@
 <script lang="ts">
-  export let items: { label: string; count: number; sub?: string }[];
+  export let items: { label: string; count: number; sub?: string; href?: string }[];
   export let tone: 'accent' | 'blocked' = 'accent';
   export let empty: string;
 
@@ -12,11 +12,16 @@
   <ol>
     {#each items as item (item.label)}
       <li>
-        <div class="row">
+        <svelte:element
+          this={item.href ? 'a' : 'div'}
+          href={item.href ?? undefined}
+          class="row"
+          class:link={item.href}
+        >
           <span class="label" title={item.label}>{item.label}</span>
           {#if item.sub}<span class="sub">{item.sub}</span>{/if}
           <span class="count">{item.count.toLocaleString()}</span>
-        </div>
+        </svelte:element>
         <div class="track">
           <div
             class="bar"
@@ -45,6 +50,16 @@
     align-items: baseline;
     gap: 0.5rem;
     font-size: 0.82rem;
+  }
+
+  a.row {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  a.row.link:hover .label {
+    color: var(--accent);
+    text-decoration: underline;
   }
 
   .label {
