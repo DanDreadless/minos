@@ -127,6 +127,7 @@ export interface ListStatus {
 export interface Device {
   ip: string;
   mac?: string;
+  vendor?: string;
   hostname?: string;
   name?: string;
   group: string;

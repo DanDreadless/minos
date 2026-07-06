@@ -17,6 +17,7 @@ import (
 
 	"minos/internal/config"
 	"minos/internal/filter"
+	"minos/internal/oui"
 	"minos/internal/services"
 )
 
@@ -65,6 +66,7 @@ type device struct {
 type Device struct {
 	IP        string     `json:"ip"`
 	MAC       string     `json:"mac,omitempty"`
+	Vendor    string     `json:"vendor,omitempty"` // derived from MAC via the OUI table
 	Hostname  string     `json:"hostname,omitempty"`
 	Name      string     `json:"name,omitempty"`
 	Group     string     `json:"group"`
@@ -323,6 +325,9 @@ func (r *Registry) Devices(cfg *config.Config) []Device {
 	}
 	out := make([]Device, 0, len(byIP))
 	for _, d := range byIP {
+		if d.MAC != "" {
+			d.Vendor = oui.Vendor(d.MAC) // "" for prefixes not in the curated table
+		}
 		out = append(out, *d)
 	}
 	sort.Slice(out, func(i, j int) bool {

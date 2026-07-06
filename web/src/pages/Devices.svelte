@@ -207,6 +207,7 @@
         <tr>
           <th>IP</th>
           <th>MAC</th>
+          <th>Vendor</th>
           <th>Hostname</th>
           <th>Label</th>
           <th>Group</th>
@@ -221,6 +222,7 @@
           <tr class:dns-blocked={d.blocked}>
             <td>{d.ip}</td>
             <td>{d.mac ?? ''}</td>
+            <td>{d.vendor ?? ''}</td>
             <td title={d.hostname}>{d.hostname ?? ''}</td>
             <td>
               <input
