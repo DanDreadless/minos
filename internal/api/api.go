@@ -82,6 +82,7 @@ func (s *Server) Router() http.Handler {
 	r.Route("/api", func(r chi.Router) {
 		r.Use(s.auth)
 		r.Get("/status", s.handleStatus)
+		r.Get("/update", s.handleUpdate)
 		r.Get("/querylog", s.handleQueryLog)
 		r.Get("/querylog/history", s.handleQueryLogHistory)
 		r.Get("/querylog/stream", s.handleQueryLogStream)

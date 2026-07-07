@@ -32,6 +32,15 @@ export interface LogEntry {
   duration_ms: number;
 }
 
+export interface UpdateInfo {
+  current: string;
+  latest?: string;
+  available: boolean;
+  install_method: string;
+  command: string;
+  notes_url: string;
+}
+
 export interface TimelineBucket {
   time: string;
   total: number;
@@ -251,6 +260,7 @@ async function uploadRaw<T>(path: string, body: Blob): Promise<T> {
 
 export const api = {
   status: () => request<Status>('GET', '/api/status'),
+  update: () => request<UpdateInfo>('GET', '/api/update'),
   stats: (hours = 24) => request<Stats>('GET', `/api/stats?hours=${hours}`),
   check: (domain: string) =>
     request<CheckResult>('GET', `/api/check?domain=${encodeURIComponent(domain)}`),
