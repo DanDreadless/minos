@@ -6,23 +6,70 @@
   import { notify, notifyError } from '../lib/toast';
 
   const MAX_ROWS = 500;
+  const HISTORY_PAGE = 200;
 
-  let entries: LogEntry[] = [];
+  // live: the ring buffer + WebSocket stream (the live tail). history: the
+  // persisted, server-filtered results shown while searching or drilled in —
+  // so a drill-down spans the full retained log, not just the ring.
+  let live: LogEntry[] = [];
+  let history: LogEntry[] = [];
+  let historyLoading = false;
+  let historyDone = false;
   let search = '';
   let verdictFilter: 'all' | 'blocked' | 'allowed' = 'all';
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let searchDebounce: ReturnType<typeof setTimeout> | null = null;
   let destroyed = false;
   let connected = false;
 
-  $: filtered = entries.filter((e) => {
+  $: hasFilter = search.trim() !== '' || verdictFilter !== 'all';
+
+  function clientMatch(e: LogEntry): boolean {
     if (verdictFilter !== 'all' && e.verdict !== verdictFilter) return false;
     if (search) {
       const q = search.toLowerCase();
-      return e.qname.includes(q) || e.client.includes(q);
+      return e.qname.toLowerCase().includes(q) || e.client.toLowerCase().includes(q);
     }
     return true;
-  });
+  }
+
+  // Unfiltered → the live tail. Filtered → server history, falling back to
+  // filtering the live ring when history is empty (ephemeral mode, where the
+  // ring already backs the dashboard too, or simply no persisted matches).
+  $: displayed = !hasFilter ? live : history.length ? history : live.filter(clientMatch);
+
+  async function fetchHistory(reset: boolean): Promise<void> {
+    if (historyLoading) return;
+    historyLoading = true;
+    try {
+      const before =
+        !reset && history.length ? new Date(history[history.length - 1].time).getTime() : undefined;
+      const rows = await api.querylogHistory({
+        q: search.trim(),
+        verdict: verdictFilter,
+        before,
+        limit: HISTORY_PAGE,
+      });
+      history = reset ? rows : [...history, ...rows];
+      historyDone = rows.length < HISTORY_PAGE;
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      historyLoading = false;
+    }
+  }
+
+  function refreshHistory(): void {
+    history = [];
+    historyDone = false;
+    if (hasFilter) void fetchHistory(true);
+  }
+
+  function onSearchInput(): void {
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(refreshHistory, 250);
+  }
 
   function fmtTime(iso: string): string {
     return new Date(iso).toLocaleTimeString();
@@ -33,7 +80,9 @@
     ws = openStream(
       (e) => {
         connected = true;
-        entries = [e, ...entries].slice(0, MAX_ROWS);
+        live = [e, ...live].slice(0, MAX_ROWS);
+        // Keep a filtered/drilled-in view live: prepend new matches on top.
+        if (hasFilter && history.length && clientMatch(e)) history = [e, ...history];
       },
       () => {
         ws = null;
@@ -73,16 +122,19 @@
     else if (params.qname) search = params.qname;
 
     try {
-      entries = await api.querylog(MAX_ROWS);
+      live = await api.querylog(MAX_ROWS);
     } catch (e) {
       notifyError(e);
     }
+    // Arrived via a drill-down/search → load the persisted history for it.
+    if (hasFilter) void fetchHistory(true);
     connect();
   });
 
   onDestroy(() => {
     destroyed = true;
     if (reconnectTimer) clearTimeout(reconnectTimer);
+    if (searchDebounce) clearTimeout(searchDebounce);
     ws?.close();
   });
 </script>
@@ -93,17 +145,25 @@
 </h1>
 
 <div class="filters">
-  <input type="search" placeholder={copy.docket.searchPlaceholder} bind:value={search} />
-  <select bind:value={verdictFilter}>
+  <input
+    type="search"
+    placeholder={copy.docket.searchPlaceholder}
+    bind:value={search}
+    on:input={onSearchInput}
+  />
+  <select bind:value={verdictFilter} on:change={refreshHistory}>
     <option value="all">{copy.docket.filterAll}</option>
     <option value="blocked">{copy.docket.filterBlocked}</option>
     <option value="allowed">{copy.docket.filterAllowed}</option>
   </select>
-  <span class="count">{filtered.length} shown</span>
+  <span class="count">
+    {displayed.length} shown{#if hasFilter && history.length}
+      <span class="scope">· searching history</span>{/if}
+  </span>
 </div>
 
-{#if filtered.length === 0}
-  <p class="empty">{copy.docket.empty}</p>
+{#if displayed.length === 0}
+  <p class="empty">{historyLoading ? 'Searching…' : copy.docket.empty}</p>
 {:else}
   <div class="table-wrap">
     <table>
@@ -119,7 +179,7 @@
         </tr>
       </thead>
       <tbody>
-        {#each filtered as e (e.time + e.qname + e.client + e.qtype)}
+        {#each displayed as e (e.time + e.qname + e.client + e.qtype)}
           <tr>
             <td>{fmtTime(e.time)}</td>
             <td>{e.client}</td>
@@ -155,6 +215,13 @@
       </tbody>
     </table>
   </div>
+  {#if hasFilter && history.length > 0 && !historyDone}
+    <div class="load-older">
+      <button on:click={() => fetchHistory(false)} disabled={historyLoading}>
+        {historyLoading ? 'Loading…' : 'Load older'}
+      </button>
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -192,6 +259,20 @@
     color: var(--text-dim);
     font-size: 0.8rem;
     margin-left: auto;
+  }
+
+  .count .scope {
+    color: var(--accent);
+  }
+
+  .load-older {
+    text-align: center;
+    padding: 0.6rem 0;
+    flex: none;
+  }
+
+  .load-older button {
+    font-size: 0.8rem;
   }
 
   .empty {

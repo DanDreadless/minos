@@ -181,3 +181,22 @@ func TestQueryLogEndpoint(t *testing.T) {
 		t.Errorf("limit=0: status = %d, want 400", rec.Code)
 	}
 }
+
+func TestQueryLogHistoryEndpoint(t *testing.T) {
+	s, _ := newTestServer(t, "")
+	// Ephemeral test log → history is empty, but the handler must still wire
+	// up and validate params (filtering itself is covered in querylog tests).
+	rec := doJSON(t, s.Router(), "GET", "/api/querylog/history?q=1.2.3.4&verdict=blocked", "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if body := strings.TrimSpace(rec.Body.String()); body != "[]" {
+		t.Errorf("ephemeral history body = %q, want []", body)
+	}
+	for _, bad := range []string{"?limit=0", "?limit=5000", "?before=notanumber"} {
+		rec := doJSON(t, s.Router(), "GET", "/api/querylog/history"+bad, "", nil)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400", bad, rec.Code)
+		}
+	}
+}

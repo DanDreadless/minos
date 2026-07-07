@@ -115,12 +115,55 @@ func TestPersistAndHistory(t *testing.T) {
 	}
 	defer l2.Close()
 
-	got, err := l2.QueryHistory(context.Background(), 10, time.Time{})
+	got, err := l2.QueryHistory(context.Background(), HistoryFilter{}, 10, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].QName != "persisted.example" || got[0].Verdict != VerdictBlocked {
 		t.Errorf("QueryHistory = %+v, want one persisted.example blocked entry", got)
+	}
+}
+
+func TestQueryHistoryFilters(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	l, err := Open(Options{RingSize: 50, DBPath: dbPath, RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Record(Entry{Client: "10.0.0.5", QName: "ads.example", Verdict: VerdictBlocked, Time: time.Now()})
+	l.Record(Entry{Client: "10.0.0.5", QName: "news.example", Verdict: VerdictAllowed, Time: time.Now()})
+	l.Record(Entry{Client: "10.0.0.9", QName: "ads.example", Verdict: VerdictBlocked, Time: time.Now()})
+	if err := l.Close(); err != nil { // flush to SQLite
+		t.Fatal(err)
+	}
+	l2, err := Open(Options{RingSize: 50, DBPath: dbPath, RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l2.Close()
+
+	count := func(f HistoryFilter) int {
+		got, err := l2.QueryHistory(context.Background(), f, 100, time.Time{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(got)
+	}
+	if n := count(HistoryFilter{Search: "10.0.0.5"}); n != 2 {
+		t.Errorf("client filter: got %d, want 2", n)
+	}
+	if n := count(HistoryFilter{Search: "ads.example"}); n != 2 {
+		t.Errorf("qname filter: got %d, want 2", n)
+	}
+	if n := count(HistoryFilter{Search: "10.0.0.5", Verdict: VerdictBlocked}); n != 1 {
+		t.Errorf("client+verdict filter: got %d, want 1", n)
+	}
+	if n := count(HistoryFilter{Verdict: VerdictBlocked}); n != 2 {
+		t.Errorf("verdict filter: got %d, want 2", n)
+	}
+	// LIKE metacharacters in the search must be matched literally.
+	if n := count(HistoryFilter{Search: "%"}); n != 0 {
+		t.Errorf("literal %% search: got %d, want 0", n)
 	}
 }
 
@@ -132,7 +175,7 @@ func TestEphemeralWritesNothing(t *testing.T) {
 	defer l.Close()
 
 	l.Record(testEntry("mem-only.example", VerdictAllowed))
-	got, err := l.QueryHistory(context.Background(), 10, time.Time{})
+	got, err := l.QueryHistory(context.Background(), HistoryFilter{}, 10, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}

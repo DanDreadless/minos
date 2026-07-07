@@ -255,6 +255,14 @@ export const api = {
   check: (domain: string) =>
     request<CheckResult>('GET', `/api/check?domain=${encodeURIComponent(domain)}`),
   querylog: (limit = 100) => request<LogEntry[]>('GET', `/api/querylog?limit=${limit}`),
+  querylogHistory: (params: { q?: string; verdict?: string; before?: number; limit?: number }) => {
+    const sp = new URLSearchParams();
+    if (params.q) sp.set('q', params.q);
+    if (params.verdict && params.verdict !== 'all') sp.set('verdict', params.verdict);
+    if (params.before) sp.set('before', String(params.before));
+    sp.set('limit', String(params.limit ?? 200));
+    return request<LogEntry[]>('GET', `/api/querylog/history?${sp.toString()}`);
+  },
 
   getConfig: () => request<ConfigView>('GET', '/api/config'),
   updateConfig: (upd: SettingsUpdate) => request<ConfigView>('PUT', '/api/config', upd),
