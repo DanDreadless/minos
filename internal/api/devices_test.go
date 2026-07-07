@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"minos/internal/clients"
+	"minos/internal/config"
 )
 
 func TestGroupCRUD(t *testing.T) {
@@ -176,6 +177,40 @@ func TestMACKeyEncodedPath(t *testing.T) {
 	// Forget through the encoded path too.
 	if rec := doJSON(t, r, "DELETE", "/api/clients/28%3Acd%3Ac1%3A00%3A11%3A22", "", nil); rec.Code != http.StatusOK {
 		t.Fatalf("encoded MAC DELETE: status = %d: %s", rec.Code, rec.Body)
+	}
+	if len(store.Get().Clients) != 0 {
+		t.Errorf("clients after forget = %+v", store.Get().Clients)
+	}
+}
+
+func TestMACUpdateAbsorbsLegacyIPClient(t *testing.T) {
+	s, store := newTestServer(t, "")
+	r := s.Router()
+	// A pre-v0.10 assignment: IP-keyed, no MAC.
+	if err := store.Update(func(c *config.Config) error {
+		c.Clients = []config.Client{{IP: "192.168.68.117", Name: "old-label"}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// The device now has a known MAC, so the UI addresses it by MAC and sends
+	// the current IP as a hint. Clearing the label must reconcile onto the
+	// existing entry, not append a duplicate IP (the reported crash).
+	rec := doJSON(t, r, "PUT", "/api/clients/aa:bb:cc:00:11:22",
+		`{"name":"","ip":"192.168.68.117"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update: status = %d: %s", rec.Code, rec.Body)
+	}
+	cfg := store.Get()
+	if len(cfg.Clients) != 1 {
+		t.Fatalf("clients = %+v, want exactly one (absorbed, not duplicated)", cfg.Clients)
+	}
+	if cfg.Clients[0].MAC != "aa:bb:cc:00:11:22" || cfg.Clients[0].IP != "192.168.68.117" || cfg.Clients[0].Name != "" {
+		t.Errorf("client = %+v, want MAC-keyed, IP kept, label cleared", cfg.Clients[0])
+	}
+	// Forget by MAC removes the (now MAC-keyed) entry.
+	if rec := doJSON(t, r, "DELETE", "/api/clients/aa:bb:cc:00:11:22", "", nil); rec.Code != http.StatusOK {
+		t.Fatalf("forget: status = %d: %s", rec.Code, rec.Body)
 	}
 	if len(store.Get().Clients) != 0 {
 		t.Errorf("clients after forget = %+v", store.Get().Clients)
