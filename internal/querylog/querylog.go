@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -341,22 +342,48 @@ func (l *Log) prune() {
 	}
 }
 
-// QueryHistory reads persisted entries from SQLite, newest first, for the
-// API's historical view. Not used on the hot path.
-func (l *Log) QueryHistory(ctx context.Context, limit int, before time.Time) ([]Entry, error) {
+// HistoryFilter narrows QueryHistory. Empty fields impose no constraint.
+type HistoryFilter struct {
+	// Search matches (case-insensitively) as a substring of qname OR client —
+	// the same free-text match the Docket search box and drill-downs use.
+	Search string
+	// Verdict is "blocked", "allowed", or "" for both.
+	Verdict string
+}
+
+// QueryHistory returns judged queries newest-first, older than `before`, that
+// match the filter — the Docket's window into the persisted log (so a
+// drill-down shows full history, not just what the ring buffer holds since the
+// last restart). SQLite-backed; returns nil in ephemeral mode, where the ring
+// already feeds both the Docket and the dashboard so the frontend's live
+// filtering stays consistent. Off the hot path.
+func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, before time.Time) ([]Entry, error) {
 	if l.db == nil {
 		return nil, nil
 	}
 	if limit <= 0 || limit > 1000 {
 		limit = 1000
 	}
-	beforeMs := before.UnixMilli()
 	if before.IsZero() {
-		beforeMs = time.Now().Add(time.Hour).UnixMilli()
+		before = time.Now().Add(time.Hour)
 	}
-	rows, err := l.db.QueryContext(ctx, `SELECT ts, client, qname, qtype, verdict,
-		list, rule, upstream, duration_ms FROM querylog
-		WHERE ts < ? ORDER BY ts DESC LIMIT ?`, beforeMs, limit)
+
+	where := []string{"ts < ?"}
+	args := []any{before.UnixMilli()}
+	if f.Search != "" {
+		where = append(where, "(qname LIKE ? ESCAPE '\\' OR client LIKE ? ESCAPE '\\')")
+		like := "%" + escapeLike(f.Search) + "%"
+		args = append(args, like, like)
+	}
+	if f.Verdict == VerdictBlocked || f.Verdict == VerdictAllowed {
+		where = append(where, "verdict = ?")
+		args = append(args, f.Verdict)
+	}
+	args = append(args, limit)
+	query := `SELECT ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms
+		FROM querylog WHERE ` + strings.Join(where, " AND ") + ` ORDER BY ts DESC LIMIT ?`
+
+	rows, err := l.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query history: %w", err)
 	}
@@ -373,4 +400,10 @@ func (l *Log) QueryHistory(ctx context.Context, limit int, before time.Time) ([]
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// escapeLike escapes the SQL LIKE metacharacters so a search for "a_b" or
+// "50%" is matched literally (paired with ESCAPE '\' in the query).
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
 }

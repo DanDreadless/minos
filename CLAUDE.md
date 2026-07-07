@@ -274,10 +274,16 @@ This is security software; hold it to that standard.
   with NXDOMAIN (RFC 6303 backstop), so LAN hostnames never resolve. The
   enrichment worker instead tries the default gateway (Linux
   /proc/net/route → `resolverAt(gw:53)`), which knows the DHCP names,
-  then falls back to the system resolver. Off the hot path; Windows
-  (dev-only) skips gateway detection and uses the system resolver, which
-  there is not Minos. Other identity sources (DHCP-lease ingestion, OUI
-  vendor labels) are roadmapped but not yet built.
+  then falls back to the system resolver, and finally to **multicast DNS**
+  (reverse PTR to 224.0.0.251:5353 with the RFC 6762 unicast-response bit) —
+  the one source that works when the router won't answer PTR (the common
+  case). mDNS is sent bound to *every* up/multicast/non-loopback interface,
+  concurrently, so a multi-homed host (eth+wlan, Docker) still reaches the
+  LAN — a `:0` bind silently egresses the wrong adapter. All off the hot
+  path; Windows (dev-only) skips gateway detection. Separately, every device
+  with a known MAC also gets a **vendor label** from `internal/oui` (a
+  curated IEEE-OUI subset, embedded). Still roadmapped: DHCP-lease ingestion
+  and NetBIOS.
 - **Response cache semantics** (fixed decisions): the cache sits *after*
   the filter — verdicts always reflect live rules and blocked answers are
   never cached. Any config change swaps in a fresh cache (that IS the

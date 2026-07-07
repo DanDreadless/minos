@@ -52,8 +52,10 @@ func (r *Registry) enrichOne(ctx context.Context, ip string) {
 	}
 }
 
-// lookupHostname reverse-resolves ip, trying each resolver in turn (gateway
-// first, then the system resolver) and taking the first non-empty answer.
+// lookupHostname reverse-resolves ip, trying each source in turn and taking
+// the first non-empty answer: unicast PTR (gateway, then system resolver),
+// then multicast DNS. mDNS is last because it is slower and only some devices
+// answer — but it is the one source that works when the router won't do PTR.
 func (r *Registry) lookupHostname(ctx context.Context, ip string) string {
 	for _, res := range r.revResolvers {
 		lookupCtx, cancel := context.WithTimeout(ctx, ptrTimeout)
@@ -63,7 +65,7 @@ func (r *Registry) lookupHostname(ctx context.Context, ip string) string {
 			return strings.TrimSuffix(names[0], ".")
 		}
 	}
-	return ""
+	return lookupMDNS(ip)
 }
 
 // reverseResolvers returns the resolvers to try for PTR lookups, in order:

@@ -74,6 +74,22 @@ Svelte 5 / Vite 6, clearing all open Dependabot alerts.
 
 ### Still planned (carried over from the round)
 
+- **Drill-downs read persisted history (Docket history)** — *known bug in the
+  v0.7.0 drill-downs.* The Docket's data source (`GET /api/querylog` →
+  `querylog.Recent()`) reads only the in-memory ring buffer, which is empty
+  after a restart and refills from live traffic; the dashboard aggregates
+  (busiest clients, top blocked) read SQLite, i.e. the full 90-day history. So
+  clicking a busiest client that shows 3000+ condemned lands on a Docket
+  showing only events since the last restart — a mismatch that *looks* like
+  data loss after an upgrade but isn't (SQLite keeps everything; don't reset
+  the aggregates). Fix: wire persisted history with server-side filters.
+  `querylog.QueryHistory()` already reads SQLite paginated by timestamp but is
+  unused by the API — extend it to accept `client` / `qname` / `verdict`
+  filters, add `GET /api/querylog/history?client=&qname=&verdict=&before=&limit=`,
+  and have the Docket load from it when opened via a drill-down or a search
+  (with "load older" pagination), keeping the live WebSocket stream prepending
+  new matches on top. SQLite reads stay off the query hot path (as the
+  aggregates already are); never flush per query. *(planned, next)*
 - **In-app upgrade guidance** — the "new version available" notice currently
   only links to the GitHub release; it should show the **exact upgrade
   command for how this instance was installed**: quick-install/binary →
@@ -89,17 +105,20 @@ Svelte 5 / Vite 6, clearing all open Dependabot alerts.
   ingestion is moot when the router (not Minos) is the DHCP server — the lease
   file isn't on the Pi. Real names have to come from the devices themselves.
   **Hard constraint: all of this stays on the enrichment worker and must never
-  add latency to a DNS request** — the query hot path is untouched. Next slice:
+  add latency to a DNS request** — the query hot path is untouched.
   - **MAC → vendor labels (OUI)** — a small embedded OUI-prefix table turns
     the ARP-derived MAC into a vendor (Apple, Google, Amazon, Raspberry Pi,
     Espressif…). Add a **Vendor column** to the Devices table so every device
     is identifiable even when no hostname resolves; works for 100% of devices
     with a known MAC, needs no network cooperation. The universal baseline.
-  - **mDNS reverse lookup** — query `224.0.0.251:5353` for each device's
-    `.local` name; picks up Apple / Google / Chromecast / printer / IoT
-    devices that answer multicast DNS. Partial coverage, LAN-local, no router
-    needed.
+    *(shipped)*
+  - **mDNS reverse lookup** — reverse PTR to `224.0.0.251:5353` (unicast-
+    response bit) resolves `.local` names for Apple / Fire TV / LG / printer /
+    IoT devices, and is the one source that works when the router won't do
+    PTR. Sent on every interface, so multi-homed hosts still reach the LAN.
+    *(shipped)*
   - **NetBIOS / NBSTAT** — a later layer for Windows / Samba machine names.
+    *(planned)*
 
   All best-effort and layered (first hit wins for the hostname; the vendor
   label is always computed from the MAC); a device with none simply shows its

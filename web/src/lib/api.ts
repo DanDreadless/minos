@@ -32,6 +32,15 @@ export interface LogEntry {
   duration_ms: number;
 }
 
+export interface UpdateInfo {
+  current: string;
+  latest?: string;
+  available: boolean;
+  install_method: string;
+  command: string;
+  notes_url: string;
+}
+
 export interface TimelineBucket {
   time: string;
   total: number;
@@ -127,6 +136,7 @@ export interface ListStatus {
 export interface Device {
   ip: string;
   mac?: string;
+  vendor?: string;
   hostname?: string;
   name?: string;
   group: string;
@@ -250,10 +260,19 @@ async function uploadRaw<T>(path: string, body: Blob): Promise<T> {
 
 export const api = {
   status: () => request<Status>('GET', '/api/status'),
+  update: () => request<UpdateInfo>('GET', '/api/update'),
   stats: (hours = 24) => request<Stats>('GET', `/api/stats?hours=${hours}`),
   check: (domain: string) =>
     request<CheckResult>('GET', `/api/check?domain=${encodeURIComponent(domain)}`),
   querylog: (limit = 100) => request<LogEntry[]>('GET', `/api/querylog?limit=${limit}`),
+  querylogHistory: (params: { q?: string; verdict?: string; before?: number; limit?: number }) => {
+    const sp = new URLSearchParams();
+    if (params.q) sp.set('q', params.q);
+    if (params.verdict && params.verdict !== 'all') sp.set('verdict', params.verdict);
+    if (params.before) sp.set('before', String(params.before));
+    sp.set('limit', String(params.limit ?? 200));
+    return request<LogEntry[]>('GET', `/api/querylog/history?${sp.toString()}`);
+  },
 
   getConfig: () => request<ConfigView>('GET', '/api/config'),
   updateConfig: (upd: SettingsUpdate) => request<ConfigView>('PUT', '/api/config', upd),

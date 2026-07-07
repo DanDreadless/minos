@@ -82,7 +82,9 @@ func (s *Server) Router() http.Handler {
 	r.Route("/api", func(r chi.Router) {
 		r.Use(s.auth)
 		r.Get("/status", s.handleStatus)
+		r.Get("/update", s.handleUpdate)
 		r.Get("/querylog", s.handleQueryLog)
+		r.Get("/querylog/history", s.handleQueryLogHistory)
 		r.Get("/querylog/stream", s.handleQueryLogStream)
 		r.Get("/stats", s.handleStats)
 		r.Get("/check", s.handleCheck)
@@ -209,6 +211,47 @@ func (s *Server) handleQueryLog(w http.ResponseWriter, r *http.Request) {
 		limit = n
 	}
 	entries := s.qlog.Recent(limit)
+	if entries == nil {
+		entries = []querylog.Entry{}
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
+
+// handleQueryLogHistory serves the persisted query log filtered by client/
+// domain substring and verdict, newest first, paginated by `before` (unix
+// millis). It backs the Docket drill-downs and search, which must span the
+// full retained history — not just the live ring buffer. Returns [] in
+// ephemeral mode (no SQLite); the frontend then filters the live ring.
+func (s *Server) handleQueryLogHistory(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit := 200
+	if v := q.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 1000 {
+			writeError(w, http.StatusBadRequest, "limit must be 1-1000")
+			return
+		}
+		limit = n
+	}
+	var before time.Time
+	if v := q.Get("before"); v != "" {
+		ms, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || ms < 0 {
+			writeError(w, http.StatusBadRequest, "before must be unix milliseconds")
+			return
+		}
+		before = time.UnixMilli(ms)
+	}
+	verdict := q.Get("verdict")
+	if verdict == "all" {
+		verdict = ""
+	}
+	filter := querylog.HistoryFilter{Search: q.Get("q"), Verdict: verdict}
+	entries, err := s.qlog.QueryHistory(r.Context(), filter, limit, before)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	if entries == nil {
 		entries = []querylog.Entry{}
 	}

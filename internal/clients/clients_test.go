@@ -259,6 +259,30 @@ func TestDevicesSortedByIP(t *testing.T) {
 	}
 }
 
+func TestDevicesPopulateVendorFromMAC(t *testing.T) {
+	r := NewRegistry()
+	cfg := config.Default()
+	// A configured client with a Raspberry Pi OUI (28:cd:c1) and one with an
+	// unknown OUI; the MAC override feeds the vendor lookup.
+	cfg.Clients = []config.Client{
+		{IP: "10.0.0.5", MAC: "28:cd:c1:aa:bb:cc"},
+		{IP: "10.0.0.6", MAC: "02:00:00:11:22:33"},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	byIP := map[string]Device{}
+	for _, d := range r.Devices(cfg) {
+		byIP[d.IP] = d
+	}
+	if got := byIP["10.0.0.5"].Vendor; got != "Raspberry Pi" {
+		t.Errorf("vendor for 28:cd:c1 = %q, want Raspberry Pi", got)
+	}
+	if got := byIP["10.0.0.6"].Vendor; got != "" {
+		t.Errorf("vendor for unknown OUI = %q, want empty", got)
+	}
+}
+
 func TestSeedDoesNotClobberLiveState(t *testing.T) {
 	r := NewRegistry()
 	now := time.Now()

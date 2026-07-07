@@ -6,6 +6,14 @@ export const copy = {
   appName: 'Minos',
   tagline: 'Every query gets judged.',
 
+  update: {
+    available: (v: string) => `Minos v${v} is available.`,
+    whatsNew: "What's new",
+    howTo: (method: string) => `To upgrade (${method}):`,
+    copy: 'Copy command',
+    copied: 'Upgrade command copied.',
+  },
+
   nav: {
     dashboard: { label: 'The Tribunal', hint: 'dashboard' },
     querylog: { label: 'The Docket', hint: 'query log' },
