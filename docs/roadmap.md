@@ -117,12 +117,21 @@ Svelte 5 / Vite 6, clearing all open Dependabot alerts.
     IoT devices, and is the one source that works when the router won't do
     PTR. Sent on every interface, so multi-homed hosts still reach the LAN.
     *(shipped)*
-  - **NetBIOS / NBSTAT** — a later layer for Windows / Samba machine names.
-    *(planned)*
+  - **NetBIOS / NBSTAT** — the layer for Windows / Samba machine names, which
+    typically run no mDNS responder and so stay blank today. A single unicast
+    NBSTAT node-status query to UDP 137 reads the device's own name table; it
+    slots into the hostname chain after unicast PTR and before mDNS (cheap
+    unicast, fast-fail on non-Windows hosts). Stdlib-only, on the enrichment
+    worker, never on the query path. *(planned, next)*
 
   All best-effort and layered (first hit wins for the hostname; the vendor
   label is always computed from the MAC); a device with none simply shows its
   vendor or bare IP.
+- **Devices drill-down to the Docket** — click a device's IP on the Devices
+  page to open the Docket filtered to that client (all its allowed and denied
+  queries), mirroring the Tribunal's busiest-client drill-down. Reuses the
+  existing `docketHref`/persisted-history plumbing; a frontend-only link.
+  *(planned, small)*
 - **Config schema-version + migration seam** — deferred until a real
   migration needs it, so it ships with tolerant loading already in the field.
 

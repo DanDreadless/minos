@@ -43,35 +43,20 @@ port 53 needs root/admin on most systems; on Linux prefer the systemd unit in
 
 Then point a client (or your router's DHCP DNS option) at the machine's IP.
 
-## Migrating from Pi-hole or AdGuard Home
-
-One command carries your settings over — run it before starting Minos (or
-restart afterwards), since it edits the config file directly:
+## CLI
 
 ```sh
-# From a Pi-hole install (reads gravity.db and custom.list, read-only):
-minos import pihole /etc/pihole
-
-# From AdGuard Home:
-minos import adguard /opt/AdGuardHome/AdGuardHome.yaml
+minos status     # show counters and pause state
+minos pause 30m  # pause blocking (blank duration = until resumed)
+minos resume     # resume blocking
+minos import pihole /etc/pihole            # migrate Pi-hole settings
+minos import adguard AdGuardHome.yaml      # migrate AdGuard Home settings
+minos version
 ```
 
-What comes across: blocklist subscriptions (with their enabled state),
-exact allow/deny domains and user rules, local DNS records / rewrites,
-and — from AdGuard Home — blocked services that exist in the Minos
-catalog. Imports only add: nothing already in your Minos config is
-changed, and running an import twice adds nothing new.
-
-What doesn't: regex rules and AdBlock rules with options (Minos matches
-whole domains only), allowlist subscriptions, and upstream/DHCP settings.
-Every skipped item is printed with a reason so nothing vanishes silently.
-
-Prefer the web UI? **Settings → Import from Pi-hole or AdGuard Home** takes
-the same files as an upload (`gravity.db`, an optional `custom.list`, or
-`AdGuardHome.yaml`) and shows the same add-only report — no shell needed.
-The **Backup & restore** card there also restores a `minos.yaml` you
-exported earlier (listen addresses and query-log storage are kept from the
-running instance, since those need a restart to change).
+`status`, `pause`, and `resume` talk to the running instance over its HTTP
+API, honoring `-config` to find the address and token. `import` edits the
+config file directly — run it while Minos is stopped, or restart afterwards.
 
 ## Prepare the host (Raspberry Pi / Linux)
 
@@ -222,67 +207,6 @@ git fetch --tags && git checkout v0.7.0 && make build
 After restarting, the sidebar footer shows the running version and the
 "update available" notice clears.
 
-## The web interface
-
-Open `http://<host>:8080`. Six pages, one per concern:
-
-- **The Tribunal** (dashboard) — query counters, cache hit rate, a
-  24-hour volume chart, the most-blocked domains, the busiest clients,
-  and **Recess** controls to pause blocking (5/30 minutes, a custom
-  duration, or until resumed).
-- **The Docket** (query log) — live-streaming log with search and verdict
-  filters. Every blocked entry shows *which list and rule* condemned it and
-  has a one-click **Pardon** button; allowed entries can be **Sentenced**
-  (blocked) just as fast.
-- **Devices** — every client that queries the resolver, identified by IP,
-  MAC address (from the ARP table), vendor (derived from the MAC), and
-  hostname (reverse DNS aimed at the gateway, with an mDNS `.local` fallback)
-  where available, with query counts and last-seen times. From here you can
-  label
-  a device, block its DNS entirely, or assign it to a **group**:
-  - `filter` groups get the default rules *plus* the group's own extra
-    allow/deny domains and blocked services (a group pardon beats a
-    global block),
-  - `bypass` groups skip filtering entirely,
-  - `block` groups get no DNS service at all.
-  Unassigned devices follow the default rules. Filter groups can also
-  enforce **Safe Search** for their members. Any group can carry a
-  **schedule** — school-night hours, weekend windows — and applies only
-  inside it; outside, its devices follow the default rules.
-
-  **Safe Search** (per group here, or network-wide from Settings) answers
-  queries for Google, Bing, DuckDuckGo, and YouTube with the provider's
-  enforced-safe host (`forcesafesearch.google.com`, `strict.bing.com`,
-  `safe.duckduckgo.com`, `restrictmoderate.youtube.com`), so filtered
-  results are enforced by the provider itself and can't be switched off
-  in the page settings. Only exact search hostnames are rewritten —
-  Gmail, Maps, and other subdomains are untouched.
-- **The Codex** (blocklists) — add, enable/disable, or remove list
-  subscriptions and refresh them on demand, with per-list rule counts and
-  fetch errors. The **Blocked services** card blocks a whole service
-  (TikTok, YouTube, Discord…) with one checkbox for every device. To block
-  a service only for some devices, or only at certain times, set it on a
-  **group** on the Devices page instead — a group's blocked services apply
-  to its members and obey the group's schedule.
-- **Pardons & Sentences** (allow/deny domains) — manage both lists, plus a
-  "judge a domain" tool that shows exactly which rule decides any name's
-  fate before you ever query it. The **Local DNS** card lives here too:
-  A/AAAA/CNAME records (wildcards like `*.home.lab` included) that Minos
-  answers itself — they beat the blocklists, never leave your network, and
-  address records answer reverse (PTR) lookups automatically.
-- **Settings** — everything below is editable here and applies immediately,
-  no restart: upstream resolvers and their order, conditional forwarding
-  (send `lan` or your reverse zone to the router so DHCP hostnames keep
-  resolving), the response cache (repeat queries answered from memory —
-  the dashboard shows the hit rate), blocking mode and TTL, network-wide
-  Safe Search, list refresh interval, query-log retention and buffer
-  size, the API token, a one-click YAML config backup, and an opt-in
-  daily update check (a "vX.Y.Z available" link appears in the sidebar
-  when a newer release exists — nothing is sent beyond the request).
-
-If you set `api.token` (in the config file or from Settings), the UI and
-CLI require it.
-
 ## Encrypted DNS for your devices (DoT / DoH)
 
 Minos can serve DNS-over-TLS and DNS-over-HTTPS itself, so phones and
@@ -366,6 +290,67 @@ sudo ufw allow from 192.168.1.0/24 to any port 853  proto tcp
 sudo ufw allow from 192.168.1.0/24 to any port 8443 proto tcp
 ```
 
+## The web interface
+
+Open `http://<host>:8080`. Six pages, one per concern:
+
+- **The Tribunal** (dashboard) — query counters, cache hit rate, a
+  24-hour volume chart, the most-blocked domains, the busiest clients,
+  and **Recess** controls to pause blocking (5/30 minutes, a custom
+  duration, or until resumed).
+- **The Docket** (query log) — live-streaming log with search and verdict
+  filters. Every blocked entry shows *which list and rule* condemned it and
+  has a one-click **Pardon** button; allowed entries can be **Sentenced**
+  (blocked) just as fast.
+- **Devices** — every client that queries the resolver, identified by IP,
+  MAC address (from the ARP table), vendor (derived from the MAC), and
+  hostname (reverse DNS aimed at the gateway, with an mDNS `.local` fallback)
+  where available, with query counts and last-seen times. From here you can
+  label
+  a device, block its DNS entirely, or assign it to a **group**:
+  - `filter` groups get the default rules *plus* the group's own extra
+    allow/deny domains and blocked services (a group pardon beats a
+    global block),
+  - `bypass` groups skip filtering entirely,
+  - `block` groups get no DNS service at all.
+  Unassigned devices follow the default rules. Filter groups can also
+  enforce **Safe Search** for their members. Any group can carry a
+  **schedule** — school-night hours, weekend windows — and applies only
+  inside it; outside, its devices follow the default rules.
+
+  **Safe Search** (per group here, or network-wide from Settings) answers
+  queries for Google, Bing, DuckDuckGo, and YouTube with the provider's
+  enforced-safe host (`forcesafesearch.google.com`, `strict.bing.com`,
+  `safe.duckduckgo.com`, `restrictmoderate.youtube.com`), so filtered
+  results are enforced by the provider itself and can't be switched off
+  in the page settings. Only exact search hostnames are rewritten —
+  Gmail, Maps, and other subdomains are untouched.
+- **The Codex** (blocklists) — add, enable/disable, or remove list
+  subscriptions and refresh them on demand, with per-list rule counts and
+  fetch errors. The **Blocked services** card blocks a whole service
+  (TikTok, YouTube, Discord…) with one checkbox for every device. To block
+  a service only for some devices, or only at certain times, set it on a
+  **group** on the Devices page instead — a group's blocked services apply
+  to its members and obey the group's schedule.
+- **Pardons & Sentences** (allow/deny domains) — manage both lists, plus a
+  "judge a domain" tool that shows exactly which rule decides any name's
+  fate before you ever query it. The **Local DNS** card lives here too:
+  A/AAAA/CNAME records (wildcards like `*.home.lab` included) that Minos
+  answers itself — they beat the blocklists, never leave your network, and
+  address records answer reverse (PTR) lookups automatically.
+- **Settings** — everything below is editable here and applies immediately,
+  no restart: upstream resolvers and their order, conditional forwarding
+  (send `lan` or your reverse zone to the router so DHCP hostnames keep
+  resolving), the response cache (repeat queries answered from memory —
+  the dashboard shows the hit rate), blocking mode and TTL, network-wide
+  Safe Search, list refresh interval, query-log retention and buffer
+  size, the API token, a one-click YAML config backup, and an opt-in
+  daily update check (a "vX.Y.Z available" link appears in the sidebar
+  when a newer release exists — nothing is sent beyond the request).
+
+If you set `api.token` (in the config file or from Settings), the UI and
+CLI require it.
+
 ## Monitoring with Prometheus / Grafana
 
 `GET /metrics` on the API port serves Prometheus exposition format:
@@ -396,6 +381,36 @@ Scripting Minos instead of watching it? The full REST surface is in
 [api.md](api.md), and [home-assistant.md](home-assistant.md) has
 copy-paste recipes: a blocking switch, sensors, bedtime device blocks,
 and Minos events on your phone.
+
+## Migrating from Pi-hole or AdGuard Home
+
+One command carries your settings over — run it before starting Minos (or
+restart afterwards), since it edits the config file directly:
+
+```sh
+# From a Pi-hole install (reads gravity.db and custom.list, read-only):
+minos import pihole /etc/pihole
+
+# From AdGuard Home:
+minos import adguard /opt/AdGuardHome/AdGuardHome.yaml
+```
+
+What comes across: blocklist subscriptions (with their enabled state),
+exact allow/deny domains and user rules, local DNS records / rewrites,
+and — from AdGuard Home — blocked services that exist in the Minos
+catalog. Imports only add: nothing already in your Minos config is
+changed, and running an import twice adds nothing new.
+
+What doesn't: regex rules and AdBlock rules with options (Minos matches
+whole domains only), allowlist subscriptions, and upstream/DHCP settings.
+Every skipped item is printed with a reason so nothing vanishes silently.
+
+Prefer the web UI? **Settings → Import from Pi-hole or AdGuard Home** takes
+the same files as an upload (`gravity.db`, an optional `custom.list`, or
+`AdGuardHome.yaml`) and shows the same add-only report — no shell needed.
+The **Backup & restore** card there also restores a `minos.yaml` you
+exported earlier (listen addresses and query-log storage are kept from the
+running instance, since those need a restart to change).
 
 ## Configuration
 
@@ -503,18 +518,3 @@ failure breaker or recovers, and — with the update check enabled — a
  "message":"192.168.1.77 (androids-phone.lan) [aa:bb:cc:dd:ee:ff] made its first DNS query through Minos.",
  "time":"2026-07-05T10:12:03Z"}
 ```
-
-## CLI
-
-```sh
-minos status     # show counters and pause state
-minos pause 30m  # pause blocking (blank duration = until resumed)
-minos resume     # resume blocking
-minos import pihole /etc/pihole            # migrate Pi-hole settings
-minos import adguard AdGuardHome.yaml      # migrate AdGuard Home settings
-minos version
-```
-
-`status`, `pause`, and `resume` talk to the running instance over its HTTP
-API, honoring `-config` to find the address and token. `import` edits the
-config file directly — run it while Minos is stopped, or restart afterwards.
