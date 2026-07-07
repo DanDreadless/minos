@@ -33,8 +33,10 @@ no appeals (well, except pardons).
 
 **For the household**
 
-- Device tracking (IP, MAC, hostname) with per-device groups: extra rules,
-  full bypass, or no DNS at all — and a one-click block for any device
+- Device identity — IP, MAC, vendor (from the MAC's OUI), and hostname
+  (reverse DNS aimed at the gateway, with an mDNS `.local` fallback) — with
+  per-device groups: extra rules, full bypass, or no DNS at all, plus a
+  one-click block for any device
 - One-click blocked services (TikTok, YouTube, Discord…) — globally or
   per group, with optional schedules ("no social media after 21:00")
 - Safe Search enforcement (Google, Bing, DuckDuckGo, YouTube) — network-wide
@@ -52,7 +54,8 @@ no appeals (well, except pardons).
 
 **Running it**
 
-- Web dashboard with query charts, top blocked domains, busiest clients,
+- Web dashboard with query charts, top blocked domains, and busiest clients
+  — all clickable to drill straight into the matching (full-history) log —
   cache hit rate, and a live query log streamed over WebSocket
 - Full management from the UI: blocklists, allow/deny domains, upstreams,
   blocking mode, retention, API token — all applied live, no restarts
@@ -66,8 +69,9 @@ no appeals (well, except pardons).
   does, your automations can do
 - Webhook / [ntfy](https://ntfy.sh) notifications: a new device on your
   network, an upstream failing or recovering, a new release
-- Opt-in update check — a "vX.Y.Z available" link in the sidebar; off by
-  default, and nothing is sent beyond the request itself
+- Opt-in update check — when enabled, an in-app banner shows the exact
+  upgrade command for how you installed (quick-install, Docker, or source);
+  off by default, and nothing is sent beyond the request itself
 - Batched SQLite persistence that respects SD cards
 - No telemetry. Ever.
 
@@ -143,8 +147,13 @@ Everything from the July 2026 competitive review has shipped — the
 resolver core (cache, dedup, serve-stale, failover health, private
 reverse zones), family controls, the Pi-hole/AdGuard importer with a UI
 uploader, client-facing DoT/DoH with automatic ACME certificates,
-metrics, notifications, an opt-in update check, and the release pipeline.
-The only item still under consideration is DNSSEC validation; details are
+metrics, notifications, and the release pipeline. Two follow-up rounds
+from real-world use have shipped since: a bootstrap-free default upstream
+and curated resolver picker, clickable dashboard drill-downs and a
+full-width UI, rollback-safe config loading, device **vendor** labels and
+**mDNS** hostname resolution, a full-history Docket, and in-app upgrade
+guidance. Still planned: further device-identity layers (DHCP-lease
+ingestion, NetBIOS) and, under consideration, DNSSEC validation — details
 in [docs/roadmap.md](docs/roadmap.md).
 
 ## Developing

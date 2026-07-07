@@ -45,6 +45,21 @@ Counters and state, cheap enough to poll:
 `paused_until` (RFC 3339) appears during a timed pause; `latest_version`
 appears once the opt-in update check has run.
 
+### `GET /api/update`
+
+The running and latest versions plus an actionable upgrade command for how
+*this* instance was installed (detected at runtime):
+
+```json
+{"current": "0.7.0", "latest": "0.8.0", "available": true,
+ "install_method": "binary",
+ "command": "curl -fsSL https://raw.githubusercontent.com/DanDreadless/minos/main/deploy/install.sh | sudo sh && sudo systemctl restart minos",
+ "notes_url": "https://github.com/DanDreadless/minos/releases/tag/v0.8.0"}
+```
+
+`install_method` is `binary` (quick-install), `docker`, or `source`.
+Display-only — Minos never runs the command itself.
+
 ### `GET /api/stats?hours=24`
 
 Dashboard aggregates for a 1–168 hour window: a `timeline` of
@@ -78,6 +93,15 @@ Newest first, `limit` 1–10000, from the in-memory ring:
 
 Allowed entries carry `upstream` instead of `list`/`rule` — the resolver
 that answered, or `cache`, `stale`, `local`, or `safesearch`.
+
+### `GET /api/querylog/history?q=&verdict=&before=&limit=`
+
+The persisted log (SQLite), newest first — the full retained history behind
+search and the dashboard drill-downs, not just the in-memory ring. `q`
+matches a client IP or domain substring, `verdict` is `blocked`/`allowed`/
+`all`, `before` is a unix-millis cursor for "load older" pagination, `limit`
+1–1000. Returns `[]` in ephemeral mode (there the ring already backs both the
+log and the dashboard, so the UI filters it directly).
 
 ### `GET /api/querylog/stream` (WebSocket)
 
@@ -124,8 +148,10 @@ always beats deny.
 ## Devices & groups
 
 - `GET /api/clients` — every device that has queried plus every configured
-  one: `{ip, mac, hostname, name, group, blocked, seen, queries,
-  queries_blocked, first_seen, last_seen}`
+  one: `{ip, mac, vendor, hostname, name, group, blocked, seen, queries,
+  queries_blocked, first_seen, last_seen}`. `vendor` is derived from the MAC
+  (OUI); `hostname` comes from reverse DNS via the gateway, falling back to
+  mDNS `.local` — both best-effort.
 - `PUT /api/clients/{ip}` — upsert any of `{"name", "mac", "group",
   "blocked"}` (`"group": "default"` unassigns)
 - `DELETE /api/clients/{ip}` — forget the saved assignment

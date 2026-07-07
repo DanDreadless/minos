@@ -234,9 +234,11 @@ Open `http://<host>:8080`. Six pages, one per concern:
   filters. Every blocked entry shows *which list and rule* condemned it and
   has a one-click **Pardon** button; allowed entries can be **Sentenced**
   (blocked) just as fast.
-- **Devices** — every client that queries the resolver, identified by IP
-  plus MAC address (from the ARP table) and hostname (reverse DNS) where
-  available, with query counts and last-seen times. From here you can label
+- **Devices** — every client that queries the resolver, identified by IP,
+  MAC address (from the ARP table), vendor (derived from the MAC), and
+  hostname (reverse DNS aimed at the gateway, with an mDNS `.local` fallback)
+  where available, with query counts and last-seen times. From here you can
+  label
   a device, block its DNS entirely, or assign it to a **group**:
   - `filter` groups get the default rules *plus* the group's own extra
     allow/deny domains and blocked services (a group pardon beats a
