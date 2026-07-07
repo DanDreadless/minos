@@ -134,7 +134,8 @@ export interface ListStatus {
 }
 
 export interface Device {
-  ip: string;
+  ip: string; // primary (most recently active) address
+  ips?: string[]; // every address this device has used; primary included
   mac?: string;
   vendor?: string;
   hostname?: string;
@@ -265,9 +266,16 @@ export const api = {
   check: (domain: string) =>
     request<CheckResult>('GET', `/api/check?domain=${encodeURIComponent(domain)}`),
   querylog: (limit = 100) => request<LogEntry[]>('GET', `/api/querylog?limit=${limit}`),
-  querylogHistory: (params: { q?: string; verdict?: string; before?: number; limit?: number }) => {
+  querylogHistory: (params: {
+    q?: string;
+    client?: string; // exact address(es), comma-separated for a multi-IP device
+    verdict?: string;
+    before?: number;
+    limit?: number;
+  }) => {
     const sp = new URLSearchParams();
     if (params.q) sp.set('q', params.q);
+    if (params.client) sp.set('client', params.client);
     if (params.verdict && params.verdict !== 'all') sp.set('verdict', params.verdict);
     if (params.before) sp.set('before', String(params.before));
     sp.set('limit', String(params.limit ?? 200));
@@ -309,12 +317,15 @@ export const api = {
     request<unknown>('DELETE', `/api/denylist/${encodeURIComponent(domain)}`),
 
   clients: () => request<Device[]>('GET', '/api/clients'),
+  // key is the device's MAC when it has one (so the assignment follows it
+  // across DHCP leases), else its IP. `ip` is a last-known-address hint used
+  // only when creating a MAC-keyed assignment for a device that's offline.
   updateClient: (
-    ip: string,
-    upd: { name?: string; mac?: string; group?: string; blocked?: boolean },
-  ) => request<Device[]>('PUT', `/api/clients/${encodeURIComponent(ip)}`, upd),
-  deleteClient: (ip: string) =>
-    request<Device[]>('DELETE', `/api/clients/${encodeURIComponent(ip)}`),
+    key: string,
+    upd: { name?: string; mac?: string; group?: string; blocked?: boolean; ip?: string },
+  ) => request<Device[]>('PUT', `/api/clients/${encodeURIComponent(key)}`, upd),
+  deleteClient: (key: string) =>
+    request<Device[]>('DELETE', `/api/clients/${encodeURIComponent(key)}`),
 
   groups: () => request<Group[]>('GET', '/api/groups'),
   addGroup: (g: { name: string; mode: string; allowlist?: string[]; denylist?: string[] }) =>

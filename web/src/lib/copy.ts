@@ -55,6 +55,7 @@ export const copy = {
     filterAll: 'All verdicts',
     filterBlocked: 'Condemned only',
     filterAllowed: 'Passed only',
+    deviceScope: 'device', // prefixes the drilled-in device's IP(s) chip
     live: 'live',
   },
 

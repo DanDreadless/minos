@@ -44,12 +44,20 @@ export function currentParams(): Record<string, string> {
   return Object.fromEntries(new URLSearchParams(location.hash.slice(q + 1)).entries());
 }
 
-// docketHref builds a deep link into the Docket pre-filtered by verdict and/or
-// a client or domain substring — the target of the dashboard drill-downs.
-export function docketHref(params: { verdict?: string; client?: string; qname?: string }): string {
+// docketHref builds a deep link into the Docket pre-filtered by verdict, an
+// exact client (or a device's set of IPs), and/or a domain substring — the
+// target of the dashboard and devices drill-downs. `client`/`clients` match
+// whole addresses; `qname` is a substring.
+export function docketHref(params: {
+  verdict?: string;
+  client?: string;
+  clients?: string[];
+  qname?: string;
+}): string {
   const sp = new URLSearchParams();
   if (params.verdict) sp.set('verdict', params.verdict);
-  if (params.client) sp.set('client', params.client);
+  const ips = params.clients ?? (params.client ? [params.client] : []);
+  if (ips.length) sp.set('client', ips.join(','));
   if (params.qname) sp.set('qname', params.qname);
   const qs = sp.toString();
   return qs ? `#/querylog?${qs}` : '#/querylog';

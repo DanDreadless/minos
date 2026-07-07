@@ -303,6 +303,90 @@ func TestSeedDoesNotClobberLiveState(t *testing.T) {
 	}
 }
 
+func TestDevicesMergeByMAC(t *testing.T) {
+	r := NewRegistry()
+	r.ApplyConfig(config.Default())
+	now := time.Now()
+	// One physical device across two DHCP leases over its life.
+	r.Touch("192.168.1.50", true, now.Add(-time.Hour))
+	r.Touch("192.168.1.50", false, now.Add(-time.Hour))
+	r.setMAC("192.168.1.50", "aa:bb:cc:dd:ee:ff")
+	r.Touch("192.168.1.77", false, now)           // newer lease
+	r.setMAC("192.168.1.77", "AA-BB-CC-DD-EE-FF") // same MAC, different notation
+
+	devs := r.Devices(config.Default())
+	if len(devs) != 1 {
+		t.Fatalf("got %d device rows, want 1 merged: %+v", len(devs), devs)
+	}
+	d := devs[0]
+	if d.IP != "192.168.1.77" {
+		t.Errorf("primary IP = %q, want the most recently active 192.168.1.77", d.IP)
+	}
+	if len(d.IPs) != 2 {
+		t.Errorf("IPs = %v, want both leases for the drill-down", d.IPs)
+	}
+	if d.Queries != 3 || d.QBlocked != 1 {
+		t.Errorf("merged counts = q%d b%d, want q3 b1", d.Queries, d.QBlocked)
+	}
+	if NormalizeMAC(d.MAC) != "aa:bb:cc:dd:ee:ff" {
+		t.Errorf("mac = %q, want aa:bb:cc:dd:ee:ff", d.MAC)
+	}
+}
+
+func TestPolicyFollowsMACAcrossLeases(t *testing.T) {
+	cfg := config.Default()
+	cfg.Groups = []config.Group{{Name: "iot", Mode: "block"}}
+	cfg.Clients = []config.Client{{IP: "192.168.1.10", MAC: "aa:bb:cc:00:11:22", Group: "iot"}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry()
+	r.ApplyConfig(cfg)
+
+	// The stored last-known IP is covered even before any live traffic.
+	if p := r.PolicyFor("192.168.1.10"); !p.Refuses() {
+		t.Errorf("last-known IP policy = %+v, want refuse", p)
+	}
+	// The device reappears on a new lease. Until ARP tags the MAC it follows
+	// the default rules; once enrichment learns the MAC the block follows it.
+	r.Touch("192.168.1.55", false, time.Now())
+	if p := r.PolicyFor("192.168.1.55"); p != nil {
+		t.Errorf("new lease before MAC known = %+v, want nil (default)", p)
+	}
+	r.setMAC("192.168.1.55", "aa:bb:cc:00:11:22") // enrichment → rebuild
+	if p := r.PolicyFor("192.168.1.55"); !p.Refuses() {
+		t.Errorf("new lease after MAC learned = %+v, want refuse", p)
+	}
+}
+
+func TestConfigMACMergesWithLiveDevice(t *testing.T) {
+	cfg := config.Default()
+	cfg.Clients = []config.Client{{IP: "192.168.1.10", MAC: "de:ad:be:ef:00:01", Name: "nas"}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry()
+	r.ApplyConfig(cfg)
+	// The device is currently on a different lease than the stored last-known IP.
+	r.Touch("192.168.1.88", false, time.Now())
+	r.setMAC("192.168.1.88", "de:ad:be:ef:00:01")
+
+	devs := r.Devices(cfg)
+	if len(devs) != 1 {
+		t.Fatalf("want 1 merged row, got %d: %+v", len(devs), devs)
+	}
+	d := devs[0]
+	if d.Name != "nas" {
+		t.Errorf("name = %q, want nas (the config assignment follows the MAC)", d.Name)
+	}
+	if d.IP != "192.168.1.88" {
+		t.Errorf("primary = %q, want the current lease 192.168.1.88", d.IP)
+	}
+	if len(d.IPs) != 2 {
+		t.Errorf("IPs = %v, want current + last-known for the drill-down", d.IPs)
+	}
+}
+
 func BenchmarkTouch(b *testing.B) {
 	r := NewRegistry()
 	now := time.Now()

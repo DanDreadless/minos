@@ -13,11 +13,17 @@
   let newGroupMode = 'filter';
   let timer: ReturnType<typeof setInterval> | null = null;
 
+  // A device is addressed by its MAC when it has one (so an assignment follows
+  // it across DHCP leases), else by its IP.
+  function deviceKey(d: Device): string {
+    return d.mac || d.ip;
+  }
+
   async function load(): Promise<void> {
     try {
       [devices, groups] = await Promise.all([api.clients(), api.groups()]);
       const drafts: Record<string, string> = {};
-      for (const d of devices) drafts[d.ip] = d.name ?? '';
+      for (const d of devices) drafts[deviceKey(d)] = d.name ?? '';
       names = drafts;
     } catch (e) {
       notifyError(e);
@@ -37,9 +43,11 @@
     return `${Math.floor(s / 86400)}d ago`;
   }
 
-  async function apply(ip: string, upd: Parameters<typeof api.updateClient>[1]): Promise<void> {
+  // The primary IP rides along as a last-known-address hint, needed only when
+  // creating a MAC-keyed assignment for a device that's currently offline.
+  async function apply(d: Device, upd: Parameters<typeof api.updateClient>[1]): Promise<void> {
     try {
-      devices = await api.updateClient(ip, upd);
+      devices = await api.updateClient(deviceKey(d), { ...upd, ip: d.ip });
     } catch (e) {
       notifyError(e);
       await load();
@@ -47,17 +55,17 @@
   }
 
   async function saveName(d: Device): Promise<void> {
-    const label = (names[d.ip] ?? '').trim();
+    const label = (names[deviceKey(d)] ?? '').trim();
     if (label === (d.name ?? '')) return;
-    await apply(d.ip, { name: label });
+    await apply(d, { name: label });
   }
 
   async function setGroup(d: Device, ev: Event): Promise<void> {
-    await apply(d.ip, { group: (ev.target as HTMLSelectElement).value });
+    await apply(d, { group: (ev.target as HTMLSelectElement).value });
   }
 
   async function toggleBlock(d: Device): Promise<void> {
-    await apply(d.ip, { blocked: !d.blocked });
+    await apply(d, { blocked: !d.blocked });
     notify(
       d.blocked ? `DNS restored for ${d.name || d.ip}.` : `DNS blocked for ${d.name || d.ip}.`,
     );
@@ -65,7 +73,7 @@
 
   async function forget(d: Device): Promise<void> {
     try {
-      devices = await api.deleteClient(d.ip);
+      devices = await api.deleteClient(deviceKey(d));
     } catch (e) {
       notifyError(e);
     }
@@ -219,12 +227,19 @@
         </tr>
       </thead>
       <tbody>
-        {#each devices as d (d.ip)}
+        {#each devices as d (d.mac || d.ip)}
           <tr class:dns-blocked={d.blocked}>
             <td>
-              <a class="ip-link" href={docketHref({ client: d.ip })} title={copy.devices.viewInDocket}>
+              <a
+                class="ip-link"
+                href={docketHref({ clients: d.ips ?? [d.ip] })}
+                title={copy.devices.viewInDocket}
+              >
                 {d.ip}
               </a>
+              {#if d.ips && d.ips.length > 1}
+                <span class="ip-more" title={d.ips.join(', ')}>+{d.ips.length - 1}</span>
+              {/if}
             </td>
             <td>{d.mac ?? ''}</td>
             <td>{d.vendor ?? ''}</td>
@@ -233,7 +248,7 @@
               <input
                 class="label-input"
                 placeholder={copy.devices.namePlaceholder}
-                bind:value={names[d.ip]}
+                bind:value={names[d.mac || d.ip]}
                 on:blur={() => saveName(d)}
                 on:keydown={blurOnEnter}
               />
@@ -419,6 +434,13 @@
   .ip-link:hover {
     color: var(--accent);
     text-decoration: underline;
+  }
+
+  .ip-more {
+    margin-left: 0.35rem;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    cursor: help;
   }
 
   tr.dns-blocked td {

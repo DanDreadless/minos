@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/netip"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -61,10 +62,13 @@ type device struct {
 	fresh atomic.Bool
 }
 
-// Device is the merged API view of a client: live traffic state plus any
-// configured assignment.
+// Device is the merged API view of one physical device: live traffic state
+// (summed across every IP it has used) plus any configured assignment.
 type Device struct {
-	IP        string     `json:"ip"`
+	IP string `json:"ip"` // the primary (most recently active) IP
+	// IPs lists every IP this device has used, primary included, so a
+	// drill-down can span them all. Sorted numerically.
+	IPs       []string   `json:"ips,omitempty"`
 	MAC       string     `json:"mac,omitempty"`
 	Vendor    string     `json:"vendor,omitempty"` // derived from MAC via the OUI table
 	Hostname  string     `json:"hostname,omitempty"`
@@ -213,12 +217,73 @@ func (r *Registry) rebuildPolicies(now time.Time) {
 			pol = Policy{Group: "default", Mode: ModeFilter}
 		}
 		pol.Blocked = cl.Blocked
-		if pol.Blocked || pol.Group != "default" {
-			p := pol
-			table[cl.IP] = &p
+		if !pol.Blocked && pol.Group == "default" {
+			continue
+		}
+		p := pol
+		// The hot-path table is IP-keyed; a MAC-keyed client resolves to every
+		// live IP carrying that MAC (built off the hot path here), so its group
+		// follows the device across DHCP leases.
+		for _, ip := range r.ipsForClient(cl) {
+			table[ip] = &p
 		}
 	}
 	r.policies.Store(&table)
+}
+
+// ipsForClient lists the IPs a configured client resolves to: a MAC-less client
+// is just its IP; a MAC-keyed client is every seen IP currently carrying that
+// MAC, plus its last-known IP as a fallback so a returning device stays covered
+// until ARP re-tags it.
+func (r *Registry) ipsForClient(cl config.Client) []string {
+	if cl.MAC == "" {
+		return []string{cl.IP}
+	}
+	want := NormalizeMAC(cl.MAC)
+	ips := []string{cl.IP}
+	r.seen.Range(func(k, v any) bool {
+		if m := v.(*device).mac.Load(); m != nil && NormalizeMAC(*m) == want {
+			if ip := k.(string); ip != cl.IP {
+				ips = append(ips, ip)
+			}
+		}
+		return true
+	})
+	return ips
+}
+
+// macConfigured reports whether any configured client is keyed on mac.
+func (r *Registry) macConfigured(mac string) bool {
+	cfg := r.cfg.Load()
+	if cfg == nil {
+		return false
+	}
+	want := NormalizeMAC(mac)
+	for _, cl := range cfg.Clients {
+		if cl.MAC != "" && NormalizeMAC(cl.MAC) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// CurrentIP returns the most recently active IP currently carrying mac, or ""
+// if none is known. The API uses it to stamp a last-known IP onto a MAC-keyed
+// assignment. Off the hot path.
+func (r *Registry) CurrentIP(mac string) string {
+	want := NormalizeMAC(mac)
+	var bestIP string
+	bestLast := int64(-1)
+	r.seen.Range(func(k, v any) bool {
+		d := v.(*device)
+		if m := d.mac.Load(); m != nil && NormalizeMAC(*m) == want {
+			if l := d.lastSeen.Load(); l > bestLast {
+				bestLast, bestIP = l, k.(string)
+			}
+		}
+		return true
+	})
+	return bestIP
 }
 
 // scheduleActive reports whether now falls inside the schedule's window.
@@ -279,61 +344,194 @@ func (r *Registry) Seed(ip string, total, blocked uint64, first, last time.Time)
 	}
 }
 
-// Devices returns the merged view: every IP that has queried, plus every
-// configured client (even if never seen). Sorted by numeric IP address so
-// the list is stable — rows don't reorder as live traffic updates last-seen
-// times (192.168.1.9 sorts before 192.168.1.10, and v4 before v6).
+// Devices returns the merged per-physical-device view. A device is identified
+// by its MAC when one is known (from ARP or a user-set assignment), else by its
+// IP; every IP a device has used folds into one row, with query counts summed
+// and first/last-seen spanning them — so a device that power-cycled onto a new
+// DHCP lease shows once, not once per address. Configured assignments (label,
+// group, block) attach by MAC when the client carries one, else by IP. Rows are
+// sorted by the numeric primary (most recently active) IP so the list is stable
+// (192.168.1.9 before 192.168.1.10, v4 before v6).
 func (r *Registry) Devices(cfg *config.Config) []Device {
-	byIP := make(map[string]*Device)
+	accs := make(map[string]*deviceAcc)
+
 	r.seen.Range(func(k, v any) bool {
 		ip := k.(string)
 		d := v.(*device)
-		first := time.Unix(0, d.firstSeen.Load())
-		last := time.Unix(0, d.lastSeen.Load())
-		dev := &Device{
-			IP:        ip,
-			Group:     "default",
-			Seen:      true,
-			Queries:   d.total.Load(),
-			QBlocked:  d.blocked.Load(),
-			FirstSeen: &first,
-			LastSeen:  &last,
+		mac := ""
+		if m := d.mac.Load(); m != nil {
+			mac = *m
 		}
-		if mac := d.mac.Load(); mac != nil {
-			dev.MAC = *mac
-		}
+		host := ""
 		if h := d.hostname.Load(); h != nil {
-			dev.Hostname = *h
+			host = *h
 		}
-		byIP[ip] = dev
+		a := accFor(accs, deviceKey(ip, mac))
+		a.addLive(ip, mac, host, d.total.Load(), d.blocked.Load(),
+			d.firstSeen.Load(), d.lastSeen.Load())
 		return true
 	})
+
+	// Overlay configured assignments, matching an existing device by MAC (or
+	// by last-known IP when the MAC isn't in the ARP table yet) and creating a
+	// standalone row for one never seen.
 	for _, cl := range cfg.Clients {
-		dev, ok := byIP[cl.IP]
-		if !ok {
-			dev = &Device{IP: cl.IP, Group: "default"}
-			byIP[cl.IP] = dev
+		a := matchAcc(accs, cl)
+		if a == nil {
+			a = accFor(accs, deviceKey(cl.IP, cl.MAC))
 		}
-		dev.Name = cl.Name
-		dev.Blocked = cl.Blocked
-		if cl.Group != "" {
-			dev.Group = cl.Group
-		}
-		if cl.MAC != "" { // a user-specified MAC beats ARP
-			dev.MAC = cl.MAC
-		}
+		a.applyConfig(cl)
 	}
-	out := make([]Device, 0, len(byIP))
-	for _, d := range byIP {
-		if d.MAC != "" {
-			d.Vendor = oui.Vendor(d.MAC) // "" for prefixes not in the curated table
-		}
-		out = append(out, *d)
+
+	out := make([]Device, 0, len(accs))
+	for _, a := range accs {
+		out = append(out, a.device())
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return lessIP(out[i].IP, out[j].IP)
 	})
 	return out
+}
+
+// deviceKey is the merge key: a device with a MAC groups by it (regardless of
+// IP), one without groups by its IP.
+func deviceKey(ip, mac string) string {
+	if mac != "" {
+		return "mac:" + NormalizeMAC(mac)
+	}
+	return "ip:" + ip
+}
+
+func accFor(accs map[string]*deviceAcc, key string) *deviceAcc {
+	a := accs[key]
+	if a == nil {
+		a = &deviceAcc{group: "default", ipSet: map[string]bool{}}
+		accs[key] = a
+	}
+	return a
+}
+
+// matchAcc finds the device a configured client applies to: by MAC first, then
+// by any IP the device is known to have used. Returns nil if none exists yet.
+func matchAcc(accs map[string]*deviceAcc, cl config.Client) *deviceAcc {
+	if cl.MAC != "" {
+		if a := accs["mac:"+NormalizeMAC(cl.MAC)]; a != nil {
+			return a
+		}
+	}
+	for _, a := range accs {
+		if a.ipSet[cl.IP] {
+			return a
+		}
+	}
+	return nil
+}
+
+// deviceAcc folds one physical device's per-IP live state and its configured
+// assignment into a single row.
+type deviceAcc struct {
+	ips         []string
+	ipSet       map[string]bool
+	mac         string
+	primaryIP   string
+	primaryLast int64 // unix nanos of the primary IP's last-seen
+	primaryHost string
+	total       uint64
+	blocked     uint64
+	first       int64 // unix nanos, min across IPs (0 = unset)
+	last        int64 // unix nanos, max across IPs
+	seen        bool
+	name        string
+	group       string
+	blockedDev  bool
+}
+
+func (a *deviceAcc) addIP(ip string) {
+	if !a.ipSet[ip] {
+		a.ipSet[ip] = true
+		a.ips = append(a.ips, ip)
+	}
+}
+
+func (a *deviceAcc) addLive(ip, mac, host string, total, blocked uint64, first, last int64) {
+	a.addIP(ip)
+	a.seen = true
+	if mac != "" {
+		a.mac = mac
+	}
+	a.total += total
+	a.blocked += blocked
+	if first != 0 && (a.first == 0 || first < a.first) {
+		a.first = first
+	}
+	if last > a.last {
+		a.last = last
+	}
+	if a.primaryIP == "" || last > a.primaryLast {
+		a.primaryIP, a.primaryLast = ip, last
+		if host != "" {
+			a.primaryHost = host
+		}
+	}
+	if a.primaryHost == "" && host != "" {
+		a.primaryHost = host
+	}
+}
+
+func (a *deviceAcc) applyConfig(cl config.Client) {
+	a.name = cl.Name
+	a.blockedDev = cl.Blocked
+	if cl.Group != "" {
+		a.group = cl.Group
+	}
+	if cl.MAC != "" { // a user-set MAC beats ARP
+		a.mac = cl.MAC
+	}
+	a.addIP(cl.IP) // record the last-known IP even if never seen live
+	if a.primaryIP == "" {
+		a.primaryIP = cl.IP
+	}
+}
+
+func (a *deviceAcc) device() Device {
+	sort.Slice(a.ips, func(i, j int) bool { return lessIP(a.ips[i], a.ips[j]) })
+	group := a.group
+	if group == "" {
+		group = "default"
+	}
+	d := Device{
+		IP:       a.primaryIP,
+		IPs:      a.ips,
+		MAC:      a.mac,
+		Hostname: a.primaryHost,
+		Name:     a.name,
+		Group:    group,
+		Blocked:  a.blockedDev,
+		Seen:     a.seen,
+		Queries:  a.total,
+		QBlocked: a.blocked,
+	}
+	if a.mac != "" {
+		d.Vendor = oui.Vendor(a.mac) // "" for prefixes not in the curated table
+	}
+	if a.first != 0 {
+		t := time.Unix(0, a.first)
+		d.FirstSeen = &t
+	}
+	if a.last != 0 {
+		t := time.Unix(0, a.last)
+		d.LastSeen = &t
+	}
+	return d
+}
+
+// NormalizeMAC canonicalises a MAC to lowercase colon form so ARP-derived and
+// user-entered addresses compare equal regardless of separator or case.
+func NormalizeMAC(s string) string {
+	if ha, err := net.ParseMAC(s); err == nil {
+		return ha.String()
+	}
+	return strings.ToLower(strings.TrimSpace(s))
 }
 
 // lessIP orders two device keys by numeric IP address. Unparseable keys sort
@@ -361,10 +559,24 @@ func (r *Registry) SeenCount() int {
 	return n
 }
 
-// setMAC/setHostname are called by the enrichment worker only.
+// setMAC/setHostname are called by the enrichment worker only (a single
+// goroutine — the rebuild below never races the schedule ticker's).
 func (r *Registry) setMAC(ip, mac string) {
-	if v, ok := r.seen.Load(ip); ok {
-		v.(*device).mac.Store(&mac)
+	v, ok := r.seen.Load(ip)
+	if !ok {
+		return
+	}
+	d := v.(*device)
+	if prev := d.mac.Load(); prev != nil && *prev == mac {
+		return // unchanged: no policy consequence
+	}
+	d.mac.Store(&mac)
+	// A group/block keyed on this MAC must take effect on this IP promptly:
+	// the hot-path table is IP-keyed and built from MAC assignments, so a
+	// freshly learned association needs a rebuild. Only when the MAC is
+	// actually configured, to avoid rebuilding on every ARP tag.
+	if r.macConfigured(mac) {
+		r.rebuildPolicies(time.Now())
 	}
 }
 

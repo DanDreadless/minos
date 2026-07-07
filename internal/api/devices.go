@@ -4,12 +4,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 
 	"github.com/go-chi/chi/v5"
 
+	"minos/internal/clients"
 	"minos/internal/config"
 )
+
+// clientKey reads the {key} route param URL-decoded. chi leaves path segments
+// percent-encoded, so a MAC's colons arrive as %3A from the browser's
+// encodeURIComponent; an IP key is unaffected.
+func clientKey(r *http.Request) string {
+	key := chi.URLParam(r, "key")
+	if dec, err := url.PathUnescape(key); err == nil {
+		return dec
+	}
+	return key
+}
 
 // --- Devices ---
 
@@ -22,27 +36,38 @@ type clientUpdate struct {
 	MAC     *string `json:"mac"`
 	Group   *string `json:"group"`
 	Blocked *bool   `json:"blocked"`
+	// IP is a last-known-address hint used only when creating a MAC-keyed
+	// assignment for a device that isn't currently in the ARP table, so the
+	// stored Client still carries a valid IP (config validation requires one).
+	IP *string `json:"ip"`
 }
 
-// handleUpdateClient upserts the configured assignment for one device IP.
-// Setting name="", group="", blocked=false and mac="" removes any meaning
-// from the entry, but it stays until DELETEd — harmless either way.
+// handleUpdateClient upserts the configured assignment for one device. The key
+// is the device's MAC when it has one (so the assignment follows it across DHCP
+// leases), else its IP. Setting name="", group="", blocked=false removes any
+// meaning from the entry, but it stays until DELETEd — harmless either way.
 func (s *Server) handleUpdateClient(w http.ResponseWriter, r *http.Request) {
-	ip := chi.URLParam(r, "ip")
+	key := clientKey(r)
 	var upd clientUpdate
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&upd); err != nil {
 		writeError(w, http.StatusBadRequest, "body must be JSON with any of: name, mac, group, blocked")
 		return
 	}
+	isMAC := keyIsMAC(key)
 	err := s.store.Update(func(c *config.Config) error {
 		for i := range c.Clients {
-			if c.Clients[i].IP != ip {
+			if !clientMatchesKey(c.Clients[i], key, isMAC) {
 				continue
 			}
 			applyClientUpdate(&c.Clients[i], upd)
+			if isMAC { // keep the last-known IP fresh
+				if cur := s.clients.CurrentIP(key); cur != "" {
+					c.Clients[i].IP = cur
+				}
+			}
 			return nil
 		}
-		fresh := config.Client{IP: ip}
+		fresh := s.freshClient(key, isMAC, upd)
 		applyClientUpdate(&fresh, upd)
 		c.Clients = append(c.Clients, fresh)
 		return nil
@@ -52,6 +77,36 @@ func (s *Server) handleUpdateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.clients.Devices(s.store.Get()))
+}
+
+// keyIsMAC reports whether a client route key is a MAC address (else an IP).
+func keyIsMAC(key string) bool {
+	_, err := net.ParseMAC(key)
+	return err == nil
+}
+
+// clientMatchesKey reports whether a configured client is the one addressed by
+// key. A MAC key matches only MAC-keyed clients; an IP key matches only
+// IP-keyed ones, so a bare IP never hijacks a device tracked by MAC.
+func clientMatchesKey(cl config.Client, key string, isMAC bool) bool {
+	if isMAC {
+		return cl.MAC != "" && clients.NormalizeMAC(cl.MAC) == clients.NormalizeMAC(key)
+	}
+	return cl.MAC == "" && cl.IP == key
+}
+
+// freshClient builds a new assignment for key. A MAC key resolves its current
+// IP from the registry, falling back to the body's IP hint, so the stored
+// Client always carries a (valid) last-known address.
+func (s *Server) freshClient(key string, isMAC bool, upd clientUpdate) config.Client {
+	if !isMAC {
+		return config.Client{IP: key}
+	}
+	cl := config.Client{MAC: clients.NormalizeMAC(key)}
+	if cl.IP = s.clients.CurrentIP(key); cl.IP == "" && upd.IP != nil {
+		cl.IP = *upd.IP
+	}
+	return cl
 }
 
 func applyClientUpdate(cl *config.Client, upd clientUpdate) {
@@ -74,12 +129,13 @@ func applyClientUpdate(cl *config.Client, upd clientUpdate) {
 }
 
 func (s *Server) handleDeleteClient(w http.ResponseWriter, r *http.Request) {
-	ip := chi.URLParam(r, "ip")
+	key := clientKey(r)
+	isMAC := keyIsMAC(key)
 	err := s.store.Update(func(c *config.Config) error {
 		kept := c.Clients[:0]
 		found := false
 		for _, cl := range c.Clients {
-			if cl.IP == ip {
+			if clientMatchesKey(cl, key, isMAC) {
 				found = true
 				continue
 			}
@@ -92,7 +148,7 @@ func (s *Server) handleDeleteClient(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if errors.Is(err, errNotFound) {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("no configured client %q", ip))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no configured client %q", key))
 		return
 	}
 	if err != nil {

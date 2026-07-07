@@ -256,18 +256,39 @@ This is security software; hold it to that standard.
 - **Dashboard aggregates read SQLite** (or the ring in ephemeral mode),
   so entries buffered but not yet flushed (≤30s/500) are missing from
   charts. Accepted skew — do not "fix" it by flushing per query.
-- **Device policy semantics** (fixed decisions): assignment is by source
-  IP (MAC is informational; use DHCP reservations for stability). A
-  client's `blocked: true` overrides its group, including bypass. A
-  device-level DNS block is access control, so recess does NOT lift it;
-  recess does silence group overlay rules. Group overlay pardons beat
-  global denies. Hot-path cost is one sync.Map touch (~15ns) plus one
-  atomic map read (~5ns), zero allocations — keep it that way.
+- **Device policy semantics** (fixed decisions): assignment is by **MAC
+  when the device has one** (so a group/block follows it across DHCP
+  leases) and by IP otherwise — the only option for a device Minos can't
+  see at layer 2 (off-subnet, IPv6, DoT/DoH from a proxy). The hot-path
+  table stays **IP-keyed**; a MAC-keyed client is expanded to every live
+  IP carrying that MAC in `rebuildPolicies` (off the hot path), so
+  `PolicyFor` is unchanged — one map read. A freshly learned MAC↔IP
+  association triggers a rebuild from `setMAC` (enrichment worker only, so
+  it never races the schedule ticker) to close the brief default-rules
+  window on a new lease. A configured client always keeps a **valid
+  last-known IP** (`Client.IP`), so an older IP-only binary still loads the
+  config after a downgrade (validation requires a valid IP) — this is why
+  MAC assignment needed **no new YAML key** and sidesteps the deferred
+  schema-version problem. A client's `blocked: true` overrides its group,
+  including bypass. A device-level DNS block is access control, so recess
+  does NOT lift it; recess does silence group overlay rules. Group overlay
+  pardons beat global denies. Hot-path cost is unchanged: one sync.Map
+  touch (~15ns) plus one atomic map read (~5ns), zero allocations — keep
+  it that way.
+- **Devices merge per physical device** (`Registry.Devices`): a device is
+  keyed by MAC when known (else IP), and every IP it has used folds into
+  one row — query counts summed, first/last-seen spanning them, the most
+  recently active IP the "primary", all of them exposed as `ips[]` for the
+  drill-down. This is a **read-path** merge only; the `seen` map and hot
+  path stay per-IP. Solves the duplicate rows a power-cycled device left
+  when it grabbed a new lease. If ARP never tags an old IP's MAC it can't
+  be merged (best-effort) — acceptable.
 - **Device identity is best-effort**: MAC comes from the ARP/neighbor
   table (only works when Minos shares the L2 segment; IPv4 only for
   now), hostname from a reverse-DNS lookup. Both run on the enrichment
   worker, never on the query path. Windows reads `arp -a`; Linux reads
-  /proc/net/arp.
+  /proc/net/arp. `clients.NormalizeMAC` canonicalises to lowercase colon
+  form so ARP-derived and user-entered MACs compare equal.
 - **PTR enrichment targets the gateway first** (fixed decision): a bare
   `net.DefaultResolver.LookupAddr` in production goes to the system
   resolver — usually Minos itself — which answers private reverse zones

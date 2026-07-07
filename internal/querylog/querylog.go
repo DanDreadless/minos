@@ -345,10 +345,14 @@ func (l *Log) prune() {
 // HistoryFilter narrows QueryHistory. Empty fields impose no constraint.
 type HistoryFilter struct {
 	// Search matches (case-insensitively) as a substring of qname OR client —
-	// the same free-text match the Docket search box and drill-downs use.
+	// the free-text match the Docket search box uses.
 	Search string
 	// Verdict is "blocked", "allowed", or "" for both.
 	Verdict string
+	// Clients, when non-empty, restricts to these exact client IPs — the
+	// device drill-down, where one physical device may have several IPs.
+	// Distinct from the substring Search.
+	Clients []string
 }
 
 // QueryHistory returns judged queries newest-first, older than `before`, that
@@ -378,6 +382,14 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 	if f.Verdict == VerdictBlocked || f.Verdict == VerdictAllowed {
 		where = append(where, "verdict = ?")
 		args = append(args, f.Verdict)
+	}
+	if len(f.Clients) > 0 {
+		ph := make([]string, len(f.Clients))
+		for i, c := range f.Clients {
+			ph[i] = "?"
+			args = append(args, c)
+		}
+		where = append(where, "client IN ("+strings.Join(ph, ",")+")")
 	}
 	args = append(args, limit)
 	query := `SELECT ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms
