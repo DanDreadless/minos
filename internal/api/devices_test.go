@@ -158,6 +158,30 @@ func TestMACKeyedAssignment(t *testing.T) {
 	}
 }
 
+func TestMACKeyEncodedPath(t *testing.T) {
+	s, store := newTestServer(t, "")
+	r := s.Router()
+
+	// The browser sends a MAC key percent-encoded (encodeURIComponent turns
+	// each ':' into %3A). The handler must decode it, not treat it as an IP.
+	rec := doJSON(t, r, "PUT", "/api/clients/28%3Acd%3Ac1%3A00%3A11%3A22",
+		`{"name":"pi","ip":"192.168.1.42"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("encoded MAC PUT: status = %d: %s", rec.Code, rec.Body)
+	}
+	cfg := store.Get()
+	if len(cfg.Clients) != 1 || cfg.Clients[0].MAC != "28:cd:c1:00:11:22" || cfg.Clients[0].IP != "192.168.1.42" {
+		t.Fatalf("stored client = %+v, want one MAC-keyed entry", cfg.Clients)
+	}
+	// Forget through the encoded path too.
+	if rec := doJSON(t, r, "DELETE", "/api/clients/28%3Acd%3Ac1%3A00%3A11%3A22", "", nil); rec.Code != http.StatusOK {
+		t.Fatalf("encoded MAC DELETE: status = %d: %s", rec.Code, rec.Body)
+	}
+	if len(store.Get().Clients) != 0 {
+		t.Errorf("clients after forget = %+v", store.Get().Clients)
+	}
+}
+
 func TestClientsListsSeenDevices(t *testing.T) {
 	s, _ := newTestServer(t, "")
 	s.clients.Seed("192.168.1.77", 42, 7, timeNowMinus(3600), timeNowMinus(60))

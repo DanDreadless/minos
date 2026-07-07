@@ -6,12 +6,24 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 
 	"github.com/go-chi/chi/v5"
 
 	"minos/internal/clients"
 	"minos/internal/config"
 )
+
+// clientKey reads the {key} route param URL-decoded. chi leaves path segments
+// percent-encoded, so a MAC's colons arrive as %3A from the browser's
+// encodeURIComponent; an IP key is unaffected.
+func clientKey(r *http.Request) string {
+	key := chi.URLParam(r, "key")
+	if dec, err := url.PathUnescape(key); err == nil {
+		return dec
+	}
+	return key
+}
 
 // --- Devices ---
 
@@ -35,7 +47,7 @@ type clientUpdate struct {
 // leases), else its IP. Setting name="", group="", blocked=false removes any
 // meaning from the entry, but it stays until DELETEd — harmless either way.
 func (s *Server) handleUpdateClient(w http.ResponseWriter, r *http.Request) {
-	key := chi.URLParam(r, "key")
+	key := clientKey(r)
 	var upd clientUpdate
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&upd); err != nil {
 		writeError(w, http.StatusBadRequest, "body must be JSON with any of: name, mac, group, blocked")
@@ -117,7 +129,7 @@ func applyClientUpdate(cl *config.Client, upd clientUpdate) {
 }
 
 func (s *Server) handleDeleteClient(w http.ResponseWriter, r *http.Request) {
-	key := chi.URLParam(r, "key")
+	key := clientKey(r)
 	isMAC := keyIsMAC(key)
 	err := s.store.Update(func(c *config.Config) error {
 		kept := c.Clients[:0]
