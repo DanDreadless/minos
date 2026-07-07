@@ -267,6 +267,19 @@ func (r *Registry) macConfigured(mac string) bool {
 	return false
 }
 
+// IPsForMAC returns every live IP currently carrying mac. Off the hot path.
+func (r *Registry) IPsForMAC(mac string) []string {
+	want := NormalizeMAC(mac)
+	var ips []string
+	r.seen.Range(func(k, v any) bool {
+		if m := v.(*device).mac.Load(); m != nil && NormalizeMAC(*m) == want {
+			ips = append(ips, k.(string))
+		}
+		return true
+	})
+	return ips
+}
+
 // CurrentIP returns the most recently active IP currently carrying mac, or ""
 // if none is known. The API uses it to stamp a last-known IP onto a MAC-keyed
 // assignment. Off the hot path.

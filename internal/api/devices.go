@@ -55,21 +55,25 @@ func (s *Server) handleUpdateClient(w http.ResponseWriter, r *http.Request) {
 	}
 	isMAC := keyIsMAC(key)
 	err := s.store.Update(func(c *config.Config) error {
-		for i := range c.Clients {
-			if !clientMatchesKey(c.Clients[i], key, isMAC) {
-				continue
+		// Pull out the device's existing assignment(s) — a MAC match or a
+		// legacy IP-keyed entry for one of its current IPs (assignments made
+		// before v0.10 were IP-keyed). Removing every match before re-adding a
+		// single entry keeps one config.Client per device and self-heals any
+		// duplicate.
+		ips := s.deviceIPs(key, upd)
+		cl, _ := takeDeviceClient(c, key, isMAC, ips)
+		applyClientUpdate(&cl, upd)
+		if isMAC {
+			cl.MAC = clients.NormalizeMAC(key)
+			if cur := s.clients.CurrentIP(key); cur != "" {
+				cl.IP = cur
+			} else if cl.IP == "" && upd.IP != nil {
+				cl.IP = *upd.IP
 			}
-			applyClientUpdate(&c.Clients[i], upd)
-			if isMAC { // keep the last-known IP fresh
-				if cur := s.clients.CurrentIP(key); cur != "" {
-					c.Clients[i].IP = cur
-				}
-			}
-			return nil
+		} else {
+			cl.IP = key
 		}
-		fresh := s.freshClient(key, isMAC, upd)
-		applyClientUpdate(&fresh, upd)
-		c.Clients = append(c.Clients, fresh)
+		c.Clients = append(c.Clients, cl)
 		return nil
 	})
 	if err != nil {
@@ -85,28 +89,52 @@ func keyIsMAC(key string) bool {
 	return err == nil
 }
 
-// clientMatchesKey reports whether a configured client is the one addressed by
-// key. A MAC key matches only MAC-keyed clients; an IP key matches only
-// IP-keyed ones, so a bare IP never hijacks a device tracked by MAC.
-func clientMatchesKey(cl config.Client, key string, isMAC bool) bool {
+// deviceIPs is the set of addresses that identify the device addressed by key:
+// every live IP currently carrying that MAC, plus the request's IP hint.
+func (s *Server) deviceIPs(key string, upd clientUpdate) map[string]bool {
+	set := map[string]bool{}
+	if keyIsMAC(key) {
+		for _, ip := range s.clients.IPsForMAC(key) {
+			set[ip] = true
+		}
+	}
+	if upd.IP != nil && *upd.IP != "" {
+		set[*upd.IP] = true
+	}
+	return set
+}
+
+// clientIsDevice reports whether cl is an assignment for the device addressed
+// by key. A MAC key matches a same-MAC client or a legacy IP-keyed client for
+// one of the device's current IPs; an IP key matches only the IP-keyed client.
+func clientIsDevice(cl config.Client, key string, isMAC bool, ips map[string]bool) bool {
 	if isMAC {
-		return cl.MAC != "" && clients.NormalizeMAC(cl.MAC) == clients.NormalizeMAC(key)
+		if cl.MAC != "" {
+			return clients.NormalizeMAC(cl.MAC) == clients.NormalizeMAC(key)
+		}
+		return ips[cl.IP]
 	}
 	return cl.MAC == "" && cl.IP == key
 }
 
-// freshClient builds a new assignment for key. A MAC key resolves its current
-// IP from the registry, falling back to the body's IP hint, so the stored
-// Client always carries a (valid) last-known address.
-func (s *Server) freshClient(key string, isMAC bool, upd clientUpdate) config.Client {
-	if !isMAC {
-		return config.Client{IP: key}
+// takeDeviceClient removes every assignment for the addressed device from c and
+// returns the first one found (zero Client if none), so the caller can re-add a
+// single reconciled entry.
+func takeDeviceClient(c *config.Config, key string, isMAC bool, ips map[string]bool) (config.Client, bool) {
+	var out config.Client
+	found := false
+	kept := c.Clients[:0]
+	for _, cl := range c.Clients {
+		if clientIsDevice(cl, key, isMAC, ips) {
+			if !found {
+				out, found = cl, true
+			}
+			continue
+		}
+		kept = append(kept, cl)
 	}
-	cl := config.Client{MAC: clients.NormalizeMAC(key)}
-	if cl.IP = s.clients.CurrentIP(key); cl.IP == "" && upd.IP != nil {
-		cl.IP = *upd.IP
-	}
-	return cl
+	c.Clients = kept
+	return out, found
 }
 
 func applyClientUpdate(cl *config.Client, upd clientUpdate) {
@@ -132,19 +160,11 @@ func (s *Server) handleDeleteClient(w http.ResponseWriter, r *http.Request) {
 	key := clientKey(r)
 	isMAC := keyIsMAC(key)
 	err := s.store.Update(func(c *config.Config) error {
-		kept := c.Clients[:0]
-		found := false
-		for _, cl := range c.Clients {
-			if clientMatchesKey(cl, key, isMAC) {
-				found = true
-				continue
-			}
-			kept = append(kept, cl)
-		}
-		if !found {
+		// Remove the device's assignment(s) — MAC match or a legacy IP-keyed
+		// entry for one of its current IPs.
+		if _, found := takeDeviceClient(c, key, isMAC, s.deviceIPs(key, clientUpdate{})); !found {
 			return errNotFound
 		}
-		c.Clients = kept
 		return nil
 	})
 	if errors.Is(err, errNotFound) {
