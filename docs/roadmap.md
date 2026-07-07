@@ -118,11 +118,11 @@ Svelte 5 / Vite 6, clearing all open Dependabot alerts.
     PTR. Sent on every interface, so multi-homed hosts still reach the LAN.
     *(shipped)*
   - **NetBIOS / NBSTAT** — the layer for Windows / Samba machine names, which
-    typically run no mDNS responder and so stay blank today. A single unicast
-    NBSTAT node-status query to UDP 137 reads the device's own name table; it
-    slots into the hostname chain after unicast PTR and before mDNS (cheap
-    unicast, fast-fail on non-Windows hosts). Stdlib-only, on the enrichment
-    worker, never on the query path. *(planned, next)*
+    typically run no mDNS responder and would otherwise stay blank. A single
+    unicast NBSTAT node-status query to UDP 137 reads the device's own name
+    table; it slots into the hostname chain after unicast PTR and before mDNS
+    (cheap unicast, fast-fail on non-Windows hosts). Stdlib-only, on the
+    enrichment worker, never on the query path. *(shipped)*
 
   All best-effort and layered (first hit wins for the hostname; the vendor
   label is always computed from the MAC); a device with none simply shows its
@@ -131,7 +131,7 @@ Svelte 5 / Vite 6, clearing all open Dependabot alerts.
   page to open the Docket filtered to that client (all its allowed and denied
   queries), mirroring the Tribunal's busiest-client drill-down. Reuses the
   existing `docketHref`/persisted-history plumbing; a frontend-only link.
-  *(planned, small)*
+  *(shipped)*
 - **Config schema-version + migration seam** — deferred until a real
   migration needs it, so it ships with tolerant loading already in the field.
 

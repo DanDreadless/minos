@@ -154,6 +154,7 @@ export const copy = {
       `Delete the group "${name}"? Its devices fall back to the default rules.`,
     forget: 'Forget',
     forgetHint: 'remove the saved label/group for this device',
+    viewInDocket: 'View this device’s queries in the Docket',
   },
 
   settings: {

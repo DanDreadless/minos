@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { api, type Device, type Group, type Service } from '../lib/api';
   import { copy } from '../lib/copy';
+  import { docketHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
   let devices: Device[] = [];
@@ -220,7 +221,11 @@
       <tbody>
         {#each devices as d (d.ip)}
           <tr class:dns-blocked={d.blocked}>
-            <td>{d.ip}</td>
+            <td>
+              <a class="ip-link" href={docketHref({ client: d.ip })} title={copy.devices.viewInDocket}>
+                {d.ip}
+              </a>
+            </td>
             <td>{d.mac ?? ''}</td>
             <td>{d.vendor ?? ''}</td>
             <td title={d.hostname}>{d.hostname ?? ''}</td>
@@ -404,6 +409,16 @@
   td.num {
     text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+
+  .ip-link {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .ip-link:hover {
+    color: var(--accent);
+    text-decoration: underline;
   }
 
   tr.dns-blocked td {
