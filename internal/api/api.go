@@ -102,8 +102,8 @@ func (s *Server) Router() http.Handler {
 		r.Put("/lists/{name}", s.handleUpdateList)
 		r.Delete("/lists/{name}", s.handleDeleteList)
 		r.Get("/clients", s.handleGetClients)
-		r.Put("/clients/{ip}", s.handleUpdateClient)
-		r.Delete("/clients/{ip}", s.handleDeleteClient)
+		r.Put("/clients/{key}", s.handleUpdateClient)
+		r.Delete("/clients/{key}", s.handleDeleteClient)
 		r.Get("/groups", s.handleGetGroups)
 		r.Post("/groups", s.handleAddGroup)
 		r.Put("/groups/{name}", s.handleUpdateGroup)
@@ -247,6 +247,18 @@ func (s *Server) handleQueryLogHistory(w http.ResponseWriter, r *http.Request) {
 		verdict = ""
 	}
 	filter := querylog.HistoryFilter{Search: q.Get("q"), Verdict: verdict}
+	// client is an exact-match filter (comma-separated for a multi-IP device),
+	// distinct from the free-text q substring. Capped so the IN list stays sane.
+	if c := q.Get("client"); c != "" {
+		for _, part := range strings.Split(c, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				filter.Clients = append(filter.Clients, part)
+			}
+			if len(filter.Clients) >= 32 {
+				break
+			}
+		}
+	}
 	entries, err := s.qlog.QueryHistory(r.Context(), filter, limit, before)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

@@ -94,14 +94,16 @@ Newest first, `limit` 1–10000, from the in-memory ring:
 Allowed entries carry `upstream` instead of `list`/`rule` — the resolver
 that answered, or `cache`, `stale`, `local`, or `safesearch`.
 
-### `GET /api/querylog/history?q=&verdict=&before=&limit=`
+### `GET /api/querylog/history?q=&client=&verdict=&before=&limit=`
 
 The persisted log (SQLite), newest first — the full retained history behind
 search and the dashboard drill-downs, not just the in-memory ring. `q`
-matches a client IP or domain substring, `verdict` is `blocked`/`allowed`/
-`all`, `before` is a unix-millis cursor for "load older" pagination, `limit`
-1–1000. Returns `[]` in ephemeral mode (there the ring already backs both the
-log and the dashboard, so the UI filters it directly).
+matches a client IP or domain substring; `client` is an **exact** address
+filter, comma-separated for a device with several IPs (the Devices
+drill-down), distinct from the `q` substring; `verdict` is
+`blocked`/`allowed`/`all`; `before` is a unix-millis cursor for "load older"
+pagination; `limit` 1–1000. Returns `[]` in ephemeral mode (there the ring
+already backs both the log and the dashboard, so the UI filters it directly).
 
 ### `GET /api/querylog/stream` (WebSocket)
 
@@ -148,13 +150,21 @@ always beats deny.
 ## Devices & groups
 
 - `GET /api/clients` — every device that has queried plus every configured
-  one: `{ip, mac, vendor, hostname, name, group, blocked, seen, queries,
-  queries_blocked, first_seen, last_seen}`. `vendor` is derived from the MAC
+  one, **one row per physical device**: `{ip, ips, mac, vendor, hostname,
+  name, group, blocked, seen, queries, queries_blocked, first_seen,
+  last_seen}`. A device is identified by its MAC when known, so all the IPs
+  it has held across DHCP leases fold into one entry — `ip` is the primary
+  (most recently active) address and `ips` lists them all (used by the Docket
+  drill-down); counts are summed across them. `vendor` is derived from the MAC
   (OUI); `hostname` comes from reverse DNS via the gateway, falling back to
-  mDNS `.local` — both best-effort.
-- `PUT /api/clients/{ip}` — upsert any of `{"name", "mac", "group",
-  "blocked"}` (`"group": "default"` unassigns)
-- `DELETE /api/clients/{ip}` — forget the saved assignment
+  NetBIOS then mDNS `.local` — all best-effort.
+- `PUT /api/clients/{key}` — upsert any of `{"name", "mac", "group",
+  "blocked"}` (`"group": "default"` unassigns). `{key}` is the device's **MAC**
+  when it has one (so the assignment follows it across DHCP leases) or its
+  **IP** otherwise; a MAC key resolves the device's current IP automatically,
+  or accepts an `"ip"` field as a last-known-address hint when it's offline.
+- `DELETE /api/clients/{key}` — forget the saved assignment (`{key}` is the
+  MAC or IP, as above)
 - `GET /api/groups` / `POST /api/groups` — groups are `{name, mode:
   "filter|bypass|block", allowlist, denylist, services, safe_search,
   schedule}`; `schedule` is `{days: ["mon", ...], start: "21:00",

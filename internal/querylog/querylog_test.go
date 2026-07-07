@@ -165,6 +165,21 @@ func TestQueryHistoryFilters(t *testing.T) {
 	if n := count(HistoryFilter{Search: "%"}); n != 0 {
 		t.Errorf("literal %% search: got %d, want 0", n)
 	}
+	// Exact multi-client filter (a device's IP set) is distinct from Search:
+	// it matches whole client addresses, not substrings.
+	if n := count(HistoryFilter{Clients: []string{"10.0.0.5", "10.0.0.9"}}); n != 3 {
+		t.Errorf("two-client filter: got %d, want 3", n)
+	}
+	if n := count(HistoryFilter{Clients: []string{"10.0.0.9"}}); n != 1 {
+		t.Errorf("single-client filter: got %d, want 1", n)
+	}
+	if n := count(HistoryFilter{Clients: []string{"10.0.0.5"}, Verdict: VerdictBlocked}); n != 1 {
+		t.Errorf("client+verdict filter: got %d, want 1", n)
+	}
+	// An exact filter does not substring-match: "10.0.0" hits nothing.
+	if n := count(HistoryFilter{Clients: []string{"10.0.0"}}); n != 0 {
+		t.Errorf("exact filter must not substring-match: got %d, want 0", n)
+	}
 }
 
 func TestEphemeralWritesNothing(t *testing.T) {

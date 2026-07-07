@@ -132,6 +132,15 @@ Svelte 5 / Vite 6, clearing all open Dependabot alerts.
   queries), mirroring the Tribunal's busiest-client drill-down. Reuses the
   existing `docketHref`/persisted-history plumbing; a frontend-only link.
   *(shipped)*
+- **MAC-based device identity** — a device is identified by its MAC when one
+  is known (else its IP), so a power-cycled box that grabs a new DHCP lease
+  shows as one row, not a duplicate: every IP it has used folds into a single
+  Devices entry (counts summed, drill-down spanning them all). Group/block
+  assignments follow the MAC across leases too — the hot-path policy table
+  stays IP-keyed but is rebuilt from MAC assignments off the query path, and a
+  MAC-keyed client keeps a valid last-known IP so config still loads on an
+  older binary (no new YAML key). Falls back to IP for devices Minos can't see
+  at layer 2 (off-subnet, IPv6, DoT/DoH). *(shipped)*
 - **Config schema-version + migration seam** — deferred until a real
   migration needs it, so it ships with tolerant loading already in the field.
 

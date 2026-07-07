@@ -113,6 +113,51 @@ func TestClientAssignmentAndBlock(t *testing.T) {
 	}
 }
 
+func TestMACKeyedAssignment(t *testing.T) {
+	s, store := newTestServer(t, "")
+	r := s.Router()
+
+	// Assign a block keyed by MAC (the frontend sends d.mac as the key). The
+	// device isn't in the ARP table right now, so the body carries the
+	// last-known IP hint that the stored client needs to stay valid.
+	rec := doJSON(t, r, "PUT", "/api/clients/AA:BB:CC:11:22:33",
+		`{"blocked":true,"ip":"192.168.1.40"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("assign: status = %d: %s", rec.Code, rec.Body)
+	}
+	// Stored MAC-keyed, canonicalised, with the hint as its last-known IP.
+	cfg := store.Get()
+	if len(cfg.Clients) != 1 || cfg.Clients[0].MAC != "aa:bb:cc:11:22:33" || cfg.Clients[0].IP != "192.168.1.40" {
+		t.Fatalf("stored client = %+v", cfg.Clients)
+	}
+	// The block applies to the last-known lease immediately.
+	if p := s.clients.PolicyFor("192.168.1.40"); !p.Refuses() {
+		t.Errorf("policy = %+v, want refuse", p)
+	}
+	// One merged device row, addressed by MAC.
+	var devices []clients.Device
+	if err := json.Unmarshal(rec.Body.Bytes(), &devices); err != nil {
+		t.Fatal(err)
+	}
+	if len(devices) != 1 || !devices[0].Blocked || devices[0].MAC != "aa:bb:cc:11:22:33" {
+		t.Fatalf("devices = %+v", devices)
+	}
+	// A second update addressed by the same MAC (any notation) updates in place.
+	if rec := doJSON(t, r, "PUT", "/api/clients/aa-bb-cc-11-22-33", `{"name":"printer"}`, nil); rec.Code != http.StatusOK {
+		t.Fatalf("relabel: status = %d: %s", rec.Code, rec.Body)
+	}
+	if len(store.Get().Clients) != 1 || store.Get().Clients[0].Name != "printer" {
+		t.Errorf("clients after relabel = %+v", store.Get().Clients)
+	}
+	// Forget by MAC removes it.
+	if rec := doJSON(t, r, "DELETE", "/api/clients/aa:bb:cc:11:22:33", "", nil); rec.Code != http.StatusOK {
+		t.Fatalf("forget: status = %d", rec.Code)
+	}
+	if len(store.Get().Clients) != 0 {
+		t.Errorf("clients after forget = %+v", store.Get().Clients)
+	}
+}
+
 func TestClientsListsSeenDevices(t *testing.T) {
 	s, _ := newTestServer(t, "")
 	s.clients.Seed("192.168.1.77", 42, 7, timeNowMinus(3600), timeNowMinus(60))

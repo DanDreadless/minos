@@ -16,6 +16,9 @@
   let historyLoading = false;
   let historyDone = false;
   let search = '';
+  // clientFilter holds a device's exact IP(s) when drilled in from Devices or
+  // the Tribunal — whole-address matching, distinct from the substring search.
+  let clientFilter: string[] = [];
   let verdictFilter: 'all' | 'blocked' | 'allowed' = 'all';
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -23,10 +26,11 @@
   let destroyed = false;
   let connected = false;
 
-  $: hasFilter = search.trim() !== '' || verdictFilter !== 'all';
+  $: hasFilter = search.trim() !== '' || verdictFilter !== 'all' || clientFilter.length > 0;
 
   function clientMatch(e: LogEntry): boolean {
     if (verdictFilter !== 'all' && e.verdict !== verdictFilter) return false;
+    if (clientFilter.length && !clientFilter.includes(e.client)) return false;
     if (search) {
       const q = search.toLowerCase();
       return e.qname.toLowerCase().includes(q) || e.client.toLowerCase().includes(q);
@@ -47,6 +51,7 @@
         !reset && history.length ? new Date(history[history.length - 1].time).getTime() : undefined;
       const rows = await api.querylogHistory({
         q: search.trim(),
+        client: clientFilter.join(','),
         verdict: verdictFilter,
         before,
         limit: HISTORY_PAGE,
@@ -64,6 +69,11 @@
     history = [];
     historyDone = false;
     if (hasFilter) void fetchHistory(true);
+  }
+
+  function clearClientFilter(): void {
+    clientFilter = [];
+    refreshHistory();
   }
 
   function onSearchInput(): void {
@@ -118,8 +128,14 @@
     if (params.verdict === 'blocked' || params.verdict === 'allowed') {
       verdictFilter = params.verdict;
     }
-    if (params.client) search = params.client;
-    else if (params.qname) search = params.qname;
+    if (params.client) {
+      clientFilter = params.client
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    } else if (params.qname) {
+      search = params.qname;
+    }
 
     try {
       live = await api.querylog(MAX_ROWS);
@@ -156,6 +172,13 @@
     <option value="blocked">{copy.docket.filterBlocked}</option>
     <option value="allowed">{copy.docket.filterAllowed}</option>
   </select>
+  {#if clientFilter.length}
+    <span class="chip" title={clientFilter.join(', ')}>
+      {copy.docket.deviceScope}
+      {clientFilter.length === 1 ? clientFilter[0] : `${clientFilter[0]} +${clientFilter.length - 1}`}
+      <button class="chip-x" on:click={clearClientFilter} aria-label="clear device filter">×</button>
+    </span>
+  {/if}
   <span class="count">
     {displayed.length} shown{#if hasFilter && history.length}
       <span class="scope">· searching history</span>{/if}
@@ -253,6 +276,32 @@
   .filters input {
     flex: 1;
     max-width: 24rem;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    color: var(--text);
+    background: var(--surface-2, rgba(127, 127, 127, 0.15));
+    border: 1px solid var(--border, rgba(127, 127, 127, 0.3));
+    border-radius: 999px;
+    padding: 0.1rem 0.3rem 0.1rem 0.6rem;
+    white-space: nowrap;
+  }
+
+  .chip-x {
+    all: unset;
+    cursor: pointer;
+    line-height: 1;
+    font-size: 1rem;
+    padding: 0 0.25rem;
+    color: var(--text-dim);
+  }
+
+  .chip-x:hover {
+    color: var(--accent);
   }
 
   .count {

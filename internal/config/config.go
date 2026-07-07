@@ -227,8 +227,12 @@ func DayAllowed(days []string, d time.Weekday) bool {
 	return false
 }
 
-// Client is a device assignment, keyed by IP. MAC and Name are labels the
-// user (or ARP enrichment) attaches; matching is by source IP.
+// Client is a device assignment. When MAC is set the assignment follows the
+// device by MAC (across DHCP leases) and IP holds its last-known address; with
+// MAC empty it matches by IP alone (the only option for devices Minos can't see
+// at layer 2 — off-subnet, IPv6, DoT/DoH). IP is always populated and valid so
+// the config still loads on an older binary that only matches by IP. Name is a
+// user label.
 type Client struct {
 	IP   string `yaml:"ip" json:"ip"`
 	MAC  string `yaml:"mac,omitempty" json:"mac,omitempty"`
