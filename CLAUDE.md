@@ -274,16 +274,22 @@ This is security software; hold it to that standard.
   with NXDOMAIN (RFC 6303 backstop), so LAN hostnames never resolve. The
   enrichment worker instead tries the default gateway (Linux
   /proc/net/route → `resolverAt(gw:53)`), which knows the DHCP names,
-  then falls back to the system resolver, and finally to **multicast DNS**
-  (reverse PTR to 224.0.0.251:5353 with the RFC 6762 unicast-response bit) —
-  the one source that works when the router won't answer PTR (the common
-  case). mDNS is sent bound to *every* up/multicast/non-loopback interface,
-  concurrently, so a multi-homed host (eth+wlan, Docker) still reaches the
-  LAN — a `:0` bind silently egresses the wrong adapter. All off the hot
-  path; Windows (dev-only) skips gateway detection. Separately, every device
-  with a known MAC also gets a **vendor label** from `internal/oui` (a
-  curated IEEE-OUI subset, embedded). Still roadmapped: DHCP-lease ingestion
-  and NetBIOS.
+  then falls back to the system resolver, then a **NetBIOS node-status
+  query** (`internal/clients/netbios.go` — a unicast NBSTAT to UDP 137 that
+  reads the device's own name table, returning the unique 0x00 Workstation
+  name; it's the Windows/Samba source mDNS can't see, and uses a *connected*
+  socket so a non-NBNS host fast-fails on ICMP unreachable instead of waiting
+  the 500ms deadline), and finally to **multicast DNS** (reverse PTR to
+  224.0.0.251:5353 with the RFC 6762 unicast-response bit) — the one source
+  that works when the router won't answer PTR (the common case). mDNS is sent
+  bound to *every* up/multicast/non-loopback interface, concurrently, so a
+  multi-homed host (eth+wlan, Docker) still reaches the LAN — a `:0` bind
+  silently egresses the wrong adapter. NetBIOS/mDNS responses are untrusted
+  input: names are bounds-checked and sanitised to printable ASCII before use.
+  All off the hot path; Windows (dev-only) skips gateway detection. Separately,
+  every device with a known MAC also gets a **vendor label** from
+  `internal/oui` (a curated IEEE-OUI subset, embedded). Still roadmapped:
+  DHCP-lease ingestion.
 - **Response cache semantics** (fixed decisions): the cache sits *after*
   the filter — verdicts always reflect live rules and blocked answers are
   never cached. Any config change swaps in a fresh cache (that IS the

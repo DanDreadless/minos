@@ -52,10 +52,13 @@ func (r *Registry) enrichOne(ctx context.Context, ip string) {
 	}
 }
 
-// lookupHostname reverse-resolves ip, trying each source in turn and taking
-// the first non-empty answer: unicast PTR (gateway, then system resolver),
-// then multicast DNS. mDNS is last because it is slower and only some devices
-// answer — but it is the one source that works when the router won't do PTR.
+// lookupHostname reverse-resolves ip, trying each source in turn and taking the
+// first non-empty answer: unicast PTR (gateway, then system resolver), then a
+// NetBIOS node-status query, then multicast DNS. NetBIOS comes before mDNS
+// because it's a cheap unicast that fast-fails on non-Windows hosts and gives
+// the canonical machine name for the Windows/Samba boxes mDNS can't see; mDNS
+// remains the fallback for Apple/IoT/.local devices and the case where the
+// router won't answer PTR.
 func (r *Registry) lookupHostname(ctx context.Context, ip string) string {
 	for _, res := range r.revResolvers {
 		lookupCtx, cancel := context.WithTimeout(ctx, ptrTimeout)
@@ -64,6 +67,9 @@ func (r *Registry) lookupHostname(ctx context.Context, ip string) string {
 		if err == nil && len(names) > 0 {
 			return strings.TrimSuffix(names[0], ".")
 		}
+	}
+	if name := lookupNetBIOS(ip); name != "" {
+		return name
 	}
 	return lookupMDNS(ip)
 }
