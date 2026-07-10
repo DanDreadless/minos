@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type CheckResult, type LocalRecord } from '../lib/api';
+  import { api, type CheckResult, type LocalRecord, type Service } from '../lib/api';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
   let allowlist: string[] = [];
   let denylist: string[] = [];
+  let catalog: Service[] = [];
+  let allowedServices = new Set<string>();
   let newPardon = '';
   let newSentence = '';
   let checkDomain = '';
@@ -18,16 +20,32 @@
 
   async function load(): Promise<void> {
     try {
-      const [al, dl, cfg] = await Promise.all([
+      const [al, dl, cfg, svcs] = await Promise.all([
         api.allowlist(),
         api.denylist(),
         api.getConfig(),
+        api.services(),
       ]);
       allowlist = al;
       denylist = dl;
       localRecords = cfg.dns.local_records;
+      catalog = svcs.catalog;
+      allowedServices = new Set(svcs.allowed);
     } catch (e) {
       notifyError(e);
+    }
+  }
+
+  async function togglePardonService(name: string): Promise<void> {
+    const next = new Set(allowedServices);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    try {
+      const view = await api.updateServices({ allowed: [...next] });
+      allowedServices = new Set(view.allowed);
+    } catch (e) {
+      notifyError(e);
+      await load();
     }
   }
 
@@ -146,6 +164,26 @@
       <span class="domain">{checkResult.domain}</span> — {describeCheck(checkResult)}
     </p>
   {/if}
+</section>
+
+<section class="card service-pardons">
+  <h2>{copy.domains.servicePardonsTitle} <small>{copy.domains.servicePardonsHint}</small></h2>
+  <div class="service-grid">
+    {#each catalog as svc (svc.name)}
+      <label class="service" title={copy.lists.serviceDomains(svc.domains.length)}>
+        <input
+          type="checkbox"
+          checked={allowedServices.has(svc.name)}
+          on:change={() => togglePardonService(svc.name)}
+        />
+        {svc.label}
+      </label>
+    {/each}
+  </div>
+  <p class="note">
+    {copy.domains.servicePardonsNote}
+    <a href="#/devices">{copy.domains.servicePardonsNoteLink}</a>
+  </p>
 </section>
 
 <section class="columns">
@@ -304,6 +342,25 @@
 
   .local {
     margin-top: 1.25rem;
+  }
+
+  .service-pardons {
+    margin-top: 1.25rem;
+  }
+
+  .service-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: 0.35rem 1rem;
+  }
+
+  .service {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.88rem;
+    padding: 0.15rem 0;
   }
 
   .local-add {

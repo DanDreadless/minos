@@ -197,6 +197,29 @@ func TestGroupBlockedServices(t *testing.T) {
 	}
 }
 
+func TestGroupAllowedServices(t *testing.T) {
+	cfg := testConfig()
+	cfg.Groups[0].Allowlist = nil
+	cfg.Groups[0].Denylist = nil
+	cfg.Groups[0].AllowedServices = []string{"netflix"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry()
+	r.ApplyConfig(cfg)
+
+	kids := r.PolicyFor("10.0.0.10")
+	if kids == nil || kids.Overlay == nil {
+		t.Fatal("kids policy missing overlay (allowed services alone must build one)")
+	}
+	// An overlay allow verdict (Rule != "") short-circuits the global rules,
+	// so this group pardon would beat a global deny on the same name.
+	res := kids.Overlay.Match("beacon.netflix.com")
+	if res.Blocked || res.Rule == "" || res.List != "service:netflix" {
+		t.Errorf("beacon.netflix.com = %+v, want allow verdict from service:netflix", res)
+	}
+}
+
 func TestTouchAndDevices(t *testing.T) {
 	r := NewRegistry()
 	cfg := testConfig()

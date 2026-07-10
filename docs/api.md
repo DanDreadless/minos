@@ -142,10 +142,16 @@ always beats deny.
 - `DELETE /api/lists/{name}`
 - `POST /api/lists/refresh` — refetch everything now (synchronous)
 
-## Blocked services
+## Services
 
-- `GET /api/services` — `{"catalog": [{name, label, domains}], "blocked": [...]}`
-- `PUT /api/services` — replace the global set: `{"blocked": ["tiktok", "youtube"]}`
+- `GET /api/services` — `{"catalog": [{name, label, domains}],
+  "blocked": [...], "allowed": [...]}`. `blocked` services are denied for
+  everyone; `allowed` services are pardoned for everyone — every domain the
+  service needs, including playback/sign-in hosts the deny bundle doesn't
+  carry. Allow beats deny, so a service that is both ends up allowed.
+- `PUT /api/services` — partial update; each present field replaces its
+  set, omitted fields stay untouched: `{"blocked": ["tiktok"]}`,
+  `{"allowed": ["netflix"]}`, or both.
 
 ## Devices & groups
 
@@ -166,9 +172,10 @@ always beats deny.
 - `DELETE /api/clients/{key}` — forget the saved assignment (`{key}` is the
   MAC or IP, as above)
 - `GET /api/groups` / `POST /api/groups` — groups are `{name, mode:
-  "filter|bypass|block", allowlist, denylist, services, safe_search,
-  schedule}`; `schedule` is `{days: ["mon", ...], start: "21:00",
-  end: "07:00"}` or `null` to clear
+  "filter|bypass|block", allowlist, denylist, services, allowed_services,
+  safe_search, schedule}`; `services` are blocked and `allowed_services`
+  pardoned for members only; `schedule` is `{days: ["mon", ...], start:
+  "21:00", end: "07:00"}` or `null` to clear
 - `PUT /api/groups/{name}` / `DELETE /api/groups/{name}`
 
 ## Settings

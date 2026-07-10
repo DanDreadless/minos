@@ -162,6 +162,38 @@ func TestBlockedZeroIP(t *testing.T) {
 	}
 }
 
+// A query passed by an allow rule records which list pardoned it — the
+// docket's "why was this passed", mirroring blocked attribution.
+func TestAllowedVerdictAttribution(t *testing.T) {
+	srv, qlog := startProxy(t, "zero_ip")
+	b := filter.NewBuilder()
+	b.AddDeny("testlist", "example.net")
+	b.AddAllow("service:netflix", "cdn.example.net")
+	srv.engine.Swap(b.Build())
+
+	resp := query(t, srv.UDPAddr().String(), "cdn.example.net", dns.TypeA)
+	if resp.Rcode != dns.RcodeSuccess || len(resp.Answer) != 1 {
+		t.Fatalf("rcode=%s answers=%d, want forwarded NOERROR with 1 answer",
+			dns.RcodeToString[resp.Rcode], len(resp.Answer))
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		recent := qlog.Recent(1)
+		if len(recent) == 1 {
+			e := recent[0]
+			if e.Verdict != querylog.VerdictAllowed || e.List != "service:netflix" || e.Rule != "cdn.example.net" {
+				t.Errorf("logged entry = %+v, want allowed by service:netflix/cdn.example.net", e)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("query log entry never arrived")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func TestBlockedNXDomain(t *testing.T) {
 	srv, _ := startProxy(t, "nxdomain", "ads.example.com")
 	resp := query(t, srv.UDPAddr().String(), "ads.example.com", dns.TypeA)

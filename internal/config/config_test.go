@@ -184,6 +184,24 @@ func TestUnknownFieldToleratedOnDiskStrictOnRestore(t *testing.T) {
 	}
 }
 
+// Clone must deep-copy the service lists so an aborted Update can't leak
+// mutations into the live config.
+func TestCloneDeepCopiesServiceLists(t *testing.T) {
+	c := Default()
+	c.Blocking.Services = []string{"tiktok"}
+	c.Blocking.AllowedServices = []string{"netflix"}
+	c.Groups = []Group{{Name: "kids", Mode: "filter", AllowedServices: []string{"disneyplus"}}}
+	out := c.Clone()
+	out.Blocking.Services[0] = "changed"
+	out.Blocking.AllowedServices[0] = "changed"
+	out.Groups[0].AllowedServices[0] = "changed"
+	if c.Blocking.Services[0] != "tiktok" ||
+		c.Blocking.AllowedServices[0] != "netflix" ||
+		c.Groups[0].AllowedServices[0] != "disneyplus" {
+		t.Errorf("Clone shares slices with the original: %+v", c.Blocking)
+	}
+}
+
 func TestValidateRejectsDuplicateClientMAC(t *testing.T) {
 	c := Default()
 	c.Clients = []Client{

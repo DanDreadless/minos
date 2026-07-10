@@ -27,7 +27,7 @@
     if (next.has(name)) next.delete(name);
     else next.add(name);
     try {
-      const view = await api.updateServices([...next]);
+      const view = await api.updateServices({ blocked: [...next] });
       blockedServices = new Set(view.blocked);
     } catch (e) {
       notifyError(e);

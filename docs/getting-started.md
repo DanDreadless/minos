@@ -334,7 +334,13 @@ Open `http://<host>:8080`. Six pages, one per concern:
   to its members and obey the group's schedule.
 - **Pardons & Sentences** (allow/deny domains) — manage both lists, plus a
   "judge a domain" tool that shows exactly which rule decides any name's
-  fate before you ever query it. The **Local DNS** card lives here too:
+  fate before you ever query it. The **Service pardons** card fixes a
+  streaming app a blocklist broke with one checkbox: pardoning Netflix,
+  Disney+, Prime Video (or any catalog service) always allows every domain
+  it needs — including the playback and sign-in hosts on shared CDNs that
+  the blocked-services bundles deliberately leave out. A pardon beats any
+  sentence or blocklist; to pardon a service only for certain devices, set
+  it on a group on the Devices page. The **Local DNS** card lives here too:
   A/AAAA/CNAME records (wildcards like `*.home.lab` included) that Minos
   answers itself — they beat the blocklists, never leave your network, and
   address records answer reverse (PTR) lookups automatically.
@@ -463,12 +469,14 @@ blocking:
   allowlist: []             # pardons: always allowed
   denylist: []              # sentences: always blocked
   services: [onlyfans]      # curated service bundles, blocked for everyone
+  allowed_services: [netflix]  # service bundles pardoned for everyone (allow beats deny)
   safe_search: false        # rewrite search engines to enforced-safe variants
 groups:                     # device policies (all optional)
   - name: kids
     mode: filter            # filter | bypass | block
     denylist: [tiktok.com]  # extra blocks for members only
     services: [snapchat]    # service bundles for members only
+    allowed_services: []    # service bundles pardoned for members only
     safe_search: true       # enforce safe search for members only
     schedule:               # optional: group active only in this window
       days: [sun, mon, tue, wed, thu]   # empty/omitted = every day

@@ -19,6 +19,10 @@ At or beyond parity with the field:
 - **Conditional forwarding** to route `lan`/reverse zones at the router *(shipped)*
 - **Family controls** — one-click blocked services (25-service catalog),
   per-group schedules, Safe Search enforcement *(shipped)*
+- **Service pardons** — one-click "always allow" for a whole service
+  (global or per group), with the extra playback/CDN hosts streaming apps
+  need; unbreaks Netflix/Disney+/Prime Video without hand-adding domains
+  *(shipped)*
 - **Migration importer** — `minos import pihole|adguard` carries over
   blocklists, allow/deny rules, local records, blocked services *(shipped)*
 - **Prometheus metrics** — `/metrics` with query, cache, per-upstream, and

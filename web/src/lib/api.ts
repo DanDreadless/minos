@@ -161,6 +161,7 @@ export interface Group {
   allowlist: string[] | null;
   denylist: string[] | null;
   services: string[] | null;
+  allowed_services: string[] | null;
   safe_search: boolean;
   schedule?: Schedule | null;
 }
@@ -174,6 +175,7 @@ export interface Service {
 export interface ServicesView {
   catalog: Service[];
   blocked: string[];
+  allowed: string[];
 }
 
 const TOKEN_KEY = 'minos-api-token';
@@ -337,14 +339,16 @@ export const api = {
       allowlist?: string[];
       denylist?: string[];
       services?: string[];
+      allowed_services?: string[];
       safe_search?: boolean;
       schedule?: Schedule | null;
     },
   ) => request<Group[]>('PUT', `/api/groups/${encodeURIComponent(name)}`, upd),
 
   services: () => request<ServicesView>('GET', '/api/services'),
-  updateServices: (blocked: string[]) =>
-    request<ServicesView>('PUT', '/api/services', { blocked }),
+  // Partial update: an omitted field leaves that set unchanged.
+  updateServices: (upd: { blocked?: string[]; allowed?: string[] }) =>
+    request<ServicesView>('PUT', '/api/services', upd),
   deleteGroup: (name: string) =>
     request<Group[]>('DELETE', `/api/groups/${encodeURIComponent(name)}`),
 

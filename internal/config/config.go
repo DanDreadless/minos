@@ -160,6 +160,11 @@ type BlockingConfig struct {
 	// Services are catalog names (see internal/services) blocked for
 	// everyone; groups can block more for their members only.
 	Services []string `yaml:"services,omitempty"`
+	// AllowedServices are catalog names pardoned for everyone: every domain
+	// the service needs (including its playback CDN hosts) is always
+	// allowed. A service both blocked and allowed ends up allowed — allow
+	// wins at every label depth in the matcher.
+	AllowedServices []string `yaml:"allowed_services,omitempty"`
 	// SafeSearch rewrites search engines (and YouTube) to their
 	// enforced-safe variants for every device.
 	SafeSearch bool `yaml:"safe_search,omitempty"`
@@ -180,6 +185,10 @@ type Group struct {
 	// Services are catalog names blocked for this group's members
 	// (filter mode only).
 	Services []string `yaml:"services,omitempty" json:"services"`
+	// AllowedServices are catalog names pardoned for this group's members
+	// (filter mode only); like group allowlist entries, they beat global
+	// denies.
+	AllowedServices []string `yaml:"allowed_services,omitempty" json:"allowed_services"`
 	// SafeSearch enforces safe search for this group's members
 	// (filter mode only; global blocking.safe_search covers everyone).
 	SafeSearch bool `yaml:"safe_search,omitempty" json:"safe_search"`
@@ -348,6 +357,7 @@ func (c *Config) Clone() *Config {
 	out.Blocking.Allowlist = append([]string(nil), c.Blocking.Allowlist...)
 	out.Blocking.Denylist = append([]string(nil), c.Blocking.Denylist...)
 	out.Blocking.Services = append([]string(nil), c.Blocking.Services...)
+	out.Blocking.AllowedServices = append([]string(nil), c.Blocking.AllowedServices...)
 	out.Lists.Sources = append([]ListSource(nil), c.Lists.Sources...)
 	out.Groups = make([]Group, len(c.Groups))
 	for i, g := range c.Groups {
@@ -355,6 +365,7 @@ func (c *Config) Clone() *Config {
 		out.Groups[i].Allowlist = append([]string(nil), g.Allowlist...)
 		out.Groups[i].Denylist = append([]string(nil), g.Denylist...)
 		out.Groups[i].Services = append([]string(nil), g.Services...)
+		out.Groups[i].AllowedServices = append([]string(nil), g.AllowedServices...)
 		if g.Schedule != nil {
 			sch := *g.Schedule
 			sch.Days = append([]string(nil), g.Schedule.Days...)
@@ -516,6 +527,11 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("blocking.services[%d]: unknown service %q", i, s)
 		}
 	}
+	for i, s := range c.Blocking.AllowedServices {
+		if !services.Exists(s) {
+			return fmt.Errorf("blocking.allowed_services[%d]: unknown service %q", i, s)
+		}
+	}
 	groupNames := make(map[string]bool, len(c.Groups))
 	for i, g := range c.Groups {
 		if g.Name == "" {
@@ -536,6 +552,11 @@ func (c *Config) Validate() error {
 		for j, s := range g.Services {
 			if !services.Exists(s) {
 				return fmt.Errorf("groups[%d].services[%d]: unknown service %q", i, j, s)
+			}
+		}
+		for j, s := range g.AllowedServices {
+			if !services.Exists(s) {
+				return fmt.Errorf("groups[%d].allowed_services[%d]: unknown service %q", i, j, s)
 			}
 		}
 		if sch := g.Schedule; sch != nil {

@@ -74,3 +74,44 @@ func Domains(name string) []string {
 	}
 	return nil
 }
+
+// allowExtra lists additional domains a service needs to *work* when it is
+// pardoned rather than blocked: playback, auth, and license hosts that live
+// on shared CDNs and therefore must never appear in the deny bundles above.
+// Entries are precise hostnames — never a shared-CDN apex like
+// cloudfront.net or akamaihd.net, which would pardon unrelated things.
+// Sourced from the Pi-hole community's commonly-whitelisted lists; expect
+// them to drift as the services move distributions.
+var allowExtra = map[string][]string{
+	"disneyplus": {
+		"cdn.registerdisney.go.com", // sign-in
+	},
+	"primevideo": {
+		"amazonvideo.com",              // app control plane
+		"atv-ps.amazon.com",            // playback services
+		"atv-ext.amazon.com",           // playback API
+		"atv-ext-eu.amazon.com",        //   … EU region
+		"atv-ext-fe.amazon.com",        //   … FE region
+		"pv-cdn.net",                   // Prime Video's own CDN
+		"avodmp4s3ww-a.akamaihd.net",   // video segments (Akamai distribution)
+		"d25xi40x97liuc.cloudfront.net", // artwork (CloudFront distribution)
+		"dmqdd6hw24ucf.cloudfront.net",  // playback manifests (CloudFront distribution)
+		"d22qjgkvxw22r6.cloudfront.net", // playback (CloudFront distribution)
+	},
+}
+
+// AllowDomains returns the domains pardoned when a service is allowed: its
+// deny bundle plus any extras playback needs. Defined for every catalog
+// service (default: identical to Domains); allow entries cover subdomains,
+// so the deny bundle already unblocks anything a blocklist names under it.
+func AllowDomains(name string) []string {
+	base := Domains(name)
+	extra := allowExtra[name]
+	if len(extra) == 0 {
+		return base
+	}
+	out := make([]string, 0, len(base)+len(extra))
+	out = append(out, base...)
+	out = append(out, extra...)
+	return out
+}
