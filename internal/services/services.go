@@ -87,13 +87,13 @@ var allowExtra = map[string][]string{
 		"cdn.registerdisney.go.com", // sign-in
 	},
 	"primevideo": {
-		"amazonvideo.com",              // app control plane
-		"atv-ps.amazon.com",            // playback services
-		"atv-ext.amazon.com",           // playback API
-		"atv-ext-eu.amazon.com",        //   … EU region
-		"atv-ext-fe.amazon.com",        //   … FE region
-		"pv-cdn.net",                   // Prime Video's own CDN
-		"avodmp4s3ww-a.akamaihd.net",   // video segments (Akamai distribution)
+		"amazonvideo.com",               // app control plane
+		"atv-ps.amazon.com",             // playback services
+		"atv-ext.amazon.com",            // playback API
+		"atv-ext-eu.amazon.com",         //   … EU region
+		"atv-ext-fe.amazon.com",         //   … FE region
+		"pv-cdn.net",                    // Prime Video's own CDN
+		"avodmp4s3ww-a.akamaihd.net",    // video segments (Akamai distribution)
 		"d25xi40x97liuc.cloudfront.net", // artwork (CloudFront distribution)
 		"dmqdd6hw24ucf.cloudfront.net",  // playback manifests (CloudFront distribution)
 		"d22qjgkvxw22r6.cloudfront.net", // playback (CloudFront distribution)
