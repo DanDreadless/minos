@@ -172,6 +172,14 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 			b.AddDeny("service:"+name, d)
 		}
 	}
+	// Globally pardoned services: the allow bundle is the deny bundle plus
+	// the playback hosts a working service needs; allow wins over any deny,
+	// including the same service being blocked above.
+	for _, name := range cfg.Blocking.AllowedServices {
+		for _, d := range services.AllowDomains(name) {
+			b.AddAllow("service:"+name, d)
+		}
+	}
 
 	m.mu.Lock()
 	for _, src := range cfg.Lists.Sources {

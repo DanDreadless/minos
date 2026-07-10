@@ -189,12 +189,13 @@ func (s *Server) handleGetGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 type groupBody struct {
-	Name       *string   `json:"name"`
-	Mode       *string   `json:"mode"`
-	Allowlist  *[]string `json:"allowlist"`
-	Denylist   *[]string `json:"denylist"`
-	Services   *[]string `json:"services"`
-	SafeSearch *bool     `json:"safe_search"`
+	Name            *string   `json:"name"`
+	Mode            *string   `json:"mode"`
+	Allowlist       *[]string `json:"allowlist"`
+	Denylist        *[]string `json:"denylist"`
+	Services        *[]string `json:"services"`
+	AllowedServices *[]string `json:"allowed_services"`
+	SafeSearch      *bool     `json:"safe_search"`
 	// Schedule distinguishes three states: absent (untouched), JSON null
 	// (clear the schedule), or an object (set it).
 	Schedule json.RawMessage `json:"schedule"`
@@ -239,6 +240,9 @@ func (s *Server) handleAddGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Services != nil {
 		g.Services = *body.Services
+	}
+	if body.AllowedServices != nil {
+		g.AllowedServices = *body.AllowedServices
 	}
 	if body.SafeSearch != nil {
 		g.SafeSearch = *body.SafeSearch
@@ -287,6 +291,9 @@ func (s *Server) handleUpdateGroup(w http.ResponseWriter, r *http.Request) {
 			}
 			if body.Services != nil {
 				g.Services = *body.Services
+			}
+			if body.AllowedServices != nil {
+				g.AllowedServices = *body.AllowedServices
 			}
 			if body.SafeSearch != nil {
 				g.SafeSearch = *body.SafeSearch

@@ -145,6 +145,18 @@
     }
   }
 
+  async function toggleGroupAllowedService(g: Group, name: string): Promise<void> {
+    const next = new Set(g.allowed_services ?? []);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    try {
+      groups = await api.updateGroup(g.name, { allowed_services: [...next] });
+    } catch (e) {
+      notifyError(e);
+      await load();
+    }
+  }
+
   async function setGroupMode(g: Group, ev: Event): Promise<void> {
     try {
       groups = await api.updateGroup(g.name, {
@@ -349,6 +361,26 @@
                   type="checkbox"
                   checked={(g.services ?? []).includes(svc.name)}
                   on:change={() => toggleGroupService(g, svc.name)}
+                />
+                {svc.label}
+              </label>
+            {/each}
+          </div>
+        </details>
+        <details class="group-services">
+          <summary>
+            {copy.devices.groupAllowedServices}
+            {#if g.allowed_services?.length}
+              <span class="count">({g.allowed_services.length})</span>
+            {/if}
+          </summary>
+          <div class="service-grid">
+            {#each catalog as svc (svc.name)}
+              <label class="service">
+                <input
+                  type="checkbox"
+                  checked={(g.allowed_services ?? []).includes(svc.name)}
+                  on:change={() => toggleGroupAllowedService(g, svc.name)}
                 />
                 {svc.label}
               </label>

@@ -326,6 +326,21 @@ This is security software; hold it to that standard.
   every device with a known MAC also gets a **vendor label** from
   `internal/oui` (a curated IEEE-OUI subset, embedded). Still roadmapped:
   DHCP-lease ingestion.
+- **Service pardons semantics** (fixed decisions): a pardoned service
+  compiles `services.AllowDomains(name)` as `AddAllow("service:"+name, …)` —
+  the deny bundle plus curated `allowExtra` playback/sign-in hosts, so
+  `AllowDomains ⊇ Domains` and allowing always shadows blocking the same
+  service (allow wins at every label depth; blocked+allowed is legal, not a
+  validation error). Extras are **precise hostnames only**, never a shared
+  CDN apex (`cloudfront.net`/`akamaihd.net`) — enforced by a services test.
+  Allowed verdicts now record `List`/`Rule` in the docket (server.go, after
+  the blocked branch) so "why was this passed" names the pardoning list.
+  `PUT /api/services` is a **partial update** (`blocked`/`allowed` each
+  optional; both absent = 400) — full replace would let pre-`allowed`
+  external callers (docs/home-assistant.md recipes) silently clear pardons.
+  `blocking.allowed_services` / `groups[].allowed_services` are new YAML
+  keys: tolerant on-disk loading keeps downgrades safe (ignored with a
+  warning); only pre-tolerant strict binaries refuse, `.bak` recovers.
 - **Response cache semantics** (fixed decisions): the cache sits *after*
   the filter — verdicts always reflect live rules and blocked answers are
   never cached. Any config change swaps in a fresh cache (that IS the

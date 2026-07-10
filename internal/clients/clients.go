@@ -208,7 +208,8 @@ func (r *Registry) rebuildPolicies(now time.Time) {
 		if g.Mode == ModeFilter {
 			p.SafeSearch = g.SafeSearch
 		}
-		if g.Mode == ModeFilter && (len(g.Allowlist) > 0 || len(g.Denylist) > 0 || len(g.Services) > 0) {
+		if g.Mode == ModeFilter && (len(g.Allowlist) > 0 || len(g.Denylist) > 0 ||
+			len(g.Services) > 0 || len(g.AllowedServices) > 0) {
 			b := filter.NewBuilder()
 			list := "group:" + g.Name
 			for _, d := range g.Allowlist {
@@ -222,6 +223,13 @@ func (r *Registry) rebuildPolicies(now time.Time) {
 			for _, name := range g.Services {
 				for _, d := range services.Domains(name) {
 					b.AddDeny("service:"+name, d)
+				}
+			}
+			// Group-pardoned services: like group allowlist entries, an
+			// overlay allow verdict short-circuits the global rules.
+			for _, name := range g.AllowedServices {
+				for _, d := range services.AllowDomains(name) {
+					b.AddAllow("service:"+name, d)
 				}
 			}
 			p.Overlay = b.Build()

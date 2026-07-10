@@ -476,6 +476,12 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		s.record(entry, start)
 		return
 	}
+	if verdict.Rule != "" {
+		// An allow rule decided this ("why was this passed"): name the
+		// pardoning list in the docket, like blocks name theirs.
+		entry.List = verdict.List
+		entry.Rule = verdict.Rule
+	}
 
 	// Safe search rewrites matched search domains for enforced clients.
 	// Blocklist verdicts already won above; bypass devices are exempt.
