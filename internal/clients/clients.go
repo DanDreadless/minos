@@ -120,7 +120,27 @@ func (r *Registry) emitNew(ip string) {
 	if h := d.hostname.Load(); h != nil {
 		hostname = *h
 	}
+	if mac != "" && r.macKnownElsewhere(ip, mac) {
+		return // a known device on a new lease, not a new device
+	}
 	r.onNewDevice(ip, mac, hostname)
+}
+
+// macKnownElsewhere reports whether mac already identifies a device we know:
+// a configured client is keyed on it, or another live IP carries it.
+// Best-effort — just after a restart, Seeded entries have no MACs until ARP
+// re-tags them, so the seen-based check can miss; the configured-MAC check
+// and main's startup grace period cover that window.
+func (r *Registry) macKnownElsewhere(ip, mac string) bool {
+	if r.macConfigured(mac) {
+		return true
+	}
+	for _, other := range r.IPsForMAC(mac) {
+		if other != ip {
+			return true
+		}
+	}
+	return false
 }
 
 func NewRegistry() *Registry {
@@ -234,21 +254,34 @@ func (r *Registry) rebuildPolicies(now time.Time) {
 // ipsForClient lists the IPs a configured client resolves to: a MAC-less client
 // is just its IP; a MAC-keyed client is every seen IP currently carrying that
 // MAC, plus its last-known IP as a fallback so a returning device stays covered
-// until ARP re-tags it.
+// until ARP re-tags it. The fallback yields when the live entry at that IP
+// carries a different MAC — the address was recycled to another device, which
+// must not inherit this client's rules.
 func (r *Registry) ipsForClient(cl config.Client) []string {
 	if cl.MAC == "" {
 		return []string{cl.IP}
 	}
 	want := NormalizeMAC(cl.MAC)
-	ips := []string{cl.IP}
+	var ips []string
+	recycled := false
 	r.seen.Range(func(k, v any) bool {
-		if m := v.(*device).mac.Load(); m != nil && NormalizeMAC(*m) == want {
-			if ip := k.(string); ip != cl.IP {
+		m := v.(*device).mac.Load()
+		if m == nil {
+			return true
+		}
+		switch ip := k.(string); {
+		case NormalizeMAC(*m) == want:
+			if ip != cl.IP {
 				ips = append(ips, ip)
 			}
+		case ip == cl.IP:
+			recycled = true
 		}
 		return true
 	})
+	if !recycled {
+		ips = append(ips, cl.IP)
+	}
 	return ips
 }
 
@@ -497,8 +530,8 @@ func (a *deviceAcc) applyConfig(cl config.Client) {
 	if cl.Group != "" {
 		a.group = cl.Group
 	}
-	if cl.MAC != "" { // a user-set MAC beats ARP
-		a.mac = cl.MAC
+	if cl.MAC != "" { // a user-set MAC beats ARP; display the canonical form
+		a.mac = NormalizeMAC(cl.MAC)
 	}
 	a.addIP(cl.IP) // record the last-known IP even if never seen live
 	if a.primaryIP == "" {
@@ -580,17 +613,39 @@ func (r *Registry) setMAC(ip, mac string) {
 		return
 	}
 	d := v.(*device)
-	if prev := d.mac.Load(); prev != nil && *prev == mac {
+	prev := d.mac.Load()
+	if prev != nil && *prev == mac {
 		return // unchanged: no policy consequence
 	}
 	d.mac.Store(&mac)
 	// A group/block keyed on this MAC must take effect on this IP promptly:
 	// the hot-path table is IP-keyed and built from MAC assignments, so a
-	// freshly learned association needs a rebuild. Only when the MAC is
-	// actually configured, to avoid rebuilding on every ARP tag.
-	if r.macConfigured(mac) {
+	// freshly learned association needs a rebuild. Beyond a newly configured
+	// MAC, a rebuild is also due when the association contradicts one — the
+	// IP moved away from a configured MAC, or a configured client's last-known
+	// IP now carries another device's MAC (a recycled lease must not inherit
+	// that client's rules — see ipsForClient).
+	if r.macConfigured(mac) ||
+		(prev != nil && r.macConfigured(*prev)) ||
+		r.lastKnownIPConfigured(ip) {
 		r.rebuildPolicies(time.Now())
 	}
+}
+
+// lastKnownIPConfigured reports whether ip is the persisted last-known IP of a
+// MAC-keyed client. Learning a MAC on such an IP can start or stop the
+// client's fallback coverage of it, so the policy table needs a rebuild.
+func (r *Registry) lastKnownIPConfigured(ip string) bool {
+	cfg := r.cfg.Load()
+	if cfg == nil {
+		return false
+	}
+	for _, cl := range cfg.Clients {
+		if cl.MAC != "" && cl.IP == ip {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Registry) setHostname(ip, name string) {

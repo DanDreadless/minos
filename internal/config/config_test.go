@@ -184,6 +184,47 @@ func TestUnknownFieldToleratedOnDiskStrictOnRestore(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsDuplicateClientMAC(t *testing.T) {
+	c := Default()
+	c.Clients = []Client{
+		{IP: "192.168.1.10", MAC: "aa:bb:cc:dd:ee:ff"},
+		{IP: "192.168.1.11", MAC: "AA-BB-CC-DD-EE-FF"}, // same device, other notation
+	}
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("duplicate MAC should fail validation, got: %v", err)
+	}
+	c.Clients[1].MAC = "aa:bb:cc:dd:ee:00"
+	if err := c.Validate(); err != nil {
+		t.Errorf("distinct MACs should validate: %v", err)
+	}
+}
+
+// A hand-edited config with two entries for one MAC must not brick startup:
+// the on-disk load demotes the later entry to IP-keyed (warning logged), while
+// an uploaded restore rejects the duplicate outright.
+func TestDuplicateClientMACHealedOnDiskStrictOnRestore(t *testing.T) {
+	yaml := "clients:\n" +
+		"  - ip: 192.168.1.10\n    mac: aa:bb:cc:dd:ee:ff\n    group: default\n" +
+		"  - ip: 192.168.1.11\n    mac: AA-BB-CC-DD-EE-FF\n    name: stray\n"
+
+	path := filepath.Join(t.TempDir(), "minos.yaml")
+	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open should heal a duplicate client MAC, got: %v", err)
+	}
+	cls := s.Get().Clients
+	if len(cls) != 2 || cls[0].MAC == "" || cls[1].MAC != "" {
+		t.Errorf("want the first entry to keep the MAC and the second demoted to IP-keyed, got %+v", cls)
+	}
+
+	if _, err := Parse([]byte(yaml)); err == nil || !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("Parse (restore) should reject the duplicate MAC, got: %v", err)
+	}
+}
+
 // Overwriting an existing config leaves a .bak recovery point with the prior
 // contents; the first-ever write (no file yet) creates no spurious backup.
 func TestSaveBacksUpPriorConfig(t *testing.T) {
