@@ -557,6 +557,7 @@ func (c *Config) Validate() error {
 		}
 	}
 	clientIPs := make(map[string]bool, len(c.Clients))
+	clientMACs := make(map[string]bool, len(c.Clients))
 	for i, cl := range c.Clients {
 		if net.ParseIP(cl.IP) == nil {
 			return fmt.Errorf("clients[%d].ip: %q is not a valid IP address", i, cl.IP)
@@ -566,9 +567,16 @@ func (c *Config) Validate() error {
 		}
 		clientIPs[cl.IP] = true
 		if cl.MAC != "" {
-			if _, err := net.ParseMAC(cl.MAC); err != nil {
+			hw, err := net.ParseMAC(cl.MAC)
+			if err != nil {
 				return fmt.Errorf("clients[%d].mac: %q is not a valid MAC address", i, cl.MAC)
 			}
+			// Canonical form so aa:bb… and AA-BB… count as the same device.
+			key := hw.String()
+			if clientMACs[key] {
+				return fmt.Errorf("clients[%d].mac: duplicate client %q", i, cl.MAC)
+			}
+			clientMACs[key] = true
 		}
 		if cl.Group != "" && cl.Group != "default" && !groupNames[cl.Group] {
 			return fmt.Errorf("clients[%d].group: no group named %q", i, cl.Group)
@@ -750,10 +758,37 @@ func parseTolerant(data []byte) (*Config, error) {
 	if err := dec.Decode(c); err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	healDuplicateClientMACs(c)
 	if err := c.Validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
 	return c, nil
+}
+
+// healDuplicateClientMACs demotes later duplicate-MAC client entries to
+// IP-keyed so a hand-edited config still boots: validation rejects duplicate
+// MACs, but a startup load must not brick on a mistake the API self-heals on
+// its next write anyway. Strict Parse (restores) and Update stay strict.
+func healDuplicateClientMACs(c *Config) {
+	seen := make(map[string]bool, len(c.Clients))
+	for i := range c.Clients {
+		cl := &c.Clients[i]
+		if cl.MAC == "" {
+			continue
+		}
+		hw, err := net.ParseMAC(cl.MAC)
+		if err != nil {
+			continue // validation reports the malformed MAC itself
+		}
+		key := hw.String()
+		if seen[key] {
+			slog.Warn("config: duplicate client MAC; keeping the first entry "+
+				"and demoting this one to IP-keyed", "mac", cl.MAC, "ip", cl.IP)
+			cl.MAC = ""
+			continue
+		}
+		seen[key] = true
+	}
 }
 
 // unknownFields reports the decoder's complaint about the first unrecognised

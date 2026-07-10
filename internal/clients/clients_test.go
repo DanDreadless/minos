@@ -387,6 +387,105 @@ func TestConfigMACMergesWithLiveDevice(t *testing.T) {
 	}
 }
 
+func TestStaleIPEvictedOnRecycledLease(t *testing.T) {
+	cfg := config.Default()
+	cfg.Clients = []config.Client{{IP: "192.168.1.50", MAC: "aa:bb:cc:00:11:22", Blocked: true}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry()
+	r.ApplyConfig(cfg)
+
+	// The last-known IP stays covered while nothing contradicts it — even
+	// when traffic appears there before ARP has tagged a MAC.
+	r.Touch("192.168.1.50", false, time.Now())
+	if p := r.PolicyFor("192.168.1.50"); !p.Refuses() {
+		t.Errorf("MAC-less traffic on last-known IP = %+v, want still refused", p)
+	}
+	// DHCP recycles the address to an unrelated device. Learning its MAC must
+	// evict the stale policy without an explicit rebuild (setMAC triggers it).
+	r.setMAC("192.168.1.50", "bb:bb:bb:bb:bb:bb")
+	if p := r.PolicyFor("192.168.1.50"); p != nil {
+		t.Errorf("recycled IP = %+v, want nil (default rules)", p)
+	}
+	// The original device is still refused wherever its MAC reappears.
+	r.Touch("192.168.1.77", false, time.Now())
+	r.setMAC("192.168.1.77", "aa:bb:cc:00:11:22")
+	if p := r.PolicyFor("192.168.1.77"); !p.Refuses() {
+		t.Errorf("device's new lease = %+v, want refused", p)
+	}
+}
+
+func TestMACChangeAwayFromConfiguredEvicts(t *testing.T) {
+	cfg := config.Default()
+	cfg.Clients = []config.Client{{IP: "192.168.1.10", MAC: "aa:bb:cc:00:11:22", Blocked: true}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry()
+	r.ApplyConfig(cfg)
+
+	r.Touch("192.168.1.60", false, time.Now())
+	r.setMAC("192.168.1.60", "aa:bb:cc:00:11:22")
+	if p := r.PolicyFor("192.168.1.60"); !p.Refuses() {
+		t.Fatalf("lease with configured MAC = %+v, want refused", p)
+	}
+	// The ARP table re-tags the IP with a different, unconfigured MAC: the
+	// previous MAC being configured is what must trigger the rebuild.
+	r.setMAC("192.168.1.60", "cc:cc:cc:cc:cc:cc")
+	if p := r.PolicyFor("192.168.1.60"); p != nil {
+		t.Errorf("IP after MAC moved away = %+v, want nil (default rules)", p)
+	}
+}
+
+func TestNewDeviceCallbackDedup(t *testing.T) {
+	cfg := config.Default()
+	cfg.Clients = []config.Client{{IP: "192.168.1.40", MAC: "aa:bb:cc:dd:ee:03", Name: "known"}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry()
+	r.ApplyConfig(cfg)
+	var calls []string
+	r.OnNewDevice(func(ip, mac, _ string) { calls = append(calls, ip+"/"+mac) })
+
+	// A genuinely new device fires, even before any MAC is known.
+	r.Touch("192.168.1.20", false, time.Now())
+	r.emitNew("192.168.1.20")
+	// The same device, enriched and later roaming to a new lease: silent.
+	r.setMAC("192.168.1.20", "aa:bb:cc:dd:ee:01")
+	r.Touch("192.168.1.21", false, time.Now())
+	r.setMAC("192.168.1.21", "aa:bb:cc:dd:ee:01")
+	r.emitNew("192.168.1.21")
+	// A configured device appearing on a fresh lease: silent too.
+	r.Touch("192.168.1.41", false, time.Now())
+	r.setMAC("192.168.1.41", "aa:bb:cc:dd:ee:03")
+	r.emitNew("192.168.1.41")
+	// A different device with an unseen, unconfigured MAC still fires.
+	r.Touch("192.168.1.30", false, time.Now())
+	r.setMAC("192.168.1.30", "aa:bb:cc:dd:ee:02")
+	r.emitNew("192.168.1.30")
+
+	want := []string{"192.168.1.20/", "192.168.1.30/aa:bb:cc:dd:ee:02"}
+	if len(calls) != len(want) || calls[0] != want[0] || calls[1] != want[1] {
+		t.Errorf("callbacks = %v, want %v", calls, want)
+	}
+}
+
+func TestDeviceDisplayMACNormalized(t *testing.T) {
+	cfg := config.Default()
+	cfg.Clients = []config.Client{{IP: "192.168.1.10", MAC: "AA-BB-CC-DD-EE-FF", Name: "nas"}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry()
+	r.ApplyConfig(cfg)
+	devs := r.Devices(cfg)
+	if len(devs) != 1 || devs[0].MAC != "aa:bb:cc:dd:ee:ff" {
+		t.Errorf("devices = %+v, want one row with canonical mac aa:bb:cc:dd:ee:ff", devs)
+	}
+}
+
 func BenchmarkTouch(b *testing.B) {
 	r := NewRegistry()
 	now := time.Now()

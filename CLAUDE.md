@@ -265,11 +265,22 @@ This is security software; hold it to that standard.
   `PolicyFor` is unchanged — one map read. A freshly learned MAC↔IP
   association triggers a rebuild from `setMAC` (enrichment worker only, so
   it never races the schedule ticker) to close the brief default-rules
-  window on a new lease. A configured client always keeps a **valid
-  last-known IP** (`Client.IP`), so an older IP-only binary still loads the
-  config after a downgrade (validation requires a valid IP) — this is why
-  MAC assignment needed **no new YAML key** and sidesteps the deferred
-  schema-version problem. A client's `blocked: true` overrides its group,
+  window on a new lease; the trigger also fires when the association
+  *contradicts* config (IP moved away from a configured MAC, or a
+  configured client's last-known IP got another device's MAC). A configured
+  client always keeps a **valid last-known IP** (`Client.IP`), so an older
+  IP-only binary still loads the config after a downgrade (validation
+  requires a valid IP) — this is why MAC assignment needed **no new YAML
+  key** and sidesteps the deferred schema-version problem. The last-known
+  IP is covered as a fallback until ARP re-tags it, but **yields to a
+  contradicting live MAC**: a recycled DHCP lease must never inherit the
+  previous owner's rules (`ipsForClient`). Client MACs are **unique** in
+  validation (canonical `net.ParseMAC` form); the tolerant on-disk load
+  self-heals a hand-edited duplicate by demoting later entries to IP-keyed
+  rather than failing boot, while strict `Parse` (restores) and API writes
+  reject it. The new-device notification is per **physical device**: a
+  known MAC (configured, or live on another IP) appearing on a fresh lease
+  doesn't re-fire. A client's `blocked: true` overrides its group,
   including bypass. A device-level DNS block is access control, so recess
   does NOT lift it; recess does silence group overlay rules. Group overlay
   pardons beat global denies. Hot-path cost is unchanged: one sync.Map
@@ -288,7 +299,11 @@ This is security software; hold it to that standard.
   now), hostname from a reverse-DNS lookup. Both run on the enrichment
   worker, never on the query path. Windows reads `arp -a`; Linux reads
   /proc/net/arp. `clients.NormalizeMAC` canonicalises to lowercase colon
-  form so ARP-derived and user-entered MACs compare equal.
+  form so ARP-derived and user-entered MACs compare equal. Known
+  limitation (maintainer-accepted, July 2026): IPv6 clients are never
+  MAC-tagged, so an IPv6-preferring host rotating privacy addresses still
+  produces duplicate Devices rows and IP-keyed-only policies — fixing it
+  needs netlink neighbor reads (Linux), deferred until it bites.
 - **PTR enrichment targets the gateway first** (fixed decision): a bare
   `net.DefaultResolver.LookupAddr` in production goes to the system
   resolver — usually Minos itself — which answers private reverse zones
