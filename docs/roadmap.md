@@ -64,96 +64,67 @@ At or beyond parity with the field:
   addresses and query-log storage
 - Single static binary, SD-card-safe storage, no telemetry
 
-## Usability & enrichment round — shipped in v0.7.0 (July 2026)
+## Usability & enrichment round — shipped (v0.7.x, July 2026)
 
-A second July 2026 pass from real-world use, released as **v0.7.0**. Detailed
-engineering plan lives outside the repo
-(`../.claude/minos-improvements-plan.md`). Shipped: bootstrap-free default
-upstream (IP-literal DoH), curated Ferrymen picker (cert-verified known-good
-resolvers), full-width layout + internal Docket scroll, Tribunal drill-downs,
-device list sorted by IP, tidier import UI, gateway-directed PTR enrichment,
-Codex/family-controls doc reconciliation, and rollback-safe config loading
-with a `minos.yaml.bak` backup. The frontend toolchain also moved to
-Svelte 5 / Vite 6, clearing all open Dependabot alerts.
+A second July 2026 pass from real-world use, shipped across v0.7.0 and the
+releases after it (verified complete 2026-07-11). Engineering detail lives
+outside the repo (`../.claude/minos-improvements-plan.md`, now an archived
+ledger). Shipped: bootstrap-free default upstream (IP-literal DoH), curated
+Ferrymen picker, full-width layout + internal Docket scroll, Tribunal
+drill-downs, Docket drill-downs reading the full persisted history
+(`GET /api/querylog/history`, server-side filters + pagination), devices
+sorted by IP, device IP → filtered Docket, gateway-first PTR enrichment with
+NetBIOS and mDNS fallbacks, MAC-OUI vendor labels, MAC-based device identity
+(one row and one policy per physical device across DHCP leases), service
+pardons (global + per group), in-app per-install-method upgrade guidance,
+rollback-safe config loading with `minos.yaml.bak` backups, and the
+Svelte 5 / Vite 6 toolchain move.
 
-### Still planned (carried over from the round)
+### Deferred from the round (deliberate, not forgotten)
 
-- **Drill-downs read persisted history (Docket history)** — *known bug in the
-  v0.7.0 drill-downs.* The Docket's data source (`GET /api/querylog` →
-  `querylog.Recent()`) reads only the in-memory ring buffer, which is empty
-  after a restart and refills from live traffic; the dashboard aggregates
-  (busiest clients, top blocked) read SQLite, i.e. the full 90-day history. So
-  clicking a busiest client that shows 3000+ condemned lands on a Docket
-  showing only events since the last restart — a mismatch that *looks* like
-  data loss after an upgrade but isn't (SQLite keeps everything; don't reset
-  the aggregates). Fix: wire persisted history with server-side filters.
-  `querylog.QueryHistory()` already reads SQLite paginated by timestamp but is
-  unused by the API — extend it to accept `client` / `qname` / `verdict`
-  filters, add `GET /api/querylog/history?client=&qname=&verdict=&before=&limit=`,
-  and have the Docket load from it when opened via a drill-down or a search
-  (with "load older" pagination), keeping the live WebSocket stream prepending
-  new matches on top. SQLite reads stay off the query hot path (as the
-  aggregates already are); never flush per query. *(planned, next)*
-- **In-app upgrade guidance** — the "new version available" notice currently
-  only links to the GitHub release; it should show the **exact upgrade
-  command for how this instance was installed**: quick-install/binary →
-  re-run the checksum-verified installer + `systemctl restart`; Docker →
-  `compose pull && up -d`; build-from-source → `git checkout` the tag +
-  rebuild. Detect the method from a build-time stamp refined by runtime
-  Docker/systemd checks, with a "What's new" link. Display-only — Minos never
-  replaces its own binary (the installer's deliberate "no self-updates" stance
-  stands). Manual steps are documented in `getting-started.md` meanwhile.
-- **Further device identity** *(next up)* — a production check settled the
-  direction: the LAN router returns NXDOMAIN for reverse (PTR) lookups, so
-  gateway-directed PTR yields nothing on networks like it, and DHCP lease-file
-  ingestion is moot when the router (not Minos) is the DHCP server — the lease
-  file isn't on the Pi. Real names have to come from the devices themselves.
-  **Hard constraint: all of this stays on the enrichment worker and must never
-  add latency to a DNS request** — the query hot path is untouched.
-  - **MAC → vendor labels (OUI)** — a small embedded OUI-prefix table turns
-    the ARP-derived MAC into a vendor (Apple, Google, Amazon, Raspberry Pi,
-    Espressif…). Add a **Vendor column** to the Devices table so every device
-    is identifiable even when no hostname resolves; works for 100% of devices
-    with a known MAC, needs no network cooperation. The universal baseline.
-    *(shipped)*
-  - **mDNS reverse lookup** — reverse PTR to `224.0.0.251:5353` (unicast-
-    response bit) resolves `.local` names for Apple / Fire TV / LG / printer /
-    IoT devices, and is the one source that works when the router won't do
-    PTR. Sent on every interface, so multi-homed hosts still reach the LAN.
-    *(shipped)*
-  - **NetBIOS / NBSTAT** — the layer for Windows / Samba machine names, which
-    typically run no mDNS responder and would otherwise stay blank. A single
-    unicast NBSTAT node-status query to UDP 137 reads the device's own name
-    table; it slots into the hostname chain after unicast PTR and before mDNS
-    (cheap unicast, fast-fail on non-Windows hosts). Stdlib-only, on the
-    enrichment worker, never on the query path. *(shipped)*
-
-  All best-effort and layered (first hit wins for the hostname; the vendor
-  label is always computed from the MAC); a device with none simply shows its
-  vendor or bare IP.
-- **Devices drill-down to the Docket** — click a device's IP on the Devices
-  page to open the Docket filtered to that client (all its allowed and denied
-  queries), mirroring the Tribunal's busiest-client drill-down. Reuses the
-  existing `docketHref`/persisted-history plumbing; a frontend-only link.
-  *(shipped)*
-- **MAC-based device identity** — a device is identified by its MAC when one
-  is known (else its IP), so a power-cycled box that grabs a new DHCP lease
-  shows as one row, not a duplicate: every IP it has used folds into a single
-  Devices entry (counts summed, drill-down spanning them all). Group/block
-  assignments follow the MAC across leases too — the hot-path policy table
-  stays IP-keyed but is rebuilt from MAC assignments off the query path, and a
-  MAC-keyed client keeps a valid last-known IP so config still loads on an
-  older binary (no new YAML key). Falls back to IP for devices Minos can't see
-  at layer 2 (off-subnet, IPv6, DoT/DoH). *(shipped)*
 - **Config schema-version + migration seam** — deferred until a real
   migration needs it, so it ships with tolerant loading already in the field.
+- **DHCP lease-file ingestion** — moot on the common home setup where the
+  router (not the Minos box) runs DHCP and the lease file isn't on the Pi.
+  Revisit only if users running dnsmasq/Kea beside Minos ask.
+- **Install-method build stamp** — upgrade guidance currently detects
+  docker/systemd/dev-version at runtime only; the ldflags stamp +
+  `update.install_method` override moved to the next round.
 
-Beyond these, what gets promoted comes from the list below as real-world
-usage decides:
+## Next round — making Minos the homelab default
+
+The implementation-ready plan is `../.claude/minos-product-plan.md`, built
+from a July 2026 competitive review (Pi-hole v6, AdGuard Home, Blocky,
+Technitium, NextDNS). Headlines, roughly in build order:
+
+- **Curated blocklist catalog** on the Codex page (Hagezi / OISD /
+  StevenBlack tiers, one-click subscribe — the Ferrymen-picker pattern
+  applied to the harder decision)
+- **Subscribed allowlists** (`action: allow` list sources — Pi-hole v6
+  "antigravity" parity, nearly free given the matcher's allow semantics)
+- **Per-list effectiveness stats** — 7-day blocks attributed per list, so
+  dead-weight lists are visible (the "why was this judged" data, aggregated)
+- **Audit (dry-run) lists** — rules logged as "would block" but never
+  enforced; try a strict list safely, then enforce with one click. Requested
+  around Pi-hole for years, shipped by nobody
+- **Bypass resistance** — Firefox DoH canary answered by default, opt-in
+  iCloud Private Relay block, and an `encrypted-dns` services-catalog bundle
+  blockable per group
+- **Per-client dashboard** — aggregated top allowed/blocked per device,
+  spanning all its IPs (AdGuard's headline advantage, matched)
+- **Weekly digest** through the existing webhook/ntfy notifier
+- **First-run checklist** on the Tribunal; install-method build stamp
+
+Maintainer-gated (explicit decision needed before any code): **replica
+config sync** (bounded one-way push; the docs-only keepalived + API-sync
+recipe can ship anytime), and **DNS-over-QUIC** (parked on the quic-go
+dependency weight).
 
 ## Under consideration
 
 - DNSSEC validation (today: delegate to validating DoH/DoT upstreams)
+- DNS-over-QUIC / DoH3, client-facing and upstream (parked: needs quic-go,
+  a heavy dependency against the blessed-set rule)
 
 ## Not building (pre-1.0)
 
