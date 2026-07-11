@@ -93,6 +93,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/querylog/stream", s.handleQueryLogStream)
 		r.Get("/stats", s.handleStats)
 		r.Get("/stats/client", s.handleClientStats)
+		r.Get("/stats/lists", s.handleListStats)
 		r.Get("/check", s.handleCheck)
 		r.Get("/config", s.handleGetConfig)
 		r.Put("/config", s.handleUpdateConfig)

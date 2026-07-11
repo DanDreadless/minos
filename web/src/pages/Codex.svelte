@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type ListStatus, type Service } from '../lib/api';
+  import { api, type ListStats, type ListStatus, type Service } from '../lib/api';
+  import { blocklistPresets, blocklistTiers, type BlocklistPreset } from '../lib/blocklists';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
@@ -12,6 +13,33 @@
   let newAction: 'block' | 'allow' = 'block';
   let catalog: Service[] = [];
   let blockedServices = new Set<string>();
+  let listStats: ListStats | null = null;
+
+  // Blocks attributed per list over the stats window, keyed by list name.
+  $: blocksByList = new Map((listStats?.lists ?? []).map((s) => [s.list, s.count]));
+  // Attributions that aren't a subscribed list: the user's own deny domains,
+  // blocked services, group overlays, and device blocks.
+  $: builtinStats = (listStats?.lists ?? []).filter((s) => !lists.some((l) => l.name === s.list));
+
+  function builtinLabel(name: string): string {
+    if (name.startsWith('service:')) {
+      const raw = name.slice('service:'.length);
+      const svc = catalog.find((c) => c.name === raw);
+      return copy.lists.statService(svc ? svc.label : raw);
+    }
+    if (name.startsWith('group:')) return copy.lists.statGroup(name.slice('group:'.length));
+    if (name === 'denylist') return copy.lists.statDenylist;
+    if (name === 'clients') return copy.lists.statClients;
+    return name;
+  }
+
+  async function loadStats(): Promise<void> {
+    try {
+      listStats = await api.listStats();
+    } catch {
+      // Decorative: the lists table works without the block counts.
+    }
+  }
 
   async function loadServices(): Promise<void> {
     try {
@@ -102,9 +130,26 @@
     }
   }
 
+  // A catalog card is "Added" when a subscribed source carries its exact URL,
+  // like the resolver picker matches presets by exact fields.
+  $: subscribedURLs = new Set(lists.map((l) => l.url));
+
+  async function addPreset(p: BlocklistPreset): Promise<void> {
+    busy = true;
+    try {
+      lists = await api.addList({ ...p.list, enabled: true });
+      notify(`List "${p.list.name}" added.`);
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      busy = false;
+    }
+  }
+
   onMount(() => {
     void load();
     void loadServices();
+    void loadStats();
   });
 </script>
 
@@ -129,6 +174,7 @@
           <th>Format</th>
           <th>Rules</th>
           <th>Skipped</th>
+          <th>{copy.lists.blocksHeader}</th>
           <th>Last refresh</th>
           <th></th>
         </tr>
@@ -156,6 +202,17 @@
             <td>{l.format}</td>
             <td class="num">{l.rules.toLocaleString()}</td>
             <td class="num">{l.skipped ? l.skipped.toLocaleString() : ''}</td>
+            <td class="num">
+              {#if l.action === 'allow'}
+                <span class="quiet" title={copy.lists.allowStatTitle}>—</span>
+              {:else if listStats}
+                {#if blocksByList.get(l.name)}
+                  {blocksByList.get(l.name)?.toLocaleString()}
+                {:else}
+                  <span class="quiet" title={copy.lists.noBlocksTitle}>{copy.lists.noBlocks}</span>
+                {/if}
+              {/if}
+            </td>
             <td>
               {#if l.last_error}
                 <span class="err" title={l.last_error}>fetch failed</span>
@@ -171,6 +228,14 @@
       </tbody>
     </table>
   </div>
+{/if}
+
+{#if builtinStats.length > 0}
+  <p class="builtin">
+    {copy.lists.builtinStatsTitle}
+    {#each builtinStats as s, i (s.list)}{i > 0 ? ' · ' : ' '}{builtinLabel(s.list)}:
+      {s.count.toLocaleString()}{/each}
+  </p>
 {/if}
 
 <section class="card services">
@@ -191,6 +256,34 @@
     {copy.lists.servicesNote}
     <a href="#/devices">{copy.lists.servicesNoteLink}</a>
   </p>
+</section>
+
+<section class="card catalog">
+  <h2>{copy.lists.catalogTitle} <small>{copy.lists.catalogHint}</small></h2>
+  {#each blocklistTiers as tier (tier)}
+    <h3>
+      {copy.lists.tiers[tier].label}
+      <small>{copy.lists.tiers[tier].hint}</small>
+    </h3>
+    <div class="preset-grid">
+      {#each blocklistPresets.filter((p) => p.tier === tier) as p (p.id)}
+        <div class="preset">
+          <div class="preset-head">
+            <span class="preset-label">{p.label}</span>
+            <span class="preset-size">{p.size}</span>
+          </div>
+          <p class="preset-note">{p.note}</p>
+          {#if subscribedURLs.has(p.list.url)}
+            <span class="preset-added">{copy.lists.catalogAdded}</span>
+          {:else}
+            <button class="row-action" disabled={busy} on:click={() => addPreset(p)}>
+              {copy.lists.catalogAdd}
+            </button>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  {/each}
 </section>
 
 <section class="card add">
@@ -252,6 +345,19 @@
     color: var(--blocked);
   }
 
+  .quiet {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    font-style: italic;
+    cursor: help;
+  }
+
+  .builtin {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    margin: 0.6rem 0 0;
+  }
+
   .allow-badge {
     display: inline-block;
     margin-left: 0.4rem;
@@ -271,8 +377,70 @@
   }
 
   .add,
+  .catalog,
   .services {
     margin-top: 1.5rem;
+  }
+
+  .catalog h3 {
+    margin: 1.1rem 0 0.5rem;
+    font-size: 0.92rem;
+  }
+
+  .catalog h3 small {
+    color: var(--text-dim);
+    font-weight: normal;
+    font-size: 0.78rem;
+    margin-left: 0.5rem;
+  }
+
+  .preset-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    gap: 0.6rem;
+  }
+
+  .preset {
+    border: 1px solid var(--border);
+    border-radius: 0.4rem;
+    padding: 0.6rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .preset-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  .preset-label {
+    font-weight: 600;
+    font-size: 0.88rem;
+  }
+
+  .preset-size {
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .preset-note {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    margin: 0;
+    flex: 1;
+  }
+
+  .preset .row-action {
+    align-self: flex-start;
+  }
+
+  .preset-added {
+    color: var(--allowed);
+    font-size: 0.78rem;
   }
 
   .service-grid {
