@@ -10,7 +10,8 @@ import (
 // repo is the GitHub "owner/name" used in upgrade guidance URLs.
 const repo = "DanDreadless/minos"
 
-// Install methods, detected at runtime (no build-time stamp yet).
+// Install methods. Release builds stamp one via -ldflags (see
+// cmd/minos main.installMethod); detection refines it at runtime.
 const (
 	methodDocker = "docker"
 	methodBinary = "binary" // quick-install script / release binary
@@ -36,7 +37,8 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	if s.updates != nil {
 		latest, available = s.updates.Latest()
 	}
-	method := detectInstallMethod(s.version)
+	method := resolveInstallMethod(s.store.Get().UpdateInstallMethod,
+		s.installMethod, s.version, inDocker())
 	tag := ""
 	notesURL := "https://github.com/" + repo + "/releases"
 	if latest != "" {
@@ -53,12 +55,23 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// detectInstallMethod guesses how this instance was installed. A dev version
-// (with a pre-release suffix) implies a source build; a container is detected
-// at runtime regardless of the binary.
-func detectInstallMethod(version string) string {
-	if inDocker() {
+// resolveInstallMethod decides how this instance was installed, most
+// trustworthy source first: the operator's config override
+// (update_install_method — for deployments detection can't see, e.g. a
+// distro package), runtime container markers (they beat the build stamp so
+// a release binary run inside a container still gets the Docker command —
+// wrong guidance is worse than none), the build-time -ldflags stamp, and
+// finally a version heuristic: a pre-release suffix implies a source build.
+func resolveInstallMethod(override, stamp, version string, docker bool) string {
+	if override != "" {
+		return override // validated by config: binary|docker|source
+	}
+	if docker {
 		return methodDocker
+	}
+	switch stamp {
+	case methodBinary, methodDocker, methodSource:
+		return stamp
 	}
 	if strings.ContainsAny(version, "-+") { // e.g. 0.1.0-dev
 		return methodSource

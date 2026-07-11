@@ -48,7 +48,7 @@ appears once the opt-in update check has run.
 ### `GET /api/update`
 
 The running and latest versions plus an actionable upgrade command for how
-*this* instance was installed (detected at runtime):
+*this* instance was installed:
 
 ```json
 {"current": "0.7.0", "latest": "0.8.0", "available": true,
@@ -57,8 +57,11 @@ The running and latest versions plus an actionable upgrade command for how
  "notes_url": "https://github.com/DanDreadless/minos/releases/tag/v0.8.0"}
 ```
 
-`install_method` is `binary` (quick-install), `docker`, or `source`.
-Display-only — Minos never runs the command itself.
+`install_method` is `binary` (quick-install), `docker`, or `source`,
+decided in this order: the `update_install_method` config override if set,
+then runtime container markers, then the build-time stamp release and
+Docker builds carry, then a dev-version heuristic. Display-only — Minos
+never runs the command itself.
 
 ### `GET /api/stats?hours=24`
 
