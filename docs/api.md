@@ -71,6 +71,22 @@ beyond), `top_blocked` as `{qname, count}`, and `top_clients` as
 `{client, total, blocked}`. Entries not yet flushed to disk (up to 30 s)
 are not included.
 
+### `GET /api/stats/client?client=192.168.1.50,192.168.1.51&hours=24`
+
+One device's traffic, aggregated for the Devices activity panel. `client`
+is required: exact addresses, comma-separated because a device can span
+several IPs across DHCP leases (pass everything from the device's `ips[]`).
+`hours` is 1–168 (default 24).
+
+```json
+{"window_hours": 24, "total": 1042, "blocked": 87,
+ "top_allowed": [{"qname": "github.com", "count": 120}],
+ "top_blocked": [{"qname": "ads.example.com", "count": 33}]}
+```
+
+Like every aggregate, it reads the persisted log (or the ring in ephemeral
+mode), so entries not yet flushed (up to 30 s) are missing.
+
 ### `GET /api/check?domain=ads.example.com`
 
 Judge a name without querying it:

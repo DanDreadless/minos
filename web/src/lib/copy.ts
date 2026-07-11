@@ -167,6 +167,15 @@ export const copy = {
     forget: 'Forget',
     forgetHint: 'remove the saved label/group for this device',
     viewInDocket: 'View this device’s queries in the Docket',
+    activityHint: 'show what this device queried',
+    activityTitle: (hours: number) =>
+      hours >= 168 ? 'activity, last 7 days' : `activity, last ${hours} hours`,
+    activityTotals: (total: number, blocked: number) =>
+      `${total.toLocaleString()} queries, ${blocked.toLocaleString()} blocked`,
+    activityAllowed: 'Top allowed domains',
+    activityBlocked: 'Top blocked domains',
+    activityEmpty: 'Nothing in this window.',
+    activityLoading: 'Loading…',
   },
 
   settings: {

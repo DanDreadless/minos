@@ -113,7 +113,7 @@ Technitium, NextDNS). Headlines, roughly in build order:
   iCloud Private Relay block, and an `encrypted-dns` services-catalog bundle
   blockable per group
 - **Per-client dashboard** — aggregated top allowed/blocked per device,
-  spanning all its IPs (AdGuard's headline advantage, matched)
+  spanning all its IPs (AdGuard's headline advantage, matched) *(shipped)*
 - **Weekly digest** through the existing webhook/ntfy notifier
 - **First-run checklist** on the Tribunal
 

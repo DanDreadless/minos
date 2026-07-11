@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"minos/internal/config"
+	"minos/internal/querylog"
 )
 
 func TestGetConfigRedactsToken(t *testing.T) {
@@ -308,6 +310,51 @@ func TestStatsEndpoint(t *testing.T) {
 	}
 
 	if rec := doJSON(t, r, "GET", "/api/stats?hours=999", "", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("hours=999: status = %d, want 400", rec.Code)
+	}
+}
+
+func TestClientStatsEndpoint(t *testing.T) {
+	s, _ := newTestServer(t, "")
+	r := s.Router()
+
+	// Seed the (ephemeral) log through the public Record path.
+	now := time.Now()
+	s.qlog.Record(querylog.Entry{Time: now, Client: "10.0.0.9", QName: "ads.example.com", QType: "A", Verdict: "blocked"})
+	s.qlog.Record(querylog.Entry{Time: now, Client: "10.0.0.9", QName: "github.com", QType: "A", Verdict: "allowed"})
+	s.qlog.Record(querylog.Entry{Time: now, Client: "10.0.0.10", QName: "github.com", QType: "A", Verdict: "allowed"})
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(s.qlog.Recent(0)) < 3 {
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// A device spanning both IPs, comma-separated like the history filter.
+	rec := doJSON(t, r, "GET", "/api/stats/client?client=10.0.0.9,10.0.0.10", "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+	}
+	var got struct {
+		WindowHours int              `json:"window_hours"`
+		Total       int              `json:"total"`
+		Blocked     int              `json:"blocked"`
+		TopAllowed  []map[string]any `json:"top_allowed"`
+		TopBlocked  []map[string]any `json:"top_blocked"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.WindowHours != 24 || got.Total != 3 || got.Blocked != 1 {
+		t.Errorf("overview = %+v, want 24h window, total 3, blocked 1", got)
+	}
+	if len(got.TopAllowed) != 1 || len(got.TopBlocked) != 1 {
+		t.Errorf("top lists = %+v / %+v, want one entry each", got.TopAllowed, got.TopBlocked)
+	}
+
+	// Parameter validation mirrors the stats endpoint.
+	if rec := doJSON(t, r, "GET", "/api/stats/client", "", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("missing client: status = %d, want 400", rec.Code)
+	}
+	if rec := doJSON(t, r, "GET", "/api/stats/client?client=10.0.0.9&hours=999", "", nil); rec.Code != http.StatusBadRequest {
 		t.Errorf("hours=999: status = %d, want 400", rec.Code)
 	}
 }
