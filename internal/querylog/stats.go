@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -191,6 +192,111 @@ func (l *Log) TopClients(ctx context.Context, since time.Time, n int) ([]ClientS
 	if len(out) > n {
 		out = out[:n]
 	}
+	return out, nil
+}
+
+// ClientOverview aggregates one device's traffic for the client drill-down:
+// totals plus its most-queried allowed and blocked names. A physical device
+// can span several IPs (MAC-merged leases), so it takes the full set.
+type ClientOverview struct {
+	Total      int         `json:"total"`
+	Blocked    int         `json:"blocked"`
+	TopAllowed []TopDomain `json:"top_allowed"`
+	TopBlocked []TopDomain `json:"top_blocked"`
+}
+
+// ClientOverview reports what the given client addresses resolved since the
+// given time. Off the hot path, like every aggregate here.
+func (l *Log) ClientOverview(ctx context.Context, clients []string, since time.Time, n int) (ClientOverview, error) {
+	if n <= 0 || n > 100 {
+		n = 10
+	}
+	out := ClientOverview{TopAllowed: []TopDomain{}, TopBlocked: []TopDomain{}}
+	if len(clients) == 0 {
+		return out, nil
+	}
+
+	if l.db != nil {
+		in := strings.Repeat("?,", len(clients))
+		in = in[:len(in)-1]
+		args := make([]any, 0, len(clients)+2)
+		for _, c := range clients {
+			args = append(args, c)
+		}
+
+		err := l.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(verdict = ?), 0)
+			FROM querylog WHERE client IN (`+in+`) AND ts >= ?`,
+			append([]any{VerdictBlocked}, append(args, since.UnixMilli())...)...,
+		).Scan(&out.Total, &out.Blocked)
+		if err != nil {
+			return out, fmt.Errorf("client totals query: %w", err)
+		}
+
+		top := func(verdict string) ([]TopDomain, error) {
+			rows, err := l.db.QueryContext(ctx, `SELECT qname, COUNT(*) AS c
+				FROM querylog WHERE client IN (`+in+`) AND ts >= ? AND verdict = ?
+				GROUP BY qname ORDER BY c DESC, qname LIMIT ?`,
+				append(append([]any{}, args...), since.UnixMilli(), verdict, n)...)
+			if err != nil {
+				return nil, fmt.Errorf("client top domains query: %w", err)
+			}
+			defer rows.Close()
+			doms := make([]TopDomain, 0, n)
+			for rows.Next() {
+				var d TopDomain
+				if err := rows.Scan(&d.QName, &d.Count); err != nil {
+					return nil, fmt.Errorf("client top domains scan: %w", err)
+				}
+				doms = append(doms, d)
+			}
+			return doms, rows.Err()
+		}
+		if out.TopAllowed, err = top(VerdictAllowed); err != nil {
+			return out, err
+		}
+		if out.TopBlocked, err = top(VerdictBlocked); err != nil {
+			return out, err
+		}
+		return out, nil
+	}
+
+	// Ephemeral mode: one pass over the ring.
+	want := make(map[string]bool, len(clients))
+	for _, c := range clients {
+		want[c] = true
+	}
+	allowed := make(map[string]int)
+	blocked := make(map[string]int)
+	l.scanRing(since, func(e Entry) {
+		if !want[e.Client] {
+			return
+		}
+		out.Total++
+		if e.Verdict == VerdictBlocked {
+			out.Blocked++
+			blocked[e.QName]++
+		} else {
+			allowed[e.QName]++
+		}
+	})
+	rank := func(counts map[string]int) []TopDomain {
+		doms := make([]TopDomain, 0, len(counts))
+		for q, c := range counts {
+			doms = append(doms, TopDomain{QName: q, Count: c})
+		}
+		sort.Slice(doms, func(i, j int) bool {
+			if doms[i].Count != doms[j].Count {
+				return doms[i].Count > doms[j].Count
+			}
+			return doms[i].QName < doms[j].QName
+		})
+		if len(doms) > n {
+			doms = doms[:n]
+		}
+		return doms
+	}
+	out.TopAllowed = rank(allowed)
+	out.TopBlocked = rank(blocked)
 	return out, nil
 }
 

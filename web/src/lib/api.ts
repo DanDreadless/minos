@@ -54,6 +54,14 @@ export interface Stats {
   top_clients: { client: string; total: number; blocked: number }[];
 }
 
+export interface ClientOverview {
+  window_hours: number;
+  total: number;
+  blocked: number;
+  top_allowed: { qname: string; count: number }[];
+  top_blocked: { qname: string; count: number }[];
+}
+
 export interface CheckResult {
   domain: string;
   verdict: 'blocked' | 'allowed';
@@ -265,6 +273,11 @@ export const api = {
   status: () => request<Status>('GET', '/api/status'),
   update: () => request<UpdateInfo>('GET', '/api/update'),
   stats: (hours = 24) => request<Stats>('GET', `/api/stats?hours=${hours}`),
+  clientStats: (clients: string[], hours = 24) =>
+    request<ClientOverview>(
+      'GET',
+      `/api/stats/client?client=${encodeURIComponent(clients.join(','))}&hours=${hours}`,
+    ),
   check: (domain: string) =>
     request<CheckResult>('GET', `/api/check?domain=${encodeURIComponent(domain)}`),
   querylog: (limit = 100) => request<LogEntry[]>('GET', `/api/querylog?limit=${limit}`),

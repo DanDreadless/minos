@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"minos/internal/filter"
@@ -62,6 +63,46 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		TopBlocked:  topBlocked,
 		TopClients:  topClients,
 	})
+}
+
+// handleClientStats aggregates one device's traffic for the client
+// drill-down panel: totals plus top allowed and blocked domains. `client`
+// is required and comma-separated (a MAC-merged device spans several IPs),
+// matching the querylog/history filter's convention.
+func (s *Server) handleClientStats(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	var clients []string
+	for _, part := range strings.Split(q.Get("client"), ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			clients = append(clients, part)
+		}
+		if len(clients) >= 32 {
+			break
+		}
+	}
+	if len(clients) == 0 {
+		writeError(w, http.StatusBadRequest, "client is required (comma-separated addresses)")
+		return
+	}
+	hours := 24
+	if v := q.Get("hours"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 168 {
+			writeError(w, http.StatusBadRequest, "hours must be 1-168")
+			return
+		}
+		hours = n
+	}
+	since := time.Now().Add(-time.Duration(hours) * time.Hour)
+	overview, err := s.qlog.ClientOverview(r.Context(), clients, since, 10)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		WindowHours int `json:"window_hours"`
+		querylog.ClientOverview
+	}{hours, overview})
 }
 
 // handleCheck judges a domain against the compiled rules and reports which

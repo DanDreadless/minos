@@ -53,6 +53,34 @@ func assertAggregates(t *testing.T, l *Log) {
 		t.Errorf("top clients = %+v, want 10.0.0.1 total=3 blocked=2 first", clients)
 	}
 
+	// The client drill-down spans a device's whole IP set…
+	ov, err := l.ClientOverview(t.Context(), []string{"10.0.0.1", "10.0.0.2"}, since, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ov.Total != 4 || ov.Blocked != 3 {
+		t.Errorf("overview totals = %d/%d, want 4/3", ov.Total, ov.Blocked)
+	}
+	if len(ov.TopBlocked) != 2 || ov.TopBlocked[0].QName != "ads.example.com" || ov.TopBlocked[0].Count != 2 {
+		t.Errorf("overview top blocked = %+v, want ads.example.com x2 first", ov.TopBlocked)
+	}
+	if len(ov.TopAllowed) != 1 || ov.TopAllowed[0].QName != "github.com" {
+		t.Errorf("overview top allowed = %+v, want github.com", ov.TopAllowed)
+	}
+	// …and scopes to exactly the addresses asked for.
+	ov, err = l.ClientOverview(t.Context(), []string{"10.0.0.2"}, since, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ov.Total != 1 || ov.Blocked != 1 || len(ov.TopAllowed) != 0 {
+		t.Errorf("single-client overview = %+v, want 1/1 with no allowed", ov)
+	}
+	// No clients = empty result, not an error (and not everyone's traffic).
+	ov, err = l.ClientOverview(t.Context(), nil, since, 10)
+	if err != nil || ov.Total != 0 {
+		t.Errorf("empty client set = %+v (err %v), want zero overview", ov, err)
+	}
+
 	timeline, err := l.Timeline(t.Context(), since, 10*time.Minute)
 	if err != nil {
 		t.Fatal(err)
