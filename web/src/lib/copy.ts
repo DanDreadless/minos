@@ -94,6 +94,16 @@ export const copy = {
     actionAllow: 'allowlist — entries are always allowed',
     confirmDelete: (name: string) =>
       `Remove the list "${name}"? Its rules stop applying immediately.`,
+    blocksHeader: 'Blocked (7d)',
+    noBlocks: 'no blocks this week',
+    noBlocksTitle:
+      'No queries matched this list in the last 7 days. It may still be a quiet safety net — security lists often are.',
+    allowStatTitle: 'An allowlist pardons; it never blocks.',
+    builtinStatsTitle: 'Blocked by your own rules this week:',
+    statDenylist: 'sentences (always-blocked domains)',
+    statClients: 'device blocks',
+    statService: (label: string) => `service ${label}`,
+    statGroup: (name: string) => `group ${name}`,
     servicesTitle: 'Blocked services',
     servicesHint: 'one click blocks a whole service for every device',
     servicesNote:

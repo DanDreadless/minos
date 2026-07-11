@@ -62,6 +62,11 @@ export interface ClientOverview {
   top_blocked: { qname: string; count: number }[];
 }
 
+export interface ListStats {
+  window_hours: number;
+  lists: { list: string; count: number }[];
+}
+
 export interface CheckResult {
   domain: string;
   verdict: 'blocked' | 'allowed';
@@ -279,6 +284,7 @@ export const api = {
       'GET',
       `/api/stats/client?client=${encodeURIComponent(clients.join(','))}&hours=${hours}`,
     ),
+  listStats: (hours = 168) => request<ListStats>('GET', `/api/stats/lists?hours=${hours}`),
   check: (domain: string) =>
     request<CheckResult>('GET', `/api/check?domain=${encodeURIComponent(domain)}`),
   querylog: (limit = 100) => request<LogEntry[]>('GET', `/api/querylog?limit=${limit}`),

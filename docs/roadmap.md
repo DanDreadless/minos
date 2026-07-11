@@ -106,6 +106,7 @@ Technitium, NextDNS). Headlines, roughly in build order:
   antigravity lists over) *(shipped)*
 - **Per-list effectiveness stats** — 7-day blocks attributed per list, so
   dead-weight lists are visible (the "why was this judged" data, aggregated)
+  *(shipped)*
 - **Audit (dry-run) lists** — rules logged as "would block" but never
   enforced; try a strict list safely, then enforce with one click. Requested
   around Pi-hole for years, shipped by nobody

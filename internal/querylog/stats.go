@@ -34,6 +34,12 @@ type ClientStat struct {
 	Blocked int    `json:"blocked"`
 }
 
+// ListStat counts the blocks attributed to one list.
+type ListStat struct {
+	List  string `json:"list"`
+	Count int    `json:"count"`
+}
+
 // Timeline returns query counts bucketed by the given width, oldest first.
 // Empty buckets are filled in so charts get a continuous series.
 func (l *Log) Timeline(ctx context.Context, since time.Time, bucket time.Duration) ([]TimelineBucket, error) {
@@ -139,6 +145,54 @@ func (l *Log) TopBlockedDomains(ctx context.Context, since time.Time, n int) ([]
 	})
 	if len(out) > n {
 		out = out[:n]
+	}
+	return out, nil
+}
+
+// BlocksByList groups blocked queries by the list that condemned them,
+// busiest first — "is this list earning its keep" on the lists page. Every
+// list is small in number (subscriptions plus a few built-in pseudo-lists
+// like "denylist" and "service:<name>"), so there is no paging, just a
+// defensive cap.
+func (l *Log) BlocksByList(ctx context.Context, since time.Time) ([]ListStat, error) {
+	const maxLists = 200
+	if l.db != nil {
+		rows, err := l.db.QueryContext(ctx, `SELECT list, COUNT(*) AS c
+			FROM querylog WHERE ts >= ? AND verdict = ? AND list != ''
+			GROUP BY list ORDER BY c DESC, list LIMIT ?`,
+			since.UnixMilli(), VerdictBlocked, maxLists)
+		if err != nil {
+			return nil, fmt.Errorf("blocks by list query: %w", err)
+		}
+		defer rows.Close()
+		var out []ListStat
+		for rows.Next() {
+			var s ListStat
+			if err := rows.Scan(&s.List, &s.Count); err != nil {
+				return nil, fmt.Errorf("blocks by list scan: %w", err)
+			}
+			out = append(out, s)
+		}
+		return out, rows.Err()
+	}
+	counts := make(map[string]int)
+	l.scanRing(since, func(e Entry) {
+		if e.Verdict == VerdictBlocked && e.List != "" {
+			counts[e.List]++
+		}
+	})
+	out := make([]ListStat, 0, len(counts))
+	for list, c := range counts {
+		out = append(out, ListStat{List: list, Count: c})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].List < out[j].List
+	})
+	if len(out) > maxLists {
+		out = out[:maxLists]
 	}
 	return out, nil
 }
