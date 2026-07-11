@@ -104,6 +104,15 @@ export const copy = {
     statClients: 'device blocks',
     statService: (label: string) => `service ${label}`,
     statGroup: (name: string) => `group ${name}`,
+    catalogTitle: 'Choose your blocklists',
+    catalogHint: 'curated, verified lists — one click to subscribe',
+    catalogAdd: 'Add',
+    catalogAdded: 'Added ✓',
+    tiers: {
+      balanced: { label: 'Balanced', hint: 'recommended — blocks ads & tracking with very low breakage' },
+      strict: { label: 'Strict', hint: 'wider nets; keep an eye on the Docket and pardon what breaks' },
+      security: { label: 'Security', hint: 'malware & phishing feeds — protection, not ad blocking' },
+    },
     servicesTitle: 'Blocked services',
     servicesHint: 'one click blocks a whole service for every device',
     servicesNote:

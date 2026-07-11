@@ -336,7 +336,13 @@ Open `http://<host>:8080`. Six pages, one per concern:
   Gmail, Maps, and other subdomains are untouched.
 - **The Codex** (blocklists) — add, enable/disable, or remove list
   subscriptions and refresh them on demand, with per-list rule counts and
-  fetch errors. The **Blocked services** card blocks a whole service
+  fetch errors. The **Choose your blocklists** catalog offers curated,
+  verified lists (Hagezi, OISD, StevenBlack, threat feeds) in three plain
+  tiers — Balanced, Strict, Security — each card one click to subscribe,
+  with a size hint so you know what you're loading on a Pi. The manual
+  add-by-URL form below it takes any list the catalog doesn't carry
+  (see the YAML example in the configuration reference). The **Blocked
+  services** card blocks a whole service
   (TikTok, YouTube, Discord…) with one checkbox for every device. To block
   a service only for some devices, or only at certain times, set it on a
   **group** on the Devices page instead — a group's blocked services apply
