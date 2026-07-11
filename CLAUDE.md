@@ -420,6 +420,21 @@ This is security software; hold it to that standard.
   block, gets a `config.Validate` **warning, never an error** (the OS
   resolver on a production box is usually Minos itself, so the block would
   starve the upstream of its own address).
+- **Audit-list semantics** (fixed decisions): audit mode is **two matchers,
+  never a flag inside one** — `lists.Manager` owns a second audit engine
+  (`AuditEngine()`), compiled from only `audit: true` sources, so the
+  enforcing matcher stays byte-identical and the audit cost is strictly
+  additive. The hot path consults it in the **allowed branch only** (blocked
+  queries aren't audited; bypass devices are exempt like all filtering),
+  gated by `Engine.Empty()` — no audit lists ≈ one atomic load + branch.
+  A pardoned query CAN carry a would-block marker (pardon + audit are both
+  shown — that's the feature). Cache hits skip `handle()`'s filter section,
+  so audit marks are **sampled at resolution time**, not per hit — accepted,
+  documented in api.md; don't "fix" it. `audit` on an allow-source is a
+  validation error. The querylog gained `audit_list`/`audit_rule` TEXT
+  columns via an idempotent `PRAGMA table_info` + `ALTER TABLE ADD COLUMN`
+  migration on open (instant in SQLite, SD-safe) — copy that migration shape
+  for any future column.
 - **Upstream breaker semantics** (fixed decisions): only transport errors
   count (SERVFAIL is an answer); 3 consecutive failures sidestep an
   upstream for 30 s; a lapsed cooldown admits exactly one CAS-elected

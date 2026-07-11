@@ -63,6 +63,11 @@ type Server struct {
 	cacheHits   atomic.Uint64
 	cacheMisses atomic.Uint64
 
+	// auditEngine matches audit-mode lists against allowed queries for
+	// "would block" attribution — never enforcement. Set once at wiring
+	// (SetAuditEngine); nil when no manager provides one (tests).
+	auditEngine atomic.Pointer[filter.Engine]
+
 	// safeSearch is the global blocking.safe_search flag; per-group
 	// enforcement rides the client policy.
 	safeSearch atomic.Bool
@@ -383,6 +388,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 // DoH; NXDOMAIN means "this network filters DNS — don't".
 const firefoxCanary = "use-application-dns.net"
 
+// SetAuditEngine wires the manager's audit matcher in. Call before Start;
+// allowed queries then carry "would block" attribution when an audit-mode
+// list matches them.
+func (s *Server) SetAuditEngine(e *filter.Engine) { s.auditEngine.Store(e) }
+
 // handle is the hot path: judge, then answer or forward.
 func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 	start := time.Now()
@@ -508,6 +518,19 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		// pardoning list in the docket, like blocks name theirs.
 		entry.List = verdict.List
 		entry.Rule = verdict.Rule
+	}
+
+	// Audit-mode lists: attribution without enforcement. Only allowed
+	// queries are checked (auditing a blocked query is pointless), bypass
+	// devices are exempt like all filtering, and the empty-engine gate
+	// keeps the no-audit-lists cost to one atomic load and a branch. A
+	// pardoned query CAN carry a would-block marker — "your strict list
+	// would have condemned this; your pardon saved it". Cache hits skip
+	// handle() entirely, so audit marks are sampled at resolution time.
+	if ae := s.auditEngine.Load(); ae != nil && !ae.Empty() && !pol.Bypasses() {
+		if res := ae.Match(qname); res.Blocked {
+			entry.AuditList, entry.AuditRule = res.List, res.Rule
+		}
 	}
 
 	// Safe search rewrites matched search domains for enforced clients.

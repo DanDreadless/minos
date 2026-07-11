@@ -260,6 +260,8 @@ type listSourceBody struct {
 	Format  *string `json:"format"`
 	Action  *string `json:"action"` // "block" (default) or "allow"
 	Enabled *bool   `json:"enabled"`
+	// Audit compiles the list for "would block" logging without enforcement.
+	Audit *bool `json:"audit"`
 }
 
 func (s *Server) handleAddList(w http.ResponseWriter, r *http.Request) {
@@ -278,6 +280,9 @@ func (s *Server) handleAddList(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Enabled != nil {
 		src.Enabled = *body.Enabled
+	}
+	if body.Audit != nil {
+		src.Audit = *body.Audit
 	}
 	allow := false
 	if body.Action != nil {
@@ -337,6 +342,9 @@ func (s *Server) handleUpdateList(w http.ResponseWriter, r *http.Request) {
 				}
 				if body.Enabled != nil {
 					src.Enabled = *body.Enabled
+				}
+				if body.Audit != nil {
+					src.Audit = *body.Audit
 				}
 				if body.Action != nil {
 					// Moving between block and allow means moving the

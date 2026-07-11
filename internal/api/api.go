@@ -253,6 +253,15 @@ func (s *Server) handleQueryLogHistory(w http.ResponseWriter, r *http.Request) {
 		verdict = ""
 	}
 	filter := querylog.HistoryFilter{Search: q.Get("q"), Verdict: verdict}
+	// would_block narrows to entries an audit-mode list flagged.
+	switch v := q.Get("would_block"); v {
+	case "", "false":
+	case "true", "1":
+		filter.WouldBlock = true
+	default:
+		writeError(w, http.StatusBadRequest, "would_block must be true or false")
+		return
+	}
 	// client is an exact-match filter (comma-separated for a multi-IP device),
 	// distinct from the free-text q substring. Capped so the IN list stays sane.
 	if c := q.Get("client"); c != "" {

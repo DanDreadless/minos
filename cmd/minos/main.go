@@ -140,6 +140,7 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
+	proxy.SetAuditEngine(mgr.AuditEngine())
 	// ACME: dynamic certificates for the DoT/DoH listeners. Wired before
 	// Start so the listeners consult the manager on every handshake; the
 	// renewal loop starts once the shutdown context exists below.

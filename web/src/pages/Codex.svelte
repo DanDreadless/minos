@@ -70,6 +70,15 @@
     }
   }
 
+  async function toggleAudit(l: ListStatus): Promise<void> {
+    try {
+      lists = await api.updateList(l.name, { audit: !l.audit });
+    } catch (e) {
+      notifyError(e);
+      await load();
+    }
+  }
+
   async function remove(l: ListStatus): Promise<void> {
     if (!window.confirm(copy.lists.confirmDelete(l.name))) return;
     try {
@@ -124,6 +133,7 @@
       <thead>
         <tr>
           <th>On</th>
+          <th title={copy.lists.auditTitle}>{copy.lists.auditHeader}</th>
           <th>Name</th>
           <th>URL</th>
           <th>Format</th>
@@ -145,7 +155,22 @@
               />
             </td>
             <td>
+              {#if l.action !== 'allow'}
+                <input
+                  type="checkbox"
+                  checked={l.audit}
+                  title={copy.lists.auditTitle}
+                  on:change={() => toggleAudit(l)}
+                />
+              {/if}
+            </td>
+            <td>
               {l.name}
+              {#if l.audit}
+                <span class="audit-badge" title={copy.lists.auditBadgeTitle}>
+                  {copy.lists.auditBadge}
+                </span>
+              {/if}
               {#if l.action === 'allow'}
                 <span class="allow-badge" title={copy.lists.allowBadgeTitle}>
                   {copy.lists.allowBadge}
@@ -259,6 +284,19 @@
     border: 1px solid var(--allowed);
     border-radius: 0.6rem;
     color: var(--allowed);
+    font-size: 0.68rem;
+    line-height: 1.3;
+    vertical-align: middle;
+    cursor: help;
+  }
+
+  .audit-badge {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0 0.4rem;
+    border: 1px solid var(--audit, #c9962e);
+    border-radius: 0.6rem;
+    color: var(--audit, #c9962e);
     font-size: 0.68rem;
     line-height: 1.3;
     vertical-align: middle;

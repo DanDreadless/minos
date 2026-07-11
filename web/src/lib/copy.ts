@@ -55,6 +55,10 @@ export const copy = {
     filterAll: 'All verdicts',
     filterBlocked: 'Condemned only',
     filterAllowed: 'Passed only',
+    filterWouldBlock: 'Would block only',
+    wouldBlockBadge: 'would block',
+    wouldBlockTitle: (list: string, rule: string) =>
+      `An audit-mode list would have condemned this: "${rule}" in ${list}. Not enforced.`,
     deviceScope: 'device', // prefixes the drilled-in device's IP(s) chip
     live: 'live',
   },
@@ -94,6 +98,11 @@ export const copy = {
     actionAllow: 'allowlist — entries are always allowed',
     confirmDelete: (name: string) =>
       `Remove the list "${name}"? Its rules stop applying immediately.`,
+    auditHeader: 'Audit',
+    auditTitle:
+      "Audit mode: this list's rules are logged as 'would block' in the Docket but never enforced — try a strict list safely, then untick to enforce it.",
+    auditBadge: 'audit',
+    auditBadgeTitle: 'Logged as "would block", never enforced.',
     servicesTitle: 'Blocked services',
     servicesHint: 'one click blocks a whole service for every device',
     servicesNote:

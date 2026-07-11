@@ -184,6 +184,53 @@ func TestListSourceCRUD(t *testing.T) {
 
 // action:"allow" routes a source into Lists.AllowSources, an action change
 // moves it between the slices, and delete finds it in either.
+func TestListSourceAudit(t *testing.T) {
+	s, store := newTestServer(t, "")
+	r := s.Router()
+
+	rec := doJSON(t, r, "POST", "/api/lists",
+		`{"name":"trial","url":"http://127.0.0.1:1/strict.txt","format":"plain","audit":true,"enabled":false}`, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("add audit list: status = %d: %s", rec.Code, rec.Body)
+	}
+	auditOf := func() (bool, bool) { // (found, audit)
+		for _, src := range store.Get().Lists.Sources {
+			if src.Name == "trial" {
+				return true, src.Audit
+			}
+		}
+		return false, false
+	}
+	if found, audit := auditOf(); !found || !audit {
+		t.Fatalf("sources = %+v, want trial with audit:true", store.Get().Lists.Sources)
+	}
+	if !strings.Contains(rec.Body.String(), `"audit":true`) {
+		t.Errorf("status should report audit: %s", rec.Body)
+	}
+
+	// Enforce with one click: the toggle flips audit off in place.
+	if rec := doJSON(t, r, "PUT", "/api/lists/trial", `{"audit":false}`, nil); rec.Code != http.StatusOK {
+		t.Fatalf("audit off: status = %d: %s", rec.Code, rec.Body)
+	}
+	if found, audit := auditOf(); !found || audit {
+		t.Errorf("sources = %+v, want trial audit:false after toggle", store.Get().Lists.Sources)
+	}
+
+	// Auditing an allowlist is rejected by validation.
+	if rec := doJSON(t, r, "POST", "/api/lists",
+		`{"name":"nope","url":"http://127.0.0.1:1/a.txt","format":"plain","action":"allow","audit":true}`, nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("audit allowlist: status = %d, want 400", rec.Code)
+	}
+
+	// The history endpoint validates would_block.
+	if rec := doJSON(t, r, "GET", "/api/querylog/history?would_block=maybe", "", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("would_block=maybe: status = %d, want 400", rec.Code)
+	}
+	if rec := doJSON(t, r, "GET", "/api/querylog/history?would_block=true", "", nil); rec.Code != http.StatusOK {
+		t.Errorf("would_block=true: status = %d, want 200", rec.Code)
+	}
+}
+
 func TestListSourceAllowAction(t *testing.T) {
 	s, store := newTestServer(t, "")
 	r := s.Router()
