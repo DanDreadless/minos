@@ -18,10 +18,10 @@ import (
 // marked read-only in the UI: they are the only settings needing a restart.
 type configView struct {
 	DNS struct {
-		Listen       string               `json:"listen"`
-		Upstreams    []config.Upstream    `json:"upstreams"`
-		BlockTTL     uint32               `json:"block_ttl"`
-		Cache        config.CacheConfig   `json:"cache"`
+		Listen          string               `json:"listen"`
+		Upstreams       []config.Upstream    `json:"upstreams"`
+		BlockTTL        uint32               `json:"block_ttl"`
+		Cache           config.CacheConfig   `json:"cache"`
 		LocalRecords    []config.LocalRecord `json:"local_records"`
 		LocalTTL        uint32               `json:"local_ttl"`
 		Routes          []config.Route       `json:"routes"`
