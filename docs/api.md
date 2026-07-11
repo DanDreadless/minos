@@ -135,13 +135,22 @@ Add with `POST` (`{"domain": "example.com"}`); remove with
 `DELETE /api/allowlist/{domain}`. Entries cover subdomains, and allow
 always beats deny.
 
-## Blocklists
+## Lists
 
-- `GET /api/lists` — per-list status: `{name, url, format, enabled, rules,
-  skipped, last_refresh, last_error}`
+- `GET /api/lists` — per-list status: `{name, url, format, action, enabled,
+  rules, skipped, last_refresh, last_error}`
 - `POST /api/lists` — add: `{"name", "url", "format": "hosts|plain|adblock",
-  "enabled": true}` (fetches immediately)
-- `PUT /api/lists/{name}` — change any of `url`, `format`, `enabled`
+  "action": "block|allow", "enabled": true}` (fetches immediately). `action`
+  defaults to `block`; `allow` makes the source a subscribed allowlist —
+  every entry is always allowed, beating any blocklist, and a passing
+  verdict names it in the query log. In an `allow` list, block-shaped
+  AdBlock rules count as allows too (membership decides meaning, matching
+  AdGuard whitelist filters and Pi-hole v6 antigravity lists). In the
+  config file, allowlists live under `lists.allow_sources` (block lists
+  under `lists.sources`); names are unique across both.
+- `PUT /api/lists/{name}` — change any of `url`, `format`, `action`,
+  `enabled`; changing `action` moves the list between `sources` and
+  `allow_sources`
 - `DELETE /api/lists/{name}`
 - `POST /api/lists/refresh` — refetch everything now (synchronous)
 

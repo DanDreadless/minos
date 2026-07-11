@@ -86,7 +86,12 @@ export const copy = {
     empty: 'No blocklists configured. Add one below.',
     refreshAll: 'Refresh all lists',
     refreshing: 'Refreshing…',
-    addTitle: 'Add a blocklist',
+    addTitle: 'Add a list',
+    allowBadge: 'allowlist',
+    allowBadgeTitle:
+      'Every entry on this list is always allowed, beating every blocklist — a subscribed pardon.',
+    actionBlock: 'blocklist — entries are blocked',
+    actionAllow: 'allowlist — entries are always allowed',
     confirmDelete: (name: string) =>
       `Remove the list "${name}"? Its rules stop applying immediately.`,
     servicesTitle: 'Blocked services',

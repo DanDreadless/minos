@@ -102,7 +102,8 @@ Technitium, NextDNS). Headlines, roughly in build order:
   StevenBlack tiers, one-click subscribe — the Ferrymen-picker pattern
   applied to the harder decision)
 - **Subscribed allowlists** (`action: allow` list sources — Pi-hole v6
-  "antigravity" parity, nearly free given the matcher's allow semantics)
+  "antigravity" parity; imports carry AdGuard whitelist filters and v6
+  antigravity lists over) *(shipped)*
 - **Per-list effectiveness stats** — 7-day blocks attributed per list, so
   dead-weight lists are visible (the "why was this judged" data, aggregated)
 - **Audit (dry-run) lists** — rules logged as "would block" but never

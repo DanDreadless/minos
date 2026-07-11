@@ -28,6 +28,7 @@ type SourceStatus struct {
 	Name        string    `json:"name"`
 	URL         string    `json:"url"`
 	Format      string    `json:"format"`
+	Action      string    `json:"action"` // "block" or "allow" (empty config = block)
 	Enabled     bool      `json:"enabled"`
 	Rules       int       `json:"rules"`
 	Skipped     int       `json:"skipped"`
@@ -96,12 +97,33 @@ func (m *Manager) Refresh(ctx context.Context) {
 	m.rebuild(ctx, true)
 }
 
+// annotated pairs a configured source with what its entries do, which is
+// decided by the config slice it came from (sources vs. allow_sources).
+type annotated struct {
+	config.ListSource
+	allow bool
+}
+
+// allSources returns every configured source in config order, blocklists
+// first, allowlists after. Compile order does not decide precedence — an
+// allow wins over any deny by matcher semantics.
+func allSources(cfg *config.Config) []annotated {
+	out := make([]annotated, 0, len(cfg.Lists.Sources)+len(cfg.Lists.AllowSources))
+	for _, s := range cfg.Lists.Sources {
+		out = append(out, annotated{s, false})
+	}
+	for _, s := range cfg.Lists.AllowSources {
+		out = append(out, annotated{s, true})
+	}
+	return out
+}
+
 // EnsureFetched downloads only enabled sources that have no cached body yet
 // (freshly added or URL-changed lists), then rebuilds. Cheaper than a full
 // Refresh after a config edit.
 func (m *Manager) EnsureFetched(ctx context.Context) {
 	cfg := m.store.Get()
-	for _, src := range cfg.Lists.Sources {
+	for _, src := range allSources(cfg) {
 		if !src.Enabled {
 			continue
 		}
@@ -139,7 +161,7 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 	start := time.Now()
 
 	if refetch {
-		for _, src := range cfg.Lists.Sources {
+		for _, src := range allSources(cfg) {
 			if !src.Enabled {
 				continue
 			}
@@ -182,7 +204,7 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 	}
 
 	m.mu.Lock()
-	for _, src := range cfg.Lists.Sources {
+	for _, src := range allSources(cfg) {
 		if !src.Enabled {
 			continue
 		}
@@ -190,7 +212,7 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 		if !ok {
 			continue
 		}
-		stats, err := Parse(src.Format, src.Name, bytes.NewReader(body), b)
+		stats, err := Parse(src.Format, src.Name, src.allow, bytes.NewReader(body), b)
 		if err != nil {
 			// Only a broken reader errors, and ours can't break; log anyway.
 			slog.Error("list parse failed", "list", src.Name, "err", err)
@@ -214,41 +236,54 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 		"refetched", refetch)
 }
 
-func (m *Manager) setStatusFetched(src config.ListSource) {
+func (m *Manager) setStatusFetched(src annotated) {
 	st := m.ensureStatus(src)
 	st.LastRefresh = time.Now()
 	st.LastError = ""
 }
 
-func (m *Manager) setStatusError(src config.ListSource, err error) {
+func (m *Manager) setStatusError(src annotated, err error) {
 	st := m.ensureStatus(src)
 	st.LastError = err.Error()
 }
 
-func (m *Manager) ensureStatus(src config.ListSource) *SourceStatus {
+func (m *Manager) ensureStatus(src annotated) *SourceStatus {
 	st, ok := m.status[src.Name]
 	if !ok {
 		st = &SourceStatus{}
 		m.status[src.Name] = st
 	}
 	st.Name, st.URL, st.Format, st.Enabled = src.Name, src.URL, src.Format, src.Enabled
+	st.Action = src.actionLabel()
 	return st
 }
 
-// Status returns per-source state for the API, in config order.
+// actionLabel names what the source's entries do, for the API.
+func (a annotated) actionLabel() string {
+	if a.allow {
+		return "allow"
+	}
+	return "block"
+}
+
+// Status returns per-source state for the API, in config order (blocklists
+// first, then allowlists).
 func (m *Manager) Status() []SourceStatus {
 	cfg := m.store.Get()
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]SourceStatus, 0, len(cfg.Lists.Sources))
-	for _, src := range cfg.Lists.Sources {
+	sources := allSources(cfg)
+	out := make([]SourceStatus, 0, len(sources))
+	for _, src := range sources {
 		if st, ok := m.status[src.Name]; ok {
 			s := *st
 			s.Enabled = src.Enabled
+			s.Action = src.actionLabel()
 			out = append(out, s)
 		} else {
 			out = append(out, SourceStatus{
-				Name: src.Name, URL: src.URL, Format: src.Format, Enabled: src.Enabled,
+				Name: src.Name, URL: src.URL, Format: src.Format,
+				Action: src.actionLabel(), Enabled: src.Enabled,
 			})
 		}
 	}

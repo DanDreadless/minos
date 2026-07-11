@@ -222,12 +222,16 @@ func (m *Matcher) Match(qname string) Result {
 // it into the builder. Supported: comments, "||domain^" (block),
 // "@@||domain^" (exception), and bare domains. Anything else — element
 // hiding, regexes, paths, option suffixes — is counted and skipped.
-func (b *Builder) ParseAdblockLine(list, line string) {
+// allowList marks a subscribed allowlist: membership makes every supported
+// rule an allow, "@@" or not — that is how AdGuard whitelist filters and
+// Pi-hole v6 "antigravity" lists are written (block-shaped rules whose
+// list decides their meaning).
+func (b *Builder) ParseAdblockLine(list, line string, allowList bool) {
 	line = strings.TrimSpace(line)
 	if line == "" || strings.HasPrefix(line, "!") || strings.HasPrefix(line, "[") {
 		return // comment / header, not a rule
 	}
-	allow := false
+	allow := allowList
 	if strings.HasPrefix(line, "@@") {
 		allow = true
 		line = line[2:]

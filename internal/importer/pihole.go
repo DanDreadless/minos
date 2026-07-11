@@ -59,7 +59,15 @@ func piholeGravity(dbPath string, cfg *config.Config, rep *Report) error {
 	}
 	defer db.Close()
 
-	rows, err := db.Query(`SELECT address, enabled, comment FROM adlist`)
+	// Pi-hole v6 added a type column to adlist (0 = block, 1 = allow,
+	// their "antigravity" subscribed allowlists); a v5 gravity.db has no
+	// such column, so fall back to reading everything as a blocklist.
+	hasType := true
+	rows, err := db.Query(`SELECT address, enabled, comment, type FROM adlist`)
+	if err != nil {
+		hasType = false
+		rows, err = db.Query(`SELECT address, enabled, comment FROM adlist`)
+	}
 	if err != nil {
 		return fmt.Errorf("read adlists (is this a Pi-hole gravity.db?): %w", err)
 	}
@@ -69,7 +77,13 @@ func piholeGravity(dbPath string, cfg *config.Config, rep *Report) error {
 		var address string
 		var enabled bool
 		var comment sql.NullString
-		if err := rows.Scan(&address, &enabled, &comment); err != nil {
+		var listType int
+		if hasType {
+			err = rows.Scan(&address, &enabled, &comment, &listType)
+		} else {
+			err = rows.Scan(&address, &enabled, &comment)
+		}
+		if err != nil {
 			return fmt.Errorf("scan adlist: %w", err)
 		}
 		n++
@@ -77,8 +91,12 @@ func piholeGravity(dbPath string, cfg *config.Config, rep *Report) error {
 		if name == "" {
 			name = fmt.Sprintf("pihole-%d", n)
 		}
+		action := "block"
+		if listType == 1 {
+			action = "allow"
+		}
 		// Pi-hole treats every adlist as hosts format; so do we.
-		if mergeList(cfg, name, address, "hosts", enabled) {
+		if mergeList(cfg, name, address, "hosts", action, enabled) {
 			rep.Lists++
 		}
 	}
