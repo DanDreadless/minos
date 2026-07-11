@@ -112,7 +112,7 @@ Technitium, NextDNS). Headlines, roughly in build order:
   around Pi-hole for years, shipped by nobody
 - **Bypass resistance** — Firefox DoH canary answered by default, opt-in
   iCloud Private Relay block, and an `encrypted-dns` services-catalog bundle
-  blockable per group
+  blockable per group *(shipped)*
 - **Per-client dashboard** — aggregated top allowed/blocked per device,
   spanning all its IPs (AdGuard's headline advantage, matched) *(shipped)*
 - **Weekly digest** through the existing webhook/ntfy notifier

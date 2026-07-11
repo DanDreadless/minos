@@ -403,6 +403,23 @@ This is security software; hold it to that standard.
   auto-PTR and router forwarding always win. Applies to bypass devices
   (resolver correctness, not filtering). Opt out with
   `dns.forward_private_reverse: true`.
+- **Bypass-resistance semantics** (fixed decisions): the Firefox DoH canary
+  (`use-application-dns.net` → authoritative NXDOMAIN, logged as
+  `firefox-doh-canary`) is **default-on**, opt-out via
+  `dns.allow_firefox_doh`; it sits before local records in `handle()` and
+  deliberately ignores recess (the network still filters — it's just in
+  recess). The gate is a length compare, so the common-case hot-path cost is
+  ~1 ns — keep it that way. The iCloud Private Relay block is **opt-in**
+  (`blocking.block_icloud_private_relay`), compiles the three
+  `mask*.icloud.com` names as the `icloud-private-relay` pseudo-list in
+  `lists.rebuild()`, and must stay surgical — never block wider icloud.com.
+  The `encrypted-dns` service bundle is provider-owned hostnames only. None
+  of the three affect Minos's own forwarding (upstream exchanges bypass the
+  filter; presets are IP-literal DoH) — the one self-sabotage case, a
+  hand-typed hostname DoH/DoT upstream covered by an enabled encrypted-dns
+  block, gets a `config.Validate` **warning, never an error** (the OS
+  resolver on a production box is usually Minos itself, so the block would
+  starve the upstream of its own address).
 - **Upstream breaker semantics** (fixed decisions): only transport errors
   count (SERVFAIL is an answer); 3 consecutive failures sidestep an
   upstream for 30 s; a lapsed cooldown admits exactly one CAS-elected

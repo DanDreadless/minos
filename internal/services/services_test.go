@@ -44,6 +44,21 @@ func TestAllowExtrasWellFormed(t *testing.T) {
 	}
 }
 
+// The encrypted-dns bundle must stay curated and conservative: bare
+// provider-owned hostnames only, never shared infrastructure that would
+// break unrelated resolution when a kids group blocks it.
+func TestEncryptedDNSBundleWellFormed(t *testing.T) {
+	domains := Domains("encrypted-dns")
+	if len(domains) == 0 {
+		t.Fatal("encrypted-dns service missing from the catalog")
+	}
+	for _, d := range domains {
+		if d != strings.ToLower(d) || strings.ContainsAny(d, "/: ") {
+			t.Errorf("encrypted-dns: %q is not a bare lowercase hostname", d)
+		}
+	}
+}
+
 func TestAllowDomainsUnknownService(t *testing.T) {
 	if got := AllowDomains("no-such-service"); got != nil {
 		t.Errorf("unknown service allow bundle = %v, want nil", got)

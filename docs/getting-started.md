@@ -364,13 +364,54 @@ Open `http://<host>:8080`. Six pages, one per concern:
   (send `lan` or your reverse zone to the router so DHCP hostnames keep
   resolving), the response cache (repeat queries answered from memory —
   the dashboard shows the hit rate), blocking mode and TTL, network-wide
-  Safe Search, list refresh interval, query-log retention and buffer
+  Safe Search, the Firefox DoH canary and the iCloud Private Relay block
+  (see Bypass resistance below), list refresh interval, query-log retention and buffer
   size, the API token, a one-click YAML config backup, and an opt-in
   daily update check (a "vX.Y.Z available" link appears in the sidebar
   when a newer release exists — nothing is sent beyond the request).
 
 If you set `api.token` (in the config file or from Settings), the UI and
 CLI require it.
+
+## Bypass resistance — no side doors
+
+A sinkhole that devices can quietly sidestep is theatre. Modern browsers
+and operating systems ship their own encrypted DNS, and a hardcoded
+`dns.google` in an app ignores your DHCP settings entirely. Minos closes
+the side doors in three layers, each visible and pardonable in the query
+log like any other rule:
+
+- **Firefox stays put (on by default).** Before enabling its built-in
+  DNS-over-HTTPS, Firefox asks the network first by resolving
+  `use-application-dns.net`. Minos answers NXDOMAIN — Mozilla's documented
+  signal that this network filters DNS — so Firefox keeps using Minos.
+  No hijacking, no breakage: it is the exact mechanism Mozilla built for
+  filtering resolvers. Opt out with `dns.allow_firefox_doh: true` (or the
+  Settings toggle) if you'd rather Firefox decide.
+- **iCloud Private Relay (opt-in).** Apple routes Safari traffic and DNS
+  through its relay, hiding queries from Minos. Denying the
+  `mask.icloud.com` hostnames is Apple's own documented switch: devices
+  show "Private Relay is unavailable on this network" and fall back to
+  normal DNS. It is a real privacy trade, so it ships off — enable it in
+  Settings (`blocking.block_icloud_private_relay: true`) if judging every
+  device matters more to you than Apple's relay.
+- **Hardcoded DoH/DoT apps (blockable service).** The services catalog
+  carries an **Encrypted DNS bypass** entry: the public DoH/DoT provider
+  hostnames (Cloudflare, Google, Quad9, AdGuard, NextDNS, …) that apps and
+  smart TVs hardcode. Block it network-wide from the Codex, or — the sharp
+  use — only for a kids' group, on that group's schedule, like any other
+  service. Devices that can't resolve `dns.google` fall back to the DNS
+  you handed them: Minos.
+
+Minos's own upstream forwarding is unaffected by all three: upstream
+exchanges never pass the filter, and the shipped resolver presets reach
+DoH by IP literal. The one self-sabotage case — you hand-typed a
+*hostname* DoH/DoT upstream and then blocked the encrypted-dns service —
+is caught by config validation with a logged warning.
+
+None of this stops a determined adult with a VPN. It stops the defaults:
+browsers deciding for themselves, Apple relaying around you, and apps
+with a resolver in their pocket.
 
 ## Monitoring with Prometheus / Grafana
 

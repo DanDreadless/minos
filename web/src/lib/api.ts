@@ -108,8 +108,13 @@ export interface ConfigView {
     local_records: LocalRecord[];
     local_ttl: number;
     routes: Route[];
+    allow_firefox_doh: boolean;
   };
-  blocking: { mode: 'zero_ip' | 'nxdomain'; safe_search: boolean };
+  blocking: {
+    mode: 'zero_ip' | 'nxdomain';
+    safe_search: boolean;
+    block_icloud_private_relay: boolean;
+  };
   lists: { refresh_interval: string };
   querylog: { ephemeral: boolean; db_path: string; ring_size: number; retention_days: number };
   api: { listen: string; token_set: boolean };
@@ -126,8 +131,13 @@ export interface SettingsUpdate {
     local_records?: LocalRecord[];
     local_ttl?: number;
     routes?: Route[];
+    allow_firefox_doh?: boolean;
   };
-  blocking?: { mode?: string; safe_search?: boolean };
+  blocking?: {
+    mode?: string;
+    safe_search?: boolean;
+    block_icloud_private_relay?: boolean;
+  };
   lists?: { refresh_interval?: string };
   querylog?: { ring_size?: number; retention_days?: number };
   api?: { token?: string };

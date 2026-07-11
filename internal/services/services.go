@@ -21,6 +21,13 @@ var catalog = []Service{
 	{"9gag", "9GAG", []string{"9gag.com", "9cache.com"}},
 	{"discord", "Discord", []string{"discord.com", "discordapp.com", "discord.gg", "discordapp.net", "discord.media", "discordcdn.com"}},
 	{"disneyplus", "Disney+", []string{"disneyplus.com", "disney-plus.net", "dssott.com", "bamgrid.com", "disneystreaming.com"}},
+	// Bypass resistance: hardcoded public DoH/DoT endpoints apps and browsers
+	// use to sidestep the network resolver. Provider-owned hostnames only,
+	// never shared infrastructure. Blocking this does not affect Minos's own
+	// upstreams (they bypass the filter; the presets are IP-literal anyway) —
+	// config validation warns about the one self-sabotage case, a hand-typed
+	// hostname upstream.
+	{"encrypted-dns", "Encrypted DNS bypass (public DoH/DoT providers)", []string{"cloudflare-dns.com", "one.one.one.one", "dns.google", "dns.quad9.net", "doh.opendns.com", "dns.adguard-dns.com", "doh.cleanbrowsing.org", "dns.nextdns.io", "freedns.controld.com", "dns.mullvad.net", "doh.libredns.gr", "dns.sb"}},
 	{"epicgames", "Epic Games / Fortnite", []string{"epicgames.com", "epicgames.dev", "unrealengine.com", "fortnite.com"}},
 	{"facebook", "Facebook & Messenger", []string{"facebook.com", "fb.com", "fb.watch", "fbcdn.net", "facebook.net", "fbsbx.com", "messenger.com"}},
 	{"hulu", "Hulu", []string{"hulu.com", "hulustream.com", "huluim.com"}},

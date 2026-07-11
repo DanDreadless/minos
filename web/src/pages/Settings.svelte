@@ -19,6 +19,8 @@
   let mode: string = 'zero_ip';
   let blockTTL = 60;
   let safeSearch = false;
+  let firefoxCanary = true;
+  let blockPrivateRelay = false;
   let refreshInterval = '24h';
   let retentionDays = 90;
   let ringSize = 10000;
@@ -46,6 +48,8 @@
     upstreams = c.dns.upstreams.map((u) => ({ ...u }));
     mode = c.blocking.mode;
     safeSearch = c.blocking.safe_search;
+    firefoxCanary = !c.dns.allow_firefox_doh;
+    blockPrivateRelay = c.blocking.block_icloud_private_relay;
     blockTTL = c.dns.block_ttl;
     refreshInterval = c.lists.refresh_interval;
     retentionDays = c.querylog.retention_days;
@@ -86,7 +90,14 @@
 
   const saveUpstreams = () => save({ dns: { upstreams } });
   const saveBlocking = () =>
-    save({ blocking: { mode, safe_search: safeSearch }, dns: { block_ttl: blockTTL } });
+    save({
+      blocking: {
+        mode,
+        safe_search: safeSearch,
+        block_icloud_private_relay: blockPrivateRelay,
+      },
+      dns: { block_ttl: blockTTL, allow_firefox_doh: !firefoxCanary },
+    });
   const saveLists = () => save({ lists: { refresh_interval: refreshInterval } });
   const saveCache = () =>
     save({
@@ -318,6 +329,16 @@
       {copy.settings.safeSearch}
     </label>
     <p class="note">{copy.settings.safeSearchHint}</p>
+    <label class="radio safe-search">
+      <input type="checkbox" bind:checked={firefoxCanary} />
+      {copy.settings.firefoxCanary}
+    </label>
+    <p class="note">{copy.settings.firefoxCanaryHint}</p>
+    <label class="radio safe-search">
+      <input type="checkbox" bind:checked={blockPrivateRelay} />
+      {copy.settings.privateRelay}
+    </label>
+    <p class="note">{copy.settings.privateRelayHint}</p>
     <div class="section-actions">
       <button class="primary" on:click={saveBlocking}>{copy.settings.save}</button>
     </div>

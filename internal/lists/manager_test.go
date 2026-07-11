@@ -39,6 +39,48 @@ func TestGlobalBlockedServices(t *testing.T) {
 	}
 }
 
+// TestBlockICloudPrivateRelay: the opt-in compiles Apple's documented
+// mask.icloud.com names into a pseudo-list the docket can attribute.
+func TestBlockICloudPrivateRelay(t *testing.T) {
+	store, err := config.Open(t.TempDir() + "/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Update(func(c *config.Config) error {
+		c.Blocking.BlockICloudPrivateRelay = true
+		c.Lists.Sources = nil // no network in tests
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	engine := filter.NewEngine()
+	m := NewManager(engine, store)
+	m.rebuild(context.Background(), false)
+
+	for _, d := range []string{"mask.icloud.com", "mask-h2.icloud.com", "mask-api.icloud.com"} {
+		res := engine.Match(d)
+		if !res.Blocked || res.List != "icloud-private-relay" {
+			t.Errorf("%s = %+v, want blocked by icloud-private-relay", d, res)
+		}
+	}
+	// The rest of icloud.com is untouched — this is not an Apple block.
+	if res := engine.Match("www.icloud.com"); res.Blocked {
+		t.Errorf("www.icloud.com blocked: %+v — the relay block must stay surgical", res)
+	}
+
+	// Off by default: flipping it away rebuilds without the pseudo-list.
+	if err := store.Update(func(c *config.Config) error {
+		c.Blocking.BlockICloudPrivateRelay = false
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	m.rebuild(context.Background(), false)
+	if res := engine.Match("mask.icloud.com"); res.Blocked {
+		t.Errorf("mask.icloud.com still blocked after opt-out: %+v", res)
+	}
+}
+
 // TestUnknownServiceRejected: config validation refuses names not in the
 // catalog, so a typo can't silently block nothing.
 func TestUnknownServiceRejected(t *testing.T) {

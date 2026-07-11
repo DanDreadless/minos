@@ -213,6 +213,12 @@ export const copy = {
     safeSearch: 'Enforce Safe Search for everyone',
     safeSearchHint:
       'Google, Bing, DuckDuckGo, and YouTube (moderate) answer with their enforced-safe variants. Devices in bypass groups are exempt.',
+    firefoxCanary: 'Keep Firefox on this resolver',
+    firefoxCanaryHint:
+      "Answers Firefox's use-application-dns.net check with NXDOMAIN — Mozilla's documented signal that this network filters DNS — so Firefox keeps using Minos instead of switching itself to its built-in DNS over HTTPS. Untick to let Firefox decide.",
+    privateRelay: 'Block iCloud Private Relay',
+    privateRelayHint:
+      'Denies the mask.icloud.com hostnames Apple documents for exactly this. Apple devices show "Private Relay is unavailable on this network" and use normal DNS, so Minos can judge their queries. A real privacy trade — off by default.',
     cacheTitle: 'Response cache',
     cacheHint: 'answers repeat queries from memory instead of asking upstream',
     cacheEnabled: 'Enable the response cache',

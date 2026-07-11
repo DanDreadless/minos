@@ -18,17 +18,19 @@ import (
 // marked read-only in the UI: they are the only settings needing a restart.
 type configView struct {
 	DNS struct {
-		Listen       string               `json:"listen"`
-		Upstreams    []config.Upstream    `json:"upstreams"`
-		BlockTTL     uint32               `json:"block_ttl"`
-		Cache        config.CacheConfig   `json:"cache"`
-		LocalRecords []config.LocalRecord `json:"local_records"`
-		LocalTTL     uint32               `json:"local_ttl"`
-		Routes       []config.Route       `json:"routes"`
+		Listen          string               `json:"listen"`
+		Upstreams       []config.Upstream    `json:"upstreams"`
+		BlockTTL        uint32               `json:"block_ttl"`
+		Cache           config.CacheConfig   `json:"cache"`
+		LocalRecords    []config.LocalRecord `json:"local_records"`
+		LocalTTL        uint32               `json:"local_ttl"`
+		Routes          []config.Route       `json:"routes"`
+		AllowFirefoxDoH bool                 `json:"allow_firefox_doh"`
 	} `json:"dns"`
 	Blocking struct {
-		Mode       string `json:"mode"`
-		SafeSearch bool   `json:"safe_search"`
+		Mode                    string `json:"mode"`
+		SafeSearch              bool   `json:"safe_search"`
+		BlockICloudPrivateRelay bool   `json:"block_icloud_private_relay"`
 	} `json:"blocking"`
 	Lists struct {
 		RefreshInterval string `json:"refresh_interval"`
@@ -66,8 +68,10 @@ func viewOf(c *config.Config) configView {
 	if v.DNS.Routes == nil {
 		v.DNS.Routes = []config.Route{}
 	}
+	v.DNS.AllowFirefoxDoH = c.DNS.AllowFirefoxDoH
 	v.Blocking.Mode = c.Blocking.Mode
 	v.Blocking.SafeSearch = c.Blocking.SafeSearch
+	v.Blocking.BlockICloudPrivateRelay = c.Blocking.BlockICloudPrivateRelay
 	v.Lists.RefreshInterval = c.Lists.RefreshInterval.Std().String()
 	v.QueryLog.Ephemeral = c.QueryLog.Ephemeral
 	v.QueryLog.DBPath = c.QueryLog.DBPath
@@ -100,13 +104,15 @@ type settingsUpdate struct {
 			MaxTTL     *uint32 `json:"max_ttl"`
 			ServeStale *bool   `json:"serve_stale"`
 		} `json:"cache"`
-		LocalRecords *[]config.LocalRecord `json:"local_records"`
-		LocalTTL     *uint32               `json:"local_ttl"`
-		Routes       *[]config.Route       `json:"routes"`
+		LocalRecords    *[]config.LocalRecord `json:"local_records"`
+		LocalTTL        *uint32               `json:"local_ttl"`
+		Routes          *[]config.Route       `json:"routes"`
+		AllowFirefoxDoH *bool                 `json:"allow_firefox_doh"`
 	} `json:"dns"`
 	Blocking *struct {
-		Mode       *string `json:"mode"`
-		SafeSearch *bool   `json:"safe_search"`
+		Mode                    *string `json:"mode"`
+		SafeSearch              *bool   `json:"safe_search"`
+		BlockICloudPrivateRelay *bool   `json:"block_icloud_private_relay"`
 	} `json:"blocking"`
 	Lists *struct {
 		RefreshInterval *string `json:"refresh_interval"`
@@ -178,6 +184,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			if upd.DNS.Routes != nil {
 				c.DNS.Routes = *upd.DNS.Routes
 			}
+			if upd.DNS.AllowFirefoxDoH != nil {
+				c.DNS.AllowFirefoxDoH = *upd.DNS.AllowFirefoxDoH
+			}
 		}
 		if upd.Blocking != nil {
 			if upd.Blocking.Mode != nil {
@@ -185,6 +194,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			if upd.Blocking.SafeSearch != nil {
 				c.Blocking.SafeSearch = *upd.Blocking.SafeSearch
+			}
+			if upd.Blocking.BlockICloudPrivateRelay != nil {
+				c.Blocking.BlockICloudPrivateRelay = *upd.Blocking.BlockICloudPrivateRelay
 			}
 		}
 		if upd.Lists != nil && upd.Lists.RefreshInterval != nil {

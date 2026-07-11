@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -74,6 +75,11 @@ type DNSConfig struct {
 	// NXDOMAIN. Only useful when the default upstreams are internal
 	// resolvers that know those zones; routes are the finer-grained tool.
 	ForwardPrivateReverse bool `yaml:"forward_private_reverse,omitempty"`
+	// AllowFirefoxDoH disables the default interception of Firefox's DoH
+	// canary (use-application-dns.net): normally Minos answers it NXDOMAIN —
+	// Mozilla's documented signal that this network filters DNS — so Firefox
+	// keeps using the system resolver instead of its built-in DoH.
+	AllowFirefoxDoH bool `yaml:"allow_firefox_doh,omitempty"`
 }
 
 // TLSListeners configures client-facing encrypted DNS. Both listeners are
@@ -168,6 +174,11 @@ type BlockingConfig struct {
 	// SafeSearch rewrites search engines (and YouTube) to their
 	// enforced-safe variants for every device.
 	SafeSearch bool `yaml:"safe_search,omitempty"`
+	// BlockICloudPrivateRelay denies the mask.icloud.com hostnames Apple
+	// documents for exactly this purpose: devices fall back to normal DNS
+	// (and show "Private Relay is unavailable on this network"), so Minos
+	// can judge their queries. Opt-in — it is a real privacy trade.
+	BlockICloudPrivateRelay bool `yaml:"block_icloud_private_relay,omitempty"`
 }
 
 // Group is a named device policy. Devices not assigned to a group get the
@@ -421,6 +432,14 @@ func (c *Config) Validate() error {
 		if err := validateUpstream(u); err != nil {
 			return fmt.Errorf("dns.upstreams[%d]: %w", i, err)
 		}
+	}
+	// A warning, not an error: blocking the encrypted-dns service while a
+	// doh/dot upstream is named by a hostname it covers can self-sabotage —
+	// on a production box the OS resolver Go dials through is usually Minos
+	// itself. The shipped presets use IP-literal DoH, so this only bites
+	// hand-typed hostname upstreams.
+	for _, w := range c.encryptedDNSUpstreamWarnings() {
+		slog.Warn(w)
 	}
 	routed := make(map[string]bool)
 	for i, r := range c.DNS.Routes {
@@ -695,6 +714,59 @@ func validateUpstream(u Upstream) error {
 		return fmt.Errorf("protocol: must be udp, tcp, dot, or doh, got %q", u.Protocol)
 	}
 	return nil
+}
+
+// encryptedDNSUpstreamWarnings reports doh/dot upstreams whose hostname the
+// enabled "encrypted-dns" service block covers. Minos's own forwarding never
+// passes the filter, but resolving a hostname upstream goes through the OS
+// resolver — usually Minos itself in production — so the block would starve
+// the upstream of its own address. Warn, never reject: the operator may
+// resolve it elsewhere.
+func (c *Config) encryptedDNSUpstreamWarnings() []string {
+	enabled := slices.Contains(c.Blocking.Services, "encrypted-dns")
+	for _, g := range c.Groups {
+		enabled = enabled || slices.Contains(g.Services, "encrypted-dns")
+	}
+	if !enabled {
+		return nil
+	}
+	covered := make(map[string]bool)
+	for _, d := range services.Domains("encrypted-dns") {
+		covered[d] = true
+	}
+	var out []string
+	for _, u := range c.DNS.Upstreams {
+		var host string
+		switch u.Protocol {
+		case "doh":
+			if parsed, err := url.Parse(u.Address); err == nil {
+				host = parsed.Hostname()
+			}
+		case "dot":
+			host, _, _ = net.SplitHostPort(u.Address)
+		default:
+			continue
+		}
+		host = strings.ToLower(strings.TrimSuffix(host, "."))
+		if host == "" || net.ParseIP(host) != nil {
+			continue
+		}
+		// The service block covers subdomains, so walk the label suffixes.
+		for probe := host; probe != ""; {
+			if covered[probe] {
+				out = append(out, fmt.Sprintf(
+					"upstream %s resolves via a hostname the blocked encrypted-dns service covers (%s); "+
+						"clients of this Minos cannot resolve it — use an IP-literal upstream to be safe", u.Address, probe))
+				break
+			}
+			dot := strings.IndexByte(probe, '.')
+			if dot < 0 {
+				break
+			}
+			probe = probe[dot+1:]
+		}
+	}
+	return out
 }
 
 // validDomain reports whether s looks like a DNS name: labels of 1-63 bytes
