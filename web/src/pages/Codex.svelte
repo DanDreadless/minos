@@ -9,6 +9,7 @@
   let newName = '';
   let newUrl = '';
   let newFormat: 'hosts' | 'plain' | 'adblock' = 'hosts';
+  let newAction: 'block' | 'allow' = 'block';
   let catalog: Service[] = [];
   let blockedServices = new Set<string>();
 
@@ -86,12 +87,14 @@
         name: newName.trim(),
         url: newUrl.trim(),
         format: newFormat,
+        action: newAction,
         enabled: true,
       });
       notify(`List "${newName.trim()}" added.`);
       newName = '';
       newUrl = '';
       newFormat = 'hosts';
+      newAction = 'block';
     } catch (e) {
       notifyError(e);
     } finally {
@@ -141,7 +144,14 @@
                 on:change={() => toggle(l)}
               />
             </td>
-            <td>{l.name}</td>
+            <td>
+              {l.name}
+              {#if l.action === 'allow'}
+                <span class="allow-badge" title={copy.lists.allowBadgeTitle}>
+                  {copy.lists.allowBadge}
+                </span>
+              {/if}
+            </td>
             <td class="url" title={l.url}>{l.url}</td>
             <td>{l.format}</td>
             <td class="num">{l.rules.toLocaleString()}</td>
@@ -199,6 +209,10 @@
       <option value="plain">plain domains</option>
       <option value="adblock">adblock</option>
     </select>
+    <select bind:value={newAction} title="what the list's entries do">
+      <option value="block">{copy.lists.actionBlock}</option>
+      <option value="allow">{copy.lists.actionAllow}</option>
+    </select>
     <button type="submit" class="primary" disabled={busy || !newName.trim() || !newUrl.trim()}>
       Add list
     </button>
@@ -236,6 +250,19 @@
 
   .err {
     color: var(--blocked);
+  }
+
+  .allow-badge {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0 0.4rem;
+    border: 1px solid var(--allowed);
+    border-radius: 0.6rem;
+    color: var(--allowed);
+    font-size: 0.68rem;
+    line-height: 1.3;
+    vertical-align: middle;
+    cursor: help;
   }
 
   .row-action {

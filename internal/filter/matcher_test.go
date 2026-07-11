@@ -137,7 +137,7 @@ func TestParseAdblockLine(t *testing.T) {
 	}
 	for _, tt := range tests {
 		b := NewBuilder()
-		b.ParseAdblockLine("test", tt.line)
+		b.ParseAdblockLine("test", tt.line, false)
 		m := b.Build()
 		if tt.blocked != "" {
 			if r := m.Match(tt.blocked); !r.Blocked {
@@ -148,6 +148,38 @@ func TestParseAdblockLine(t *testing.T) {
 			if m.AllowRules() != 1 {
 				t.Errorf("line %q: expected one allow rule", tt.line)
 			}
+		}
+		if tt.skipped != (m.Skipped() > 0) {
+			t.Errorf("line %q: skipped=%d, want skipped=%v", tt.line, m.Skipped(), tt.skipped)
+		}
+	}
+}
+
+// In allowList mode, membership decides meaning: block-shaped rules,
+// bare domains, and @@ exceptions all compile as allows; unsupported
+// syntax is still skipped.
+func TestParseAdblockLineAllowList(t *testing.T) {
+	tests := []struct {
+		line    string
+		allowed bool
+		skipped bool
+	}{
+		{"||good.example.com^", true, false},
+		{"bare.example.com", true, false},
+		{"@@||also.example.com^", true, false},
+		{"||example.com^$third-party", false, true},
+		{"##.ad-banner", false, true},
+		{"! a comment", false, false},
+	}
+	for _, tt := range tests {
+		b := NewBuilder()
+		b.ParseAdblockLine("allow-test", tt.line, true)
+		m := b.Build()
+		if tt.allowed != (m.AllowRules() == 1) {
+			t.Errorf("line %q: allow rules = %d, want allowed=%v", tt.line, m.AllowRules(), tt.allowed)
+		}
+		if m.Rules() > 0 {
+			t.Errorf("line %q: compiled %d deny rules in an allowlist", tt.line, m.Rules())
 		}
 		if tt.skipped != (m.Skipped() > 0) {
 			t.Errorf("line %q: skipped=%d, want skipped=%v", tt.line, m.Skipped(), tt.skipped)

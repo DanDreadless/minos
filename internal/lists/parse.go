@@ -39,9 +39,13 @@ var hostsLocalNames = map[string]struct{}{
 }
 
 // Parse reads one list in the given format ("hosts", "plain", "adblock")
-// and feeds entries into the builder under the list name. It only returns
-// an error for a broken reader, never for bad content.
-func Parse(format, list string, r io.Reader, b *filter.Builder) (Stats, error) {
+// and feeds entries into the builder under the list name. When allow is set
+// the source is a subscribed allowlist: every entry is always-allowed
+// instead of denied — including block-shaped AdBlock rules, whose meaning
+// the list's action decides (AdGuard whitelist filters and Pi-hole
+// "antigravity" lists are written that way). It only returns an error for a
+// broken reader, never for bad content.
+func Parse(format, list string, allow bool, r io.Reader, b *filter.Builder) (Stats, error) {
 	var stats Stats
 	br := bufio.NewReaderSize(r, 64*1024)
 	for {
@@ -51,11 +55,11 @@ func Parse(format, list string, r io.Reader, b *filter.Builder) (Stats, error) {
 		} else if line != "" || err == nil {
 			switch format {
 			case "hosts":
-				parseHostsLine(list, line, b, &stats)
+				parseHostsLine(list, line, allow, b, &stats)
 			case "adblock":
-				parseAdblockLine(list, line, b, &stats)
+				parseAdblockLine(list, line, allow, b, &stats)
 			default: // plain
-				parsePlainLine(list, line, b, &stats)
+				parsePlainLine(list, line, allow, b, &stats)
 			}
 		}
 		if err == io.EOF {
@@ -96,7 +100,7 @@ func stripComment(line string) string {
 	return strings.TrimSpace(line)
 }
 
-func parseHostsLine(list, line string, b *filter.Builder, stats *Stats) {
+func parseHostsLine(list, line string, allow bool, b *filter.Builder, stats *Stats) {
 	line = stripComment(line)
 	if line == "" {
 		return
@@ -121,12 +125,12 @@ func parseHostsLine(list, line string, b *filter.Builder, stats *Stats) {
 			stats.Skipped++
 			continue
 		}
-		b.AddDeny(list, host)
+		addEntry(list, host, allow, b)
 		stats.Rules++
 	}
 }
 
-func parsePlainLine(list, line string, b *filter.Builder, stats *Stats) {
+func parsePlainLine(list, line string, allow bool, b *filter.Builder, stats *Stats) {
 	line = stripComment(line)
 	if line == "" {
 		return
@@ -135,11 +139,11 @@ func parsePlainLine(list, line string, b *filter.Builder, stats *Stats) {
 		stats.Skipped++
 		return
 	}
-	b.AddDeny(list, line)
+	addEntry(list, line, allow, b)
 	stats.Rules++
 }
 
-func parseAdblockLine(list, line string, b *filter.Builder, stats *Stats) {
+func parseAdblockLine(list, line string, allow bool, b *filter.Builder, stats *Stats) {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" || strings.HasPrefix(trimmed, "!") || strings.HasPrefix(trimmed, "[") {
 		return
@@ -147,10 +151,20 @@ func parseAdblockLine(list, line string, b *filter.Builder, stats *Stats) {
 	// The filter package owns AdBlock classification; infer the outcome
 	// from its skip counter.
 	skippedBefore := b.SkippedCount()
-	b.ParseAdblockLine(list, trimmed)
+	b.ParseAdblockLine(list, trimmed, allow)
 	if b.SkippedCount() > skippedBefore {
 		stats.Skipped++
 	} else {
 		stats.Rules++
+	}
+}
+
+// addEntry routes a bare domain to the builder: denied for a blocklist,
+// always-allowed for a subscribed allowlist.
+func addEntry(list, domain string, allow bool, b *filter.Builder) {
+	if allow {
+		b.AddAllow(list, domain)
+	} else {
+		b.AddDeny(list, domain)
 	}
 }

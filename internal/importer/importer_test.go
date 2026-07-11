@@ -101,6 +101,54 @@ func TestPiholeMissingDB(t *testing.T) {
 	}
 }
 
+// Pi-hole v6 gravity.db carries an adlist.type column: 0 = block,
+// 1 = allow ("antigravity"). The importer must map it to the list action;
+// the v5 no-type-column path is covered by TestPiholeImport.
+func TestPiholeImportV6Antigravity(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(dir, "gravity.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stmts := []string{
+		`CREATE TABLE adlist (id INTEGER PRIMARY KEY, address TEXT, enabled BOOLEAN, comment TEXT, type INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE TABLE domainlist (id INTEGER PRIMARY KEY, type INTEGER, domain TEXT, enabled BOOLEAN)`,
+		`INSERT INTO adlist (address, enabled, comment, type) VALUES
+			('https://example.com/block.txt', 1, 'blocky', 0),
+			('https://example.com/allow.txt', 1, 'antigravity', 1)`,
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatalf("fixture: %v", err)
+		}
+	}
+	db.Close()
+
+	cfg := config.Default()
+	rep, err := Pihole(dir, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("imported config is invalid: %v", err)
+	}
+	if rep.Lists != 2 {
+		t.Fatalf("Lists = %d, want 2", rep.Lists)
+	}
+	var sawBlock bool
+	for _, src := range cfg.Lists.Sources {
+		if src.Name == "blocky" {
+			sawBlock = true
+		}
+	}
+	if !sawBlock {
+		t.Errorf("sources = %+v, want blocky as a blocklist", cfg.Lists.Sources)
+	}
+	if len(cfg.Lists.AllowSources) != 1 || cfg.Lists.AllowSources[0].Name != "antigravity" {
+		t.Errorf("allow sources = %+v, want the antigravity list", cfg.Lists.AllowSources)
+	}
+}
+
 const adguardFixture = `
 filters:
   - enabled: true
@@ -151,17 +199,21 @@ func TestAdGuardImport(t *testing.T) {
 		t.Fatalf("imported config is invalid: %v", err)
 	}
 
-	if rep.Lists != 2 {
-		t.Errorf("Lists = %d, want 2", rep.Lists)
+	if rep.Lists != 3 {
+		t.Errorf("Lists = %d, want 3 (two filters + one whitelist filter)", rep.Lists)
 	}
 	var adblockCount int
-	for _, src := range cfg.Lists.Sources {
+	for _, src := range append(append([]config.ListSource{}, cfg.Lists.Sources...), cfg.Lists.AllowSources...) {
 		if src.Format == "adblock" {
 			adblockCount++
 		}
 	}
-	if adblockCount != 2 {
-		t.Errorf("adblock sources = %d, want 2", adblockCount)
+	if adblockCount != 3 {
+		t.Errorf("adblock sources = %d, want 3", adblockCount)
+	}
+	if len(cfg.Lists.AllowSources) != 1 || cfg.Lists.AllowSources[0].Name != "exceptions" ||
+		!cfg.Lists.AllowSources[0].Enabled {
+		t.Errorf("allow sources = %+v, want the whitelist filter as an enabled allow list", cfg.Lists.AllowSources)
 	}
 
 	if rep.Deny != 2 { // ads.example.com + plain.example.com
@@ -188,9 +240,9 @@ func TestAdGuardImport(t *testing.T) {
 		t.Errorf("services = %v (rep %d), want tiktok + epicgames (alias mapped)", cfg.Blocking.Services, rep.Services)
 	}
 
-	// whitelist filter + $important rule + regex rule + unknown service.
-	if len(rep.Skipped) != 4 {
-		t.Errorf("Skipped = %v, want 4 reasons", rep.Skipped)
+	// $important rule + regex rule + unknown service.
+	if len(rep.Skipped) != 3 {
+		t.Errorf("Skipped = %v, want 3 reasons", rep.Skipped)
 	}
 }
 

@@ -61,22 +61,29 @@ func mergeDomain(list *[]string, domain string) int {
 }
 
 // mergeList appends a list subscription unless its URL is already
-// subscribed; name collisions get a numeric suffix.
-func mergeList(cfg *config.Config, name, url, format string, enabled bool) bool {
-	names := make(map[string]bool, len(cfg.Lists.Sources))
-	for _, src := range cfg.Lists.Sources {
-		if src.URL == url {
-			return false
+// subscribed (in either direction); name collisions get a numeric suffix.
+// action "allow" lands the source in Lists.AllowSources (a subscribed
+// allowlist), anything else in Lists.Sources.
+func mergeList(cfg *config.Config, name, url, format, action string, enabled bool) bool {
+	names := make(map[string]bool, len(cfg.Lists.Sources)+len(cfg.Lists.AllowSources))
+	for _, sources := range [][]config.ListSource{cfg.Lists.Sources, cfg.Lists.AllowSources} {
+		for _, src := range sources {
+			if src.URL == url {
+				return false
+			}
+			names[src.Name] = true
 		}
-		names[src.Name] = true
 	}
 	unique := name
 	for i := 2; names[unique]; i++ {
 		unique = fmt.Sprintf("%s-%d", name, i)
 	}
-	cfg.Lists.Sources = append(cfg.Lists.Sources, config.ListSource{
-		Name: unique, URL: url, Format: format, Enabled: enabled,
-	})
+	src := config.ListSource{Name: unique, URL: url, Format: format, Enabled: enabled}
+	if action == "allow" {
+		cfg.Lists.AllowSources = append(cfg.Lists.AllowSources, src)
+	} else {
+		cfg.Lists.Sources = append(cfg.Lists.Sources, src)
+	}
 	return true
 }
 
