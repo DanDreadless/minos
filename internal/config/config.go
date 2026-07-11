@@ -315,6 +315,12 @@ type Config struct {
 	// sent beyond the request itself, and nothing is sent at all unless
 	// the user turns it on.
 	UpdateCheck bool `yaml:"update_check"`
+	// UpdateInstallMethod forces the install method the upgrade guidance
+	// assumes ("binary", "docker", or "source") for deployments the
+	// detection can't see — a distro package, a k8s manifest. Empty (the
+	// default) means detect: runtime container markers, then the
+	// build-time stamp, then a dev-version heuristic.
+	UpdateInstallMethod string `yaml:"update_install_method,omitempty"`
 }
 
 // Default returns the configuration used when no file exists yet.
@@ -665,6 +671,11 @@ func (c *Config) Validate() error {
 		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 			return fmt.Errorf("%s: must be an http(s) URL, got %q", name, u)
 		}
+	}
+	switch c.UpdateInstallMethod {
+	case "", "binary", "docker", "source":
+	default:
+		return fmt.Errorf("update_install_method: must be binary, docker, or source, got %q", c.UpdateInstallMethod)
 	}
 	return nil
 }

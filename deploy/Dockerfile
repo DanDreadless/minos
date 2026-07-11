@@ -17,7 +17,7 @@ COPY --from=webbuild /src/web/dist ./web/dist
 # GOARM comes from the platform variant (linux/arm/v7 → 7); it is ignored
 # by every arch except 32-bit arm.
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH GOARM=${TARGETVARIANT#v} \
-    go build -ldflags "-s -w -X main.version=$VERSION" -o /minos ./cmd/minos
+    go build -ldflags "-s -w -X main.version=$VERSION -X main.installMethod=docker" -o /minos ./cmd/minos
 
 FROM scratch
 LABEL org.opencontainers.image.source="https://github.com/DanDreadless/minos" \

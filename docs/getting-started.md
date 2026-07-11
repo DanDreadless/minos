@@ -207,6 +207,15 @@ git fetch --tags && git checkout v0.7.0 && make build
 After restarting, the sidebar footer shows the running version and the
 "update available" notice clears.
 
+The in-app notice shows the command for how it thinks this instance was
+installed (a build-time stamp, refined by runtime container detection). If
+an unusual deployment — a distro package, a k8s manifest — guesses wrong,
+pin it in the config:
+
+```yaml
+update_install_method: docker   # binary | docker | source
+```
+
 ## Encrypted DNS for your devices (DoT / DoH)
 
 Minos can serve DNS-over-TLS and DNS-over-HTTPS itself, so phones and

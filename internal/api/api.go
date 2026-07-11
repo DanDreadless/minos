@@ -52,24 +52,29 @@ type Server struct {
 	updates UpdateSource     // may be nil
 	static  fs.FS            // embedded web/dist; nil disables UI serving
 	version string
-	started time.Time
+	// installMethod is the build-time -ldflags stamp ("binary", "docker",
+	// or "" for an unstamped source build); upgrade guidance refines it at
+	// runtime — see resolveInstallMethod.
+	installMethod string
+	started       time.Time
 }
 
 func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
 	mgr *lists.Manager, reg *clients.Registry, cache ProxyStatsSource,
-	upd UpdateSource, static fs.FS, version string,
+	upd UpdateSource, static fs.FS, version, installMethod string,
 ) *Server {
 	return &Server{
-		engine:  engine,
-		qlog:    qlog,
-		store:   store,
-		lists:   mgr,
-		clients: reg,
-		cache:   cache,
-		updates: upd,
-		static:  static,
-		version: version,
-		started: time.Now(),
+		engine:        engine,
+		qlog:          qlog,
+		store:         store,
+		lists:         mgr,
+		clients:       reg,
+		cache:         cache,
+		updates:       upd,
+		static:        static,
+		version:       version,
+		installMethod: installMethod,
+		started:       time.Now(),
 	}
 }
 

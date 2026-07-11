@@ -87,9 +87,10 @@ Svelte 5 / Vite 6 toolchain move.
 - **DHCP lease-file ingestion** — moot on the common home setup where the
   router (not the Minos box) runs DHCP and the lease file isn't on the Pi.
   Revisit only if users running dnsmasq/Kea beside Minos ask.
-- **Install-method build stamp** — upgrade guidance currently detects
-  docker/systemd/dev-version at runtime only; the ldflags stamp +
-  `update.install_method` override moved to the next round.
+- **Install-method build stamp** — *(shipped since)* release and Docker
+  builds now stamp the method via ldflags, refinable with an
+  `update_install_method` config override; runtime container detection
+  still wins so a release binary in a container gets Docker guidance.
 
 ## Next round — making Minos the homelab default
 
@@ -114,7 +115,7 @@ Technitium, NextDNS). Headlines, roughly in build order:
 - **Per-client dashboard** — aggregated top allowed/blocked per device,
   spanning all its IPs (AdGuard's headline advantage, matched) *(shipped)*
 - **Weekly digest** through the existing webhook/ntfy notifier
-- **First-run checklist** on the Tribunal; install-method build stamp
+- **First-run checklist** on the Tribunal
 
 Maintainer-gated (explicit decision needed before any code): **replica
 config sync** (bounded one-way push; the docs-only keepalived + API-sync

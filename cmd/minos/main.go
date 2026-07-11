@@ -31,7 +31,13 @@ import (
 	"minos/web"
 )
 
-var version = "0.1.0-dev" // overridden at release time via -ldflags
+var (
+	version = "0.1.0-dev" // overridden at release time via -ldflags
+	// installMethod is stamped by release builds ("binary") and the
+	// Dockerfile ("docker"); empty means an unstamped source build. Used
+	// only to pick the right upgrade guidance — never to self-update.
+	installMethod = ""
+)
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -191,7 +197,7 @@ func serve(args []string) error {
 	if err != nil {
 		return fmt.Errorf("embedded ui: %w", err)
 	}
-	apiSrv := api.New(engine, qlog, store, mgr, reg, proxy, checker, static, version)
+	apiSrv := api.New(engine, qlog, store, mgr, reg, proxy, checker, static, version, installMethod)
 	httpSrv := &http.Server{
 		Addr:              cfg.API.Listen,
 		Handler:           apiSrv.Router(),
