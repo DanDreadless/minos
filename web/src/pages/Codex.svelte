@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type ListStatus, type Service } from '../lib/api';
+  import { api, type ListStats, type ListStatus, type Service } from '../lib/api';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
@@ -12,6 +12,33 @@
   let newAction: 'block' | 'allow' = 'block';
   let catalog: Service[] = [];
   let blockedServices = new Set<string>();
+  let listStats: ListStats | null = null;
+
+  // Blocks attributed per list over the stats window, keyed by list name.
+  $: blocksByList = new Map((listStats?.lists ?? []).map((s) => [s.list, s.count]));
+  // Attributions that aren't a subscribed list: the user's own deny domains,
+  // blocked services, group overlays, and device blocks.
+  $: builtinStats = (listStats?.lists ?? []).filter((s) => !lists.some((l) => l.name === s.list));
+
+  function builtinLabel(name: string): string {
+    if (name.startsWith('service:')) {
+      const raw = name.slice('service:'.length);
+      const svc = catalog.find((c) => c.name === raw);
+      return copy.lists.statService(svc ? svc.label : raw);
+    }
+    if (name.startsWith('group:')) return copy.lists.statGroup(name.slice('group:'.length));
+    if (name === 'denylist') return copy.lists.statDenylist;
+    if (name === 'clients') return copy.lists.statClients;
+    return name;
+  }
+
+  async function loadStats(): Promise<void> {
+    try {
+      listStats = await api.listStats();
+    } catch {
+      // Decorative: the lists table works without the block counts.
+    }
+  }
 
   async function loadServices(): Promise<void> {
     try {
@@ -105,6 +132,7 @@
   onMount(() => {
     void load();
     void loadServices();
+    void loadStats();
   });
 </script>
 
@@ -129,6 +157,7 @@
           <th>Format</th>
           <th>Rules</th>
           <th>Skipped</th>
+          <th>{copy.lists.blocksHeader}</th>
           <th>Last refresh</th>
           <th></th>
         </tr>
@@ -156,6 +185,17 @@
             <td>{l.format}</td>
             <td class="num">{l.rules.toLocaleString()}</td>
             <td class="num">{l.skipped ? l.skipped.toLocaleString() : ''}</td>
+            <td class="num">
+              {#if l.action === 'allow'}
+                <span class="quiet" title={copy.lists.allowStatTitle}>—</span>
+              {:else if listStats}
+                {#if blocksByList.get(l.name)}
+                  {blocksByList.get(l.name)?.toLocaleString()}
+                {:else}
+                  <span class="quiet" title={copy.lists.noBlocksTitle}>{copy.lists.noBlocks}</span>
+                {/if}
+              {/if}
+            </td>
             <td>
               {#if l.last_error}
                 <span class="err" title={l.last_error}>fetch failed</span>
@@ -171,6 +211,14 @@
       </tbody>
     </table>
   </div>
+{/if}
+
+{#if builtinStats.length > 0}
+  <p class="builtin">
+    {copy.lists.builtinStatsTitle}
+    {#each builtinStats as s, i (s.list)}{i > 0 ? ' · ' : ' '}{builtinLabel(s.list)}:
+      {s.count.toLocaleString()}{/each}
+  </p>
 {/if}
 
 <section class="card services">
@@ -250,6 +298,19 @@
 
   .err {
     color: var(--blocked);
+  }
+
+  .quiet {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    font-style: italic;
+    cursor: help;
+  }
+
+  .builtin {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    margin: 0.6rem 0 0;
   }
 
   .allow-badge {

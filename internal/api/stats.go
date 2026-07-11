@@ -105,6 +105,34 @@ func (s *Server) handleClientStats(w http.ResponseWriter, r *http.Request) {
 	}{hours, overview})
 }
 
+// handleListStats reports how many blocks each list is responsible for —
+// "is this list earning its keep" on the lists page. Defaults to a 7-day
+// window, the widest the stats endpoints allow.
+func (s *Server) handleListStats(w http.ResponseWriter, r *http.Request) {
+	hours := 168
+	if v := r.URL.Query().Get("hours"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 168 {
+			writeError(w, http.StatusBadRequest, "hours must be 1-168")
+			return
+		}
+		hours = n
+	}
+	since := time.Now().Add(-time.Duration(hours) * time.Hour)
+	stats, err := s.qlog.BlocksByList(r.Context(), since)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if stats == nil {
+		stats = []querylog.ListStat{}
+	}
+	writeJSON(w, http.StatusOK, struct {
+		WindowHours int                 `json:"window_hours"`
+		Lists       []querylog.ListStat `json:"lists"`
+	}{hours, stats})
+}
+
 // handleCheck judges a domain against the compiled rules and reports which
 // list and rule decide its fate. It consults the matcher directly, so the
 // answer reflects the rules even while blocking is paused.

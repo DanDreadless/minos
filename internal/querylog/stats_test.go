@@ -128,6 +128,67 @@ func TestAggregatesFromSQLite(t *testing.T) {
 	assertAggregates(t, reopened)
 }
 
+func seedListBlocks(t *testing.T, l *Log) {
+	t.Helper()
+	now := time.Now()
+	rec := func(qname, list, verdict string, at time.Time) {
+		l.Record(Entry{Time: at, Client: "10.0.0.1", QName: qname, QType: "A", Verdict: verdict, List: list})
+	}
+	rec("ads.example.com", "hagezi", VerdictBlocked, now.Add(-40*time.Minute))
+	rec("ads2.example.com", "hagezi", VerdictBlocked, now.Add(-30*time.Minute))
+	rec("tracker.example.com", "oisd", VerdictBlocked, now.Add(-20*time.Minute))
+	// A pardon attribution (allowed verdict with a list) is not a block…
+	rec("cdn.example.com", "allowlist", VerdictAllowed, now.Add(-10*time.Minute))
+	// …and an unattributed block counts toward no list.
+	rec("odd.example.com", "", VerdictBlocked, now.Add(-5*time.Minute))
+	drain(t, l, 5)
+}
+
+func assertBlocksByList(t *testing.T, l *Log) {
+	t.Helper()
+	got, err := l.BlocksByList(t.Context(), time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []ListStat{{List: "hagezi", Count: 2}, {List: "oisd", Count: 1}}
+	if len(got) != len(want) {
+		t.Fatalf("blocks by list = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("blocks by list[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestBlocksByListFromRing(t *testing.T) {
+	l, err := Open(Options{RingSize: 100, Ephemeral: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	seedListBlocks(t, l)
+	assertBlocksByList(t, l)
+}
+
+func TestBlocksByListFromSQLite(t *testing.T) {
+	path := t.TempDir() + "/q.db"
+	l, err := Open(Options{RingSize: 100, DBPath: path, RetentionDays: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedListBlocks(t, l)
+	if err := l.Close(); err != nil { // Close flushes the batch to SQLite
+		t.Fatal(err)
+	}
+	reopened, err := Open(Options{RingSize: 100, DBPath: path, RetentionDays: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	assertBlocksByList(t, reopened)
+}
+
 func TestResizePreservesNewest(t *testing.T) {
 	l, err := Open(Options{RingSize: 10, Ephemeral: true})
 	if err != nil {
