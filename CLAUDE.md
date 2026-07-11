@@ -341,6 +341,25 @@ This is security software; hold it to that standard.
   `blocking.allowed_services` / `groups[].allowed_services` are new YAML
   keys: tolerant on-disk loading keeps downgrades safe (ignored with a
   warning); only pre-tolerant strict binaries refuse, `.bak` recovers.
+- **Subscribed-allowlist semantics** (fixed decisions): allowlists live in
+  a **separate config slice** (`lists.allow_sources`), never as an
+  action/type field on a source — a downgrade then drops the whole unknown
+  key and the list merely vanishes (fail-safe over-blocking, same shape as
+  `allowed_services`), whereas an ignored per-source field would silently
+  turn an allowlist into a blocklist of the very domains it protects. List
+  names are unique across both slices; the API still speaks a per-list
+  `action: block|allow` (the manager derives it from the slice), and a
+  `PUT /api/lists/{name}` action change moves the source between slices.
+  Every entry compiles through `AddAllow(src.Name, …)`, so a passing
+  verdict names the allowlist in the docket like any pardon. In an
+  allow-action **AdBlock** list, membership decides meaning: block-shaped
+  rules (`||domain^`, bare domains) and `@@` exceptions all compile as
+  allows (`ParseAdblockLine(list, line, allowList)`) — that is how AdGuard
+  whitelist filters and Pi-hole v6 "antigravity" lists are written; don't
+  "fix" it to skip non-`@@` rules. Imports map sources: Pi-hole v6
+  `adlist.type` 1 → allow (v5 DBs have no type column — the importer falls
+  back to the typeless query, don't break that); AdGuard
+  `whitelist_filters` → allow.
 - **Response cache semantics** (fixed decisions): the cache sits *after*
   the filter — verdicts always reflect live rules and blocked answers are
   never cached. Any config change swaps in a fresh cache (that IS the

@@ -252,7 +252,13 @@ type Client struct {
 	Blocked bool `yaml:"blocked,omitempty" json:"blocked"`
 }
 
-// ListSource is one remote blocklist subscription.
+// ListSource is one remote list subscription. Whether its entries block or
+// allow is decided by which ListsConfig slice it lives in, not a field on
+// the source: a downgrade to a binary that predates allow-lists then drops
+// the whole allow_sources key (tolerant loading) and the list simply
+// vanishes — fail-safe over-blocking — instead of an ignored action field
+// silently turning an allowlist into a blocklist of the very domains the
+// user meant to protect. Same shape as the allowed_services decision.
 type ListSource struct {
 	Name    string `yaml:"name"`
 	URL     string `yaml:"url"`
@@ -261,7 +267,12 @@ type ListSource struct {
 }
 
 type ListsConfig struct {
-	Sources         []ListSource `yaml:"sources"`
+	Sources []ListSource `yaml:"sources"`
+	// AllowSources are subscribed allowlists: every entry is always
+	// allowed, beating any blocklist (allow wins at every label depth,
+	// like config allowlist entries and service pardons). List names are
+	// unique across Sources and AllowSources.
+	AllowSources    []ListSource `yaml:"allow_sources,omitempty"`
 	RefreshInterval Duration     `yaml:"refresh_interval"`
 }
 
@@ -359,6 +370,7 @@ func (c *Config) Clone() *Config {
 	out.Blocking.Services = append([]string(nil), c.Blocking.Services...)
 	out.Blocking.AllowedServices = append([]string(nil), c.Blocking.AllowedServices...)
 	out.Lists.Sources = append([]ListSource(nil), c.Lists.Sources...)
+	out.Lists.AllowSources = append([]ListSource(nil), c.Lists.AllowSources...)
 	out.Groups = make([]Group, len(c.Groups))
 	for i, g := range c.Groups {
 		out.Groups[i] = g
@@ -603,18 +615,28 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("clients[%d].group: no group named %q", i, cl.Group)
 		}
 	}
-	for i, s := range c.Lists.Sources {
-		if s.Name == "" {
-			return fmt.Errorf("lists.sources[%d].name: must not be empty", i)
-		}
-		parsed, err := url.Parse(s.URL)
-		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-			return fmt.Errorf("lists.sources[%d].url: must be an http(s) URL, got %q", i, s.URL)
-		}
-		switch s.Format {
-		case "hosts", "plain", "adblock":
-		default:
-			return fmt.Errorf("lists.sources[%d].format: must be hosts, plain, or adblock, got %q", i, s.Format)
+	listNames := make(map[string]bool, len(c.Lists.Sources)+len(c.Lists.AllowSources))
+	for key, sources := range map[string][]ListSource{
+		"lists.sources":       c.Lists.Sources,
+		"lists.allow_sources": c.Lists.AllowSources,
+	} {
+		for i, s := range sources {
+			if s.Name == "" {
+				return fmt.Errorf("%s[%d].name: must not be empty", key, i)
+			}
+			if listNames[s.Name] {
+				return fmt.Errorf("%s[%d].name: %q is used by another list", key, i, s.Name)
+			}
+			listNames[s.Name] = true
+			parsed, err := url.Parse(s.URL)
+			if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+				return fmt.Errorf("%s[%d].url: must be an http(s) URL, got %q", key, i, s.URL)
+			}
+			switch s.Format {
+			case "hosts", "plain", "adblock":
+			default:
+				return fmt.Errorf("%s[%d].format: must be hosts, plain, or adblock, got %q", key, i, s.Format)
+			}
 		}
 	}
 	if c.Lists.RefreshInterval.Std() < 5*time.Minute {

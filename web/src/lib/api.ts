@@ -134,6 +134,7 @@ export interface ListStatus {
   name: string;
   url: string;
   format: 'hosts' | 'plain' | 'adblock';
+  action: 'block' | 'allow';
   enabled: boolean;
   rules: number;
   skipped: number;
@@ -314,9 +315,9 @@ export const api = {
   importConfig: (file: File) => uploadRaw<ConfigView>('/api/config/import', file),
 
   lists: () => request<ListStatus[]>('GET', '/api/lists'),
-  addList: (l: { name: string; url: string; format: string; enabled: boolean }) =>
+  addList: (l: { name: string; url: string; format: string; action?: string; enabled: boolean }) =>
     request<ListStatus[]>('POST', '/api/lists', l),
-  updateList: (name: string, upd: { url?: string; format?: string; enabled?: boolean }) =>
+  updateList: (name: string, upd: { url?: string; format?: string; action?: string; enabled?: boolean }) =>
     request<ListStatus[]>('PUT', `/api/lists/${encodeURIComponent(name)}`, upd),
   deleteList: (name: string) =>
     request<ListStatus[]>('DELETE', `/api/lists/${encodeURIComponent(name)}`),

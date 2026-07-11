@@ -496,6 +496,11 @@ lists:
       url: https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
       format: hosts         # hosts | plain | adblock
       enabled: true
+  allow_sources:            # subscribed allowlists: every entry is always
+    - name: unbreak         # allowed, beating any blocklist — a pardon you
+      url: https://example.com/commonly-white.txt   # subscribe to
+      format: plain
+      enabled: true
   refresh_interval: 24h
 querylog:
   ephemeral: false          # true = never touch disk

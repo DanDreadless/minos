@@ -182,6 +182,66 @@ func TestListSourceCRUD(t *testing.T) {
 	}
 }
 
+// action:"allow" routes a source into Lists.AllowSources, an action change
+// moves it between the slices, and delete finds it in either.
+func TestListSourceAllowAction(t *testing.T) {
+	s, store := newTestServer(t, "")
+	r := s.Router()
+
+	rec := doJSON(t, r, "POST", "/api/lists",
+		`{"name":"unbreak","url":"http://127.0.0.1:1/allow.txt","format":"plain","action":"allow","enabled":false}`, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("add allow: status = %d: %s", rec.Code, rec.Body)
+	}
+	if got := store.Get().Lists.AllowSources; len(got) != 1 || got[0].Name != "unbreak" {
+		t.Fatalf("allow_sources = %+v, want the new list", got)
+	}
+	if !strings.Contains(rec.Body.String(), `"action":"allow"`) {
+		t.Errorf("status should report the action: %s", rec.Body)
+	}
+
+	// A duplicate name is rejected across the two slices.
+	if rec := doJSON(t, r, "POST", "/api/lists",
+		`{"name":"unbreak","url":"http://127.0.0.1:1/x.txt"}`, nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("duplicate across slices: status = %d, want 400", rec.Code)
+	}
+
+	// Flipping the action moves the source to the block slice.
+	if rec := doJSON(t, r, "PUT", "/api/lists/unbreak", `{"action":"block"}`, nil); rec.Code != http.StatusOK {
+		t.Fatalf("action flip: status = %d: %s", rec.Code, rec.Body)
+	}
+	cfg := store.Get()
+	if len(cfg.Lists.AllowSources) != 0 {
+		t.Errorf("allow_sources = %+v, want empty after the flip", cfg.Lists.AllowSources)
+	}
+	moved := false
+	for _, src := range cfg.Lists.Sources {
+		if src.Name == "unbreak" {
+			moved = true
+		}
+	}
+	if !moved {
+		t.Error("flipped source missing from sources")
+	}
+
+	// An unknown action is rejected.
+	if rec := doJSON(t, r, "PUT", "/api/lists/unbreak", `{"action":"maybe"}`, nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("bad action: status = %d, want 400", rec.Code)
+	}
+
+	// Flip back and delete out of the allow slice.
+	if rec := doJSON(t, r, "PUT", "/api/lists/unbreak", `{"action":"allow"}`, nil); rec.Code != http.StatusOK {
+		t.Fatalf("action flip back: status = %d: %s", rec.Code, rec.Body)
+	}
+	if rec := doJSON(t, r, "DELETE", "/api/lists/unbreak", "", nil); rec.Code != http.StatusOK {
+		t.Fatalf("delete: status = %d: %s", rec.Code, rec.Body)
+	}
+	cfg = store.Get()
+	if len(cfg.Lists.AllowSources) != 0 {
+		t.Errorf("allow_sources = %+v, want empty after delete", cfg.Lists.AllowSources)
+	}
+}
+
 func TestCheckDomain(t *testing.T) {
 	s, store := newTestServer(t, "")
 	if err := store.Update(func(c *config.Config) error {
