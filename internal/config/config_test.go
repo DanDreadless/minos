@@ -144,6 +144,15 @@ func TestValidateCatchesBadValues(t *testing.T) {
 		func(c *Config) { c.DNS.Upstreams = []Upstream{{Address: "http://insecure", Protocol: "doh"}} },
 		func(c *Config) { c.Blocking.Mode = "maim" },
 		func(c *Config) { c.Lists.Sources[0].Format = "csv" },
+		func(c *Config) { // allow-source names share the block-source namespace
+			c.Lists.AllowSources = []ListSource{{
+				Name: c.Lists.Sources[0].Name, URL: "https://example.com/allow.txt",
+				Format: "plain", Enabled: true,
+			}}
+		},
+		func(c *Config) { // allow sources are validated like block sources
+			c.Lists.AllowSources = []ListSource{{Name: "bad", URL: "ftp://x", Format: "plain", Enabled: true}}
+		},
 		func(c *Config) { c.Lists.Sources[0].URL = "ftp://old.example/list" },
 		func(c *Config) { c.Lists.RefreshInterval = Duration(time.Second) },
 		func(c *Config) { c.QueryLog.RingSize = 0 },

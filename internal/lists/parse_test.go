@@ -14,11 +14,41 @@ import (
 func parseAll(t *testing.T, format, input string) (*filter.Matcher, Stats) {
 	t.Helper()
 	b := filter.NewBuilder()
-	stats, err := Parse(format, "test", strings.NewReader(input), b)
+	stats, err := Parse(format, "test", false, strings.NewReader(input), b)
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
 	return b.Build(), stats
+}
+
+// A subscribed allowlist compiles every entry as an always-allow that beats
+// a blocklist naming the same domain, in each supported format.
+func TestParseAllowAction(t *testing.T) {
+	inputs := map[string]string{
+		"plain":   "unbreak.example.com\n",
+		"hosts":   "0.0.0.0 unbreak.example.com\n",
+		"adblock": "||unbreak.example.com^\n",
+	}
+	for format, input := range inputs {
+		t.Run(format, func(t *testing.T) {
+			b := filter.NewBuilder()
+			b.AddDeny("blocklist", "unbreak.example.com")
+			stats, err := Parse(format, "goodlist", true, strings.NewReader(input), b)
+			if err != nil {
+				t.Fatalf("Parse returned error: %v", err)
+			}
+			if stats.Rules != 1 {
+				t.Fatalf("stats = %+v, want 1 rule", stats)
+			}
+			m := b.Build()
+			if r := m.Match("unbreak.example.com"); r.Blocked {
+				t.Errorf("allowlist entry should beat the blocklist: %+v", r)
+			}
+			if r := m.Match("sub.unbreak.example.com"); r.Blocked {
+				t.Errorf("allowlist entry should cover subdomains: %+v", r)
+			}
+		})
+	}
 }
 
 func TestParseHosts(t *testing.T) {
@@ -224,6 +254,47 @@ func TestManagerRefreshAndRebuild(t *testing.T) {
 	}
 	if status[0].LastRefresh.IsZero() || time.Since(status[0].LastRefresh) > time.Minute {
 		t.Errorf("LastRefresh not set: %+v", status[0])
+	}
+}
+
+// A subscribed allowlist shadows a blocklist end-to-end through the manager,
+// and the passing verdict names the allowlist (docket attribution).
+func TestManagerAllowListShadowsBlockList(t *testing.T) {
+	blockSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("0.0.0.0 overblocked.example.com\n0.0.0.0 stillbad.example.com\n"))
+	}))
+	defer blockSrv.Close()
+	allowSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("overblocked.example.com\n"))
+	}))
+	defer allowSrv.Close()
+
+	engine := filter.NewEngine()
+	store := newTestStore(t, func(c *config.Config) {
+		c.Lists.Sources = []config.ListSource{
+			{Name: "strict", URL: blockSrv.URL, Format: "hosts", Enabled: true},
+		}
+		c.Lists.AllowSources = []config.ListSource{
+			{Name: "unbreak", URL: allowSrv.URL, Format: "plain", Enabled: true},
+		}
+	})
+	mgr := NewManager(engine, store)
+	mgr.Refresh(t.Context())
+
+	if r := engine.Match("overblocked.example.com"); r.Blocked || r.List != "unbreak" {
+		t.Errorf("allowlist should shadow the blocklist and be named: %+v", r)
+	}
+	if r := engine.Match("stillbad.example.com"); !r.Blocked || r.List != "strict" {
+		t.Errorf("unrelated blocklist entry should still block: %+v", r)
+	}
+	for _, st := range mgr.Status() {
+		want := "block"
+		if st.Name == "unbreak" {
+			want = "allow"
+		}
+		if st.Action != want {
+			t.Errorf("status action for %s = %q, want %q", st.Name, st.Action, want)
+		}
 	}
 }
 

@@ -246,13 +246,14 @@ type listSourceBody struct {
 	Name    *string `json:"name"`
 	URL     *string `json:"url"`
 	Format  *string `json:"format"`
+	Action  *string `json:"action"` // "block" (default) or "allow"
 	Enabled *bool   `json:"enabled"`
 }
 
 func (s *Server) handleAddList(w http.ResponseWriter, r *http.Request) {
 	var body listSourceBody
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "body must be JSON: {\"name\", \"url\", \"format\", \"enabled\"}")
+		writeError(w, http.StatusBadRequest, "body must be JSON: {\"name\", \"url\", \"format\", \"action\", \"enabled\"}")
 		return
 	}
 	if body.Name == nil || body.URL == nil || *body.Name == "" {
@@ -266,13 +267,28 @@ func (s *Server) handleAddList(w http.ResponseWriter, r *http.Request) {
 	if body.Enabled != nil {
 		src.Enabled = *body.Enabled
 	}
+	allow := false
+	if body.Action != nil {
+		switch *body.Action {
+		case "allow":
+			allow = true
+		case "", "block":
+		default:
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("action: must be block or allow, got %q", *body.Action))
+			return
+		}
+	}
 	err := s.store.Update(func(c *config.Config) error {
-		for _, existing := range c.Lists.Sources {
+		for _, existing := range append(append([]config.ListSource{}, c.Lists.Sources...), c.Lists.AllowSources...) {
 			if existing.Name == src.Name {
 				return fmt.Errorf("a list named %q already exists", src.Name)
 			}
 		}
-		c.Lists.Sources = append(c.Lists.Sources, src)
+		if allow {
+			c.Lists.AllowSources = append(c.Lists.AllowSources, src)
+		} else {
+			c.Lists.Sources = append(c.Lists.Sources, src)
+		}
 		return nil
 	})
 	if err != nil {
@@ -288,27 +304,48 @@ func (s *Server) handleUpdateList(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	var body listSourceBody
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "body must be JSON with any of: url, format, enabled")
+		writeError(w, http.StatusBadRequest, "body must be JSON with any of: url, format, action, enabled")
 		return
 	}
 	urlChanged := false
 	err := s.store.Update(func(c *config.Config) error {
-		for i := range c.Lists.Sources {
-			src := &c.Lists.Sources[i]
-			if src.Name != name {
-				continue
+		slices := [2]*[]config.ListSource{&c.Lists.Sources, &c.Lists.AllowSources}
+		for si, slice := range slices {
+			for i := range *slice {
+				src := &(*slice)[i]
+				if src.Name != name {
+					continue
+				}
+				if body.URL != nil && *body.URL != src.URL {
+					src.URL = *body.URL
+					urlChanged = true
+				}
+				if body.Format != nil {
+					src.Format = *body.Format
+				}
+				if body.Enabled != nil {
+					src.Enabled = *body.Enabled
+				}
+				if body.Action != nil {
+					// Moving between block and allow means moving the
+					// source between the two config slices.
+					var wantAllow bool
+					switch *body.Action {
+					case "allow":
+						wantAllow = true
+					case "", "block":
+					default:
+						return fmt.Errorf("action: must be block or allow, got %q", *body.Action)
+					}
+					if isAllow := si == 1; wantAllow != isAllow {
+						moved := *src
+						*slice = append((*slice)[:i], (*slice)[i+1:]...)
+						other := slices[1-si]
+						*other = append(*other, moved)
+					}
+				}
+				return nil
 			}
-			if body.URL != nil && *body.URL != src.URL {
-				src.URL = *body.URL
-				urlChanged = true
-			}
-			if body.Format != nil {
-				src.Format = *body.Format
-			}
-			if body.Enabled != nil {
-				src.Enabled = *body.Enabled
-			}
-			return nil
 		}
 		return errNotFound
 	})
@@ -333,19 +370,21 @@ var errNotFound = errors.New("not found")
 func (s *Server) handleDeleteList(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	err := s.store.Update(func(c *config.Config) error {
-		kept := c.Lists.Sources[:0]
 		found := false
-		for _, src := range c.Lists.Sources {
-			if src.Name == name {
-				found = true
-				continue
+		for _, slice := range [2]*[]config.ListSource{&c.Lists.Sources, &c.Lists.AllowSources} {
+			kept := (*slice)[:0]
+			for _, src := range *slice {
+				if src.Name == name {
+					found = true
+					continue
+				}
+				kept = append(kept, src)
 			}
-			kept = append(kept, src)
+			*slice = kept
 		}
 		if !found {
 			return errNotFound
 		}
-		c.Lists.Sources = kept
 		return nil
 	})
 	if errors.Is(err, errNotFound) {

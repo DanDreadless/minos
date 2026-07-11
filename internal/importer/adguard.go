@@ -76,12 +76,23 @@ func AdGuard(path string, cfg *config.Config) (*Report, error) {
 		}
 		// AdGuard filter lists are adblock syntax; our parser downgrades
 		// unsupported rules to counted skips.
-		if mergeList(cfg, name, f.URL, "adblock", f.Enabled) {
+		if mergeList(cfg, name, f.URL, "adblock", "block", f.Enabled) {
 			rep.Lists++
 		}
 	}
-	for _, f := range ag.WhitelistFilters {
-		rep.skip("allowlist subscription %q: Minos lists are deny-only (add pardons instead)", f.URL)
+	for i, f := range ag.WhitelistFilters {
+		if f.URL == "" {
+			continue
+		}
+		name := strings.TrimSpace(f.Name)
+		if name == "" {
+			name = fmt.Sprintf("adguard-allow-%d", i+1)
+		}
+		// Whitelist filters map to action:allow subscriptions — membership
+		// makes every rule an allow, matching AdGuard's semantics.
+		if mergeList(cfg, name, f.URL, "adblock", "allow", f.Enabled) {
+			rep.Lists++
+		}
 	}
 
 	for _, rule := range ag.UserRules {
