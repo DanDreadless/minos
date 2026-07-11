@@ -170,6 +170,54 @@ func TestValidateCatchesBadValues(t *testing.T) {
 	}
 }
 
+// Blocking the encrypted-dns service alongside a hostname doh/dot upstream
+// it covers is a warning (the operator may resolve it elsewhere), never a
+// validation error — and IP-literal upstreams are always quiet.
+func TestEncryptedDNSUpstreamWarnings(t *testing.T) {
+	base := func() *Config {
+		c := Default()
+		c.Blocking.Services = []string{"encrypted-dns"}
+		return c
+	}
+
+	c := base()
+	c.DNS.Upstreams = []Upstream{{Address: "https://dns.google/dns-query", Protocol: "doh"}}
+	if w := c.encryptedDNSUpstreamWarnings(); len(w) != 1 {
+		t.Errorf("hostname doh upstream: %d warnings, want 1: %v", len(w), w)
+	}
+	if err := c.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil — the overlap warns, never rejects", err)
+	}
+
+	// Subdomain of a covered name warns too (the block covers subdomains).
+	c = base()
+	c.DNS.Upstreams = []Upstream{{Address: "abcd12.dns.nextdns.io:853", Protocol: "dot"}}
+	if w := c.encryptedDNSUpstreamWarnings(); len(w) != 1 {
+		t.Errorf("dot subdomain upstream: %d warnings, want 1: %v", len(w), w)
+	}
+
+	// Group-level service blocks count: kids-group devices lose the name.
+	c = base()
+	c.Blocking.Services = nil
+	c.Groups = []Group{{Name: "kids", Mode: "filter", Services: []string{"encrypted-dns"}}}
+	c.DNS.Upstreams = []Upstream{{Address: "https://dns.quad9.net/dns-query", Protocol: "doh"}}
+	if w := c.encryptedDNSUpstreamWarnings(); len(w) != 1 {
+		t.Errorf("group service block: %d warnings, want 1: %v", len(w), w)
+	}
+
+	// Quiet cases: IP-literal upstreams (the shipped presets), an uncovered
+	// hostname, and the service not being blocked at all.
+	quiet := []*Config{base(), base(), Default()}
+	quiet[0].DNS.Upstreams = []Upstream{{Address: "https://1.1.1.1/dns-query", Protocol: "doh"}}
+	quiet[1].DNS.Upstreams = []Upstream{{Address: "https://doh.mydns.example/dns-query", Protocol: "doh"}}
+	quiet[2].DNS.Upstreams = []Upstream{{Address: "https://dns.google/dns-query", Protocol: "doh"}}
+	for i, qc := range quiet {
+		if w := qc.encryptedDNSUpstreamWarnings(); len(w) != 0 {
+			t.Errorf("quiet case %d: unexpected warnings %v", i, w)
+		}
+	}
+}
+
 // On disk, an unknown field is tolerated (so a config written by a newer
 // Minos still loads after a downgrade); an uploaded restore stays strict.
 func TestUnknownFieldToleratedOnDiskStrictOnRestore(t *testing.T) {

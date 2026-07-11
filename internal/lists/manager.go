@@ -202,6 +202,15 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 			b.AddAllow("service:"+name, d)
 		}
 	}
+	// iCloud Private Relay (opt-in): Apple documents that denying these
+	// names makes devices fall back to normal DNS — the device shows
+	// "Private Relay is unavailable on this network". A pseudo-list, so the
+	// docket names it and the one-click pardon flow works on it like any rule.
+	if cfg.Blocking.BlockICloudPrivateRelay {
+		for _, d := range []string{"mask.icloud.com", "mask-h2.icloud.com", "mask-api.icloud.com"} {
+			b.AddDeny("icloud-private-relay", d)
+		}
+	}
 
 	m.mu.Lock()
 	for _, src := range allSources(cfg) {

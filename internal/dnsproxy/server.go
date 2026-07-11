@@ -66,6 +66,9 @@ type Server struct {
 	// safeSearch is the global blocking.safe_search flag; per-group
 	// enforcement rides the client policy.
 	safeSearch atomic.Bool
+	// allowFirefoxDoH disables the Firefox DoH-canary interception
+	// (dns.allow_firefox_doh).
+	allowFirefoxDoH atomic.Bool
 	// forwardPrivateArpa opts out of answering RFC 6303 private reverse
 	// zones locally (dns.forward_private_reverse).
 	forwardPrivateArpa atomic.Bool
@@ -295,6 +298,7 @@ func (s *Server) ApplyConfig(cfg *config.Config) error {
 	})
 	s.local.Store(buildLocalZone(cfg))
 	s.safeSearch.Store(cfg.Blocking.SafeSearch)
+	s.allowFirefoxDoH.Store(cfg.DNS.AllowFirefoxDoH)
 	s.forwardPrivateArpa.Store(cfg.DNS.ForwardPrivateReverse)
 	// A fresh cache on every config change doubles as the flush that keeps
 	// cached answers consistent with new upstreams or blocking settings.
@@ -375,6 +379,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return firstErr
 }
 
+// firefoxCanary is the domain Firefox probes before enabling its built-in
+// DoH; NXDOMAIN means "this network filters DNS — don't".
+const firefoxCanary = "use-application-dns.net"
+
 // handle is the hot path: judge, then answer or forward.
 func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 	start := time.Now()
@@ -413,6 +421,25 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		entry.Verdict = querylog.VerdictBlocked
 		entry.List = "clients"
 		entry.Rule = "dns access blocked"
+		s.record(entry, start)
+		return
+	}
+
+	// Firefox's DoH canary: an authoritative NXDOMAIN for
+	// use-application-dns.net is Mozilla's documented signal that this
+	// network filters DNS, so Firefox keeps using the system resolver
+	// instead of silently switching itself to DoH. Opt out with
+	// dns.allow_firefox_doh. The length gate keeps the common-case cost to
+	// one integer compare; recess deliberately does not lift this — the
+	// network still filters, it is just in recess.
+	if len(qname) == len(firefoxCanary) && qname == firefoxCanary && !s.allowFirefoxDoH.Load() {
+		reply := new(dns.Msg)
+		reply.SetRcode(req, dns.RcodeNameError)
+		reply.Authoritative = true
+		_ = w.WriteMsg(reply)
+		entry.Verdict = querylog.VerdictBlocked
+		entry.List = "firefox-doh-canary"
+		entry.Rule = firefoxCanary
 		s.record(entry, start)
 		return
 	}
