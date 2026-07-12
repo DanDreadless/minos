@@ -580,8 +580,9 @@ notifications:              # optional; nothing is sent unless a URL is set
   webhook_url: ""           # each event POSTed as JSON
   ntfy_url: ""              # e.g. https://ntfy.sh/my-topic (or self-hosted)
   ntfy_token: ""            # bearer token for protected topics
-  digest: off               # off | daily | weekly: a traffic summary at
-                            # 09:00 server time (Mondays for weekly)
+  digest: off               # off | daily | weekly: a traffic summary
+  digest_time: "09:00"      # delivery time, 24h HH:MM, server time
+  digest_day: monday        # delivery day (weekly only), lowercase
 ```
 
 Notifications cover three low-volume events: a **new device** makes its

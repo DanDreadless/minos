@@ -316,9 +316,52 @@ type NotificationsConfig struct {
 	// NtfyToken is sent as a bearer token for protected topics.
 	NtfyToken string `yaml:"ntfy_token,omitempty" json:"-"`
 	// Digest sends a periodic traffic summary through the sinks above:
-	// "off" (default, also the empty value), "daily", or "weekly" —
-	// delivered at 09:00 server time, Mondays for weekly.
+	// "off" (default, also the empty value), "daily", or "weekly".
 	Digest string `yaml:"digest,omitempty" json:"digest"`
+	// DigestTime is the delivery time as 24h "HH:MM" in server-local time
+	// (default "09:00").
+	DigestTime string `yaml:"digest_time,omitempty" json:"digest_time"`
+	// DigestDay is the delivery weekday for the weekly cadence, as a
+	// lowercase English day name (default "monday"). Ignored for daily.
+	DigestDay string `yaml:"digest_day,omitempty" json:"digest_day"`
+}
+
+// DigestSchedule resolves the configured digest timing, applying defaults
+// and tolerating garbage (validation rejects it up front, but a hand-edited
+// file must never panic the scheduler).
+func (n NotificationsConfig) DigestSchedule() (hour, minute int, day time.Weekday) {
+	hour, minute, day = 9, 0, time.Monday
+	if h, m, err := parseClock(n.DigestTime); err == nil {
+		hour, minute = h, m
+	}
+	if d, err := parseWeekday(n.DigestDay); err == nil {
+		day = d
+	}
+	return hour, minute, day
+}
+
+// parseClock parses 24h "HH:MM". Empty is an error (callers apply defaults).
+func parseClock(s string) (hour, minute int, err error) {
+	t, err := time.Parse("15:04", s)
+	if err != nil {
+		return 0, 0, fmt.Errorf("must be 24h HH:MM, got %q", s)
+	}
+	return t.Hour(), t.Minute(), nil
+}
+
+var weekdays = map[string]time.Weekday{
+	"sunday": time.Sunday, "monday": time.Monday, "tuesday": time.Tuesday,
+	"wednesday": time.Wednesday, "thursday": time.Thursday,
+	"friday": time.Friday, "saturday": time.Saturday,
+}
+
+// parseWeekday parses a lowercase English day name. Empty is an error
+// (callers apply defaults).
+func parseWeekday(s string) (time.Weekday, error) {
+	if d, ok := weekdays[s]; ok {
+		return d, nil
+	}
+	return 0, fmt.Errorf("must be a lowercase day name (monday…sunday), got %q", s)
 }
 
 type Config struct {
@@ -707,6 +750,16 @@ func (c *Config) Validate() error {
 	case "", "off", "daily", "weekly":
 	default:
 		return fmt.Errorf("notifications.digest: must be off, daily, or weekly, got %q", c.Notifications.Digest)
+	}
+	if s := c.Notifications.DigestTime; s != "" {
+		if _, _, err := parseClock(s); err != nil {
+			return fmt.Errorf("notifications.digest_time: %w", err)
+		}
+	}
+	if s := c.Notifications.DigestDay; s != "" {
+		if _, err := parseWeekday(s); err != nil {
+			return fmt.Errorf("notifications.digest_day: %w", err)
+		}
 	}
 	switch c.UpdateInstallMethod {
 	case "", "binary", "docker", "source":

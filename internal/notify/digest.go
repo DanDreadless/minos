@@ -24,9 +24,10 @@ type DigestStats interface {
 const digestCheckInterval = time.Minute
 
 // RunDigest sends periodic summaries ("here's what your network did")
-// through the normal event queue until ctx ends. Cadence comes from
-// notifications.digest: off (default), daily, or weekly — fired at 09:00
-// server time, Mondays for weekly. Blocks; run in a goroutine beside Run.
+// through the normal event queue until ctx ends. Cadence, delivery time,
+// and (for weekly) delivery day come from notifications.digest /
+// digest_time / digest_day, re-read on every check so Settings changes
+// apply live. Blocks; run in a goroutine beside Run.
 func (n *Notifier) RunDigest(ctx context.Context, stats DigestStats) {
 	ticker := time.NewTicker(digestCheckInterval)
 	defer ticker.Stop()
@@ -38,9 +39,10 @@ func (n *Notifier) RunDigest(ctx context.Context, stats DigestStats) {
 		case <-ticker.C:
 		}
 		now := time.Now()
-		cadence := n.store.Get().Notifications.Digest
-		if cadence == "daily" || cadence == "weekly" {
-			if fire := nextDigestFire(cadence, last); !now.Before(fire) {
+		cfg := n.store.Get().Notifications
+		if cadence := cfg.Digest; cadence == "daily" || cadence == "weekly" {
+			hour, minute, day := cfg.DigestSchedule()
+			if fire := nextDigestFire(cadence, hour, minute, day, last); !now.Before(fire) {
 				n.sendDigest(ctx, stats, cadence, now)
 			}
 		}
@@ -49,21 +51,21 @@ func (n *Notifier) RunDigest(ctx context.Context, stats DigestStats) {
 }
 
 // nextDigestFire returns the first fire instant strictly after `after`:
-// the next 09:00 for daily, the next Monday 09:00 for weekly, in after's
+// the next hh:mm for daily, the next `day` at hh:mm for weekly, in after's
 // location. time.Date normalization keeps it correct across DST changes.
-func nextDigestFire(cadence string, after time.Time) time.Time {
+func nextDigestFire(cadence string, hour, minute int, day time.Weekday, after time.Time) time.Time {
 	y, m, d := after.Date()
 	for add := 0; add <= 7; add++ {
-		cand := time.Date(y, m, d+add, 9, 0, 0, 0, after.Location())
+		cand := time.Date(y, m, d+add, hour, minute, 0, 0, after.Location())
 		if !cand.After(after) {
 			continue
 		}
-		if cadence == "weekly" && cand.Weekday() != time.Monday {
+		if cadence == "weekly" && cand.Weekday() != day {
 			continue
 		}
 		return cand
 	}
-	// Unreachable: any 8-day span contains a Monday 09:00.
+	// Unreachable: any 8-day span contains every weekday at hh:mm.
 	return after.AddDate(0, 0, 7)
 }
 

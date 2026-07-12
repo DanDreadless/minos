@@ -36,6 +36,8 @@
   let ntfyToken = '';
   let ntfyTokenSet = false;
   let digest: 'off' | 'daily' | 'weekly' = 'off';
+  let digestTime = '09:00';
+  let digestDay = 'monday';
 
   interface RouteRow {
     domains: string;
@@ -66,6 +68,8 @@
     ntfyTokenSet = c.notifications.ntfy_token_set;
     ntfyToken = '';
     digest = c.notifications.digest;
+    digestTime = c.notifications.digest_time;
+    digestDay = c.notifications.digest_day;
     routeRows = c.dns.routes.map((r) => ({
       domains: r.domains.join(', '),
       address: r.upstream.address,
@@ -471,14 +475,6 @@
       <span>{copy.settings.ntfyURL} <small>{copy.settings.ntfyHint}</small></span>
       <input placeholder="https://ntfy.sh/my-topic" bind:value={ntfyURL} />
     </label>
-    <label class="field">
-      <span>{copy.settings.digest} <small>{copy.settings.digestHint}</small></span>
-      <select bind:value={digest}>
-        <option value="off">off</option>
-        <option value="daily">daily</option>
-        <option value="weekly">weekly</option>
-      </select>
-    </label>
     <label class="field wide">
       <span>{copy.settings.ntfyToken} <small>{copy.settings.ntfyTokenHint}</small></span>
       <input
@@ -489,6 +485,36 @@
       />
     </label>
     <p class="note">{copy.settings.notificationsNote}</p>
+
+    <div class="digest">
+      <h3>{copy.settings.digestTitle} <small>{copy.settings.digestHint}</small></h3>
+      <div class="digest-row">
+        <label class="field">
+          <span>{copy.settings.digestCadence}</span>
+          <select bind:value={digest}>
+            <option value="off">off</option>
+            <option value="daily">daily</option>
+            <option value="weekly">weekly</option>
+          </select>
+        </label>
+        {#if digest !== 'off'}
+          {#if digest === 'weekly'}
+            <label class="field">
+              <span>{copy.settings.digestDay}</span>
+              <select bind:value={digestDay}>
+                {#each ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as d (d)}
+                  <option value={d}>{d}</option>
+                {/each}
+              </select>
+            </label>
+          {/if}
+          <label class="field">
+            <span>{copy.settings.digestTime} <small>{copy.settings.digestTimeHint}</small></span>
+            <input type="time" bind:value={digestTime} required />
+          </label>
+        {/if}
+      </div>
+    </div>
     <div class="section-actions">
       <button
         class="primary"
@@ -498,6 +524,8 @@
               webhook_url: webhookURL.trim(),
               ntfy_url: ntfyURL.trim(),
               digest,
+              digest_time: digestTime,
+              digest_day: digestDay,
               // Only send a typed token; an untouched field never clobbers
               // the stored one. Clearing ntfy_url makes any token inert.
               ...(ntfyToken.trim() ? { ntfy_token: ntfyToken.trim() } : {}),
@@ -736,5 +764,30 @@
   .token-row input {
     max-width: 18rem;
     flex: 1;
+  }
+
+  .digest {
+    margin-top: 1rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--border, rgba(127, 127, 127, 0.3));
+  }
+
+  .digest h3 {
+    margin: 0 0 0.5rem;
+    font-size: 0.92rem;
+  }
+
+  .digest h3 small {
+    color: var(--text-dim);
+    font-weight: normal;
+    font-size: 0.78rem;
+    margin-left: 0.5rem;
+  }
+
+  .digest-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
   }
 </style>
