@@ -121,7 +121,12 @@ export interface ConfigView {
   querylog: { ephemeral: boolean; db_path: string; ring_size: number; retention_days: number };
   api: { listen: string; token_set: boolean };
   update_check: boolean;
-  notifications: { webhook_url: string; ntfy_url: string; ntfy_token_set: boolean };
+  notifications: {
+    webhook_url: string;
+    ntfy_url: string;
+    ntfy_token_set: boolean;
+    digest: 'off' | 'daily' | 'weekly';
+  };
 }
 
 // Partial settings update; omitted fields are left untouched by the server.
@@ -144,7 +149,12 @@ export interface SettingsUpdate {
   querylog?: { ring_size?: number; retention_days?: number };
   api?: { token?: string };
   update_check?: boolean;
-  notifications?: { webhook_url?: string; ntfy_url?: string; ntfy_token?: string };
+  notifications?: {
+    webhook_url?: string;
+    ntfy_url?: string;
+    ntfy_token?: string;
+    digest?: string;
+  };
 }
 
 export interface ListStatus {

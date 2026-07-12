@@ -163,6 +163,7 @@ func TestValidateCatchesBadValues(t *testing.T) {
 		func(c *Config) { c.QueryLog.DBPath = "" },
 		func(c *Config) { c.API.Listen = "" },
 		func(c *Config) { c.UpdateInstallMethod = "snap" },
+		func(c *Config) { c.Notifications.Digest = "hourly" },
 	}
 	for i, mutate := range bad {
 		c := Default()

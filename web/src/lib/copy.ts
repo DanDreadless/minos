@@ -274,6 +274,9 @@ export const copy = {
     ntfyHint: 'e.g. https://ntfy.sh/my-minos-topic, or your self-hosted ntfy',
     ntfyToken: 'ntfy access token',
     ntfyTokenHint: 'only for protected topics; leave blank otherwise',
+    digest: 'Traffic digest',
+    digestHint:
+      "a summary of what your network did — totals, top blocked, busiest client — sent to the destinations above at 09:00 (Mondays for weekly)",
     updatesTitle: 'Updates',
     updateCheck: 'Check for new releases once a day',
     updateCheckHint:

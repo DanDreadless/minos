@@ -81,6 +81,28 @@ func assertAggregates(t *testing.T, l *Log) {
 		t.Errorf("empty client set = %+v (err %v), want zero overview", ov, err)
 	}
 
+	// The digest's data-source methods (builtin-typed, for notify's interface).
+	dTotal, dBlocked, err := l.Totals(t.Context(), since)
+	if err != nil || dTotal != 4 || dBlocked != 3 {
+		t.Errorf("Totals = %d/%d (err %v), want 4/3", dTotal, dBlocked, err)
+	}
+	domains, counts, err := l.TopBlockedSummary(t.Context(), since, 3)
+	if err != nil || len(domains) != 2 || domains[0] != "ads.example.com" || counts[0] != 2 {
+		t.Errorf("TopBlockedSummary = %v/%v (err %v), want ads.example.com x2 first", domains, counts, err)
+	}
+	busiest, queries, err := l.BusiestClient(t.Context(), since)
+	if err != nil || busiest != "10.0.0.1" || queries != 3 {
+		t.Errorf("BusiestClient = %s/%d (err %v), want 10.0.0.1/3", busiest, queries, err)
+	}
+	newClients, err := l.NewClientsSince(t.Context(), since)
+	if err != nil || newClients != 2 {
+		t.Errorf("NewClientsSince = %d (err %v), want 2 (both clients are new)", newClients, err)
+	}
+	// A client seen before the window is not "new" inside it.
+	if n, err := l.NewClientsSince(t.Context(), time.Now().Add(-15*time.Minute)); err != nil || n != 0 {
+		t.Errorf("NewClientsSince(-15m) = %d (err %v), want 0 (all first-seen earlier)", n, err)
+	}
+
 	timeline, err := l.Timeline(t.Context(), since, 10*time.Minute)
 	if err != nil {
 		t.Fatal(err)

@@ -190,6 +190,7 @@ func serve(args []string) error {
 	})
 	go checker.Run(ctx)
 	go notifier.Run(ctx)
+	go notifier.RunDigest(ctx, qlog) // *querylog.Log satisfies notify.DigestStats
 	if acmeMgr != nil {
 		go acmeMgr.Run(ctx)
 	}

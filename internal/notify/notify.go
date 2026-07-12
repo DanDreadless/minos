@@ -38,6 +38,7 @@ var ntfyTags = map[string]string{
 	"upstream_sick":      "warning",
 	"upstream_recovered": "white_check_mark",
 	"update_available":   "arrow_up",
+	"digest":             "bar_chart",
 }
 
 // Notifier fans events out to the configured sinks. Safe for concurrent use.
