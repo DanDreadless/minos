@@ -294,16 +294,20 @@ This is security software; hold it to that standard.
   path stay per-IP. Solves the duplicate rows a power-cycled device left
   when it grabbed a new lease. If ARP never tags an old IP's MAC it can't
   be merged (best-effort) — acceptable.
-- **Device identity is best-effort**: MAC comes from the ARP/neighbor
-  table (only works when Minos shares the L2 segment; IPv4 only for
-  now), hostname from a reverse-DNS lookup. Both run on the enrichment
-  worker, never on the query path. Windows reads `arp -a`; Linux reads
-  /proc/net/arp. `clients.NormalizeMAC` canonicalises to lowercase colon
-  form so ARP-derived and user-entered MACs compare equal. Known
-  limitation (maintainer-accepted, July 2026): IPv6 clients are never
-  MAC-tagged, so an IPv6-preferring host rotating privacy addresses still
-  produces duplicate Devices rows and IP-keyed-only policies — fixing it
-  needs netlink neighbor reads (Linux), deferred until it bites.
+- **Device identity is best-effort**: MAC comes from the neighbour tables
+  (only works when Minos shares the L2 segment), hostname from a
+  reverse-DNS lookup. Both run on the enrichment worker, never on the
+  query path. Windows (dev-only) reads `arp -a`; Linux reads /proc/net/arp
+  for IPv4 **and execs `ip -6 neigh show` for IPv6** (`neigh_linux.go` —
+  no /proc equivalent exists and raw netlink isn't worth hand-rolling
+  under the no-new-deps rule; a missing `ip` binary logs once at Debug and
+  degrades silently). Both families feed one `neighborTable()` map, so an
+  IPv6-preferring host merges into its physical-device row and inherits
+  MAC-keyed policies with no further code — the old "IPv6 never
+  MAC-tagged" limitation is retired. Link-local (fe80::) entries are
+  deliberately kept: they carry the merging MAC. `clients.NormalizeMAC`
+  canonicalises to lowercase colon form so table-derived and user-entered
+  MACs compare equal.
 - **PTR enrichment targets the gateway first** (fixed decision): a bare
   `net.DefaultResolver.LookupAddr` in production goes to the system
   resolver — usually Minos itself — which answers private reverse zones

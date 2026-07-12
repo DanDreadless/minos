@@ -2,6 +2,7 @@ package clients
 
 import (
 	"context"
+	"maps"
 	"net"
 	"strings"
 	"time"
@@ -44,12 +45,29 @@ func (r *Registry) Run(ctx context.Context) {
 }
 
 func (r *Registry) enrichOne(ctx context.Context, ip string) {
-	if mac, ok := readARPTable()[ip]; ok {
+	if mac, ok := neighborTable()[ip]; ok {
 		r.setMAC(ip, mac)
 	}
 	if name := r.lookupHostname(ctx, ip); name != "" {
 		r.setHostname(ip, name)
 	}
+}
+
+// neighborTable merges the IPv4 ARP table with the IPv6 neighbour table:
+// one IP → MAC map covering both families. The MAC keys the physical-device
+// merge, so an IPv6-preferring host collapses into the same row (and
+// inherits the same policy) as its IPv4 addresses with no further code.
+func neighborTable() map[string]string {
+	table := readARPTable()
+	v6 := ipv6Neighbors()
+	if len(v6) == 0 {
+		return table
+	}
+	if table == nil {
+		table = make(map[string]string, len(v6))
+	}
+	maps.Copy(table, v6)
+	return table
 }
 
 // lookupHostname reverse-resolves ip, trying each source in turn and taking the
@@ -99,9 +117,10 @@ func resolverAt(addr string) *net.Resolver {
 	}
 }
 
-// refreshMACs re-reads the ARP/neighbor table and updates every known device.
+// refreshMACs re-reads the ARP + IPv6 neighbour tables and updates every
+// known device.
 func (r *Registry) refreshMACs() {
-	table := readARPTable()
+	table := neighborTable()
 	if len(table) == 0 {
 		return
 	}
