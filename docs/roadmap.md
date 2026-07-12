@@ -92,37 +92,52 @@ Svelte 5 / Vite 6 toolchain move.
   `update_install_method` config override; runtime container detection
   still wins so a release binary in a container gets Docker guidance.
 
-## Next round — making Minos the homelab default
+## Homelab round — shipped (v0.13.0–v0.14.0, July 2026)
 
-The implementation-ready plan is `../.claude/minos-product-plan.md`, built
-from a July 2026 competitive review (Pi-hole v6, AdGuard Home, Blocky,
-Technitium, NextDNS). Headlines, roughly in build order:
+The round that made Minos the homelab default candidate, from a July 2026
+competitive review (Pi-hole v6, AdGuard Home, Blocky, Technitium, NextDNS).
+The engineering plan is archived outside the repo
+(`../.claude/minos-product-plan.md`); all nine items shipped, verified
+complete 2026-07-12:
 
-- **Curated blocklist catalog** on the Codex page (Hagezi / OISD /
-  StevenBlack tiers, one-click subscribe — the Ferrymen-picker pattern
-  applied to the harder decision) *(shipped)*
-- **Subscribed allowlists** (`action: allow` list sources — Pi-hole v6
-  "antigravity" parity; imports carry AdGuard whitelist filters and v6
-  antigravity lists over) *(shipped)*
+- **Curated blocklist catalog** — Hagezi / OISD / StevenBlack / threat-feed
+  tiers on the Codex, every URL verified through the real fetch/parse
+  pipeline, one-click subscribe
+- **Subscribed allowlists** — `action: allow` sources; Pi-hole v6
+  "antigravity" parity, importer-aware
 - **Per-list effectiveness stats** — 7-day blocks attributed per list, so
-  dead-weight lists are visible (the "why was this judged" data, aggregated)
-  *(shipped)*
-- **Audit (dry-run) lists** — rules logged as "would block" but never
-  enforced; try a strict list safely, then enforce with one click. Requested
-  around Pi-hole for years, shipped by nobody *(shipped)*
-- **Bypass resistance** — Firefox DoH canary answered by default, opt-in
-  iCloud Private Relay block, and an `encrypted-dns` services-catalog bundle
-  blockable per group *(shipped)*
-- **Per-client dashboard** — aggregated top allowed/blocked per device,
-  spanning all its IPs (AdGuard's headline advantage, matched) *(shipped)*
-- **Weekly digest** through the existing webhook/ntfy notifier *(shipped —
-  daily or weekly)*
-- **First-run checklist** on the Tribunal *(shipped)*
+  dead-weight lists are visible
+- **Audit (dry-run) lists** — rules logged as amber "would block", never
+  enforced; one click to enforce. Requested around Pi-hole for years,
+  shipped by nobody
+- **Bypass resistance** — Firefox DoH canary (default on), opt-in iCloud
+  Private Relay block, blockable `encrypted-dns` service bundle
+- **Per-client dashboard** — top allowed/blocked per device across all its
+  IPs
+- **Traffic digest** — opt-in daily/weekly summary through webhook/ntfy
+- **First-run checklist** — the Tribunal walks a fresh install to a
+  working, blocking resolver
+- **Install-method build stamp** — release/Docker builds stamp upgrade
+  guidance
+
+## Next round — naming the unnamed (device identity)
+
+Too many Devices rows still show no hostname or vendor. The
+implementation-ready plan is `../.claude/minos-device-identity-plan.md`:
+passive-first identity gathering with zero query-path cost — the full IEEE
+OUI registry as a compact slab (plus honest "Private address" labels for
+randomized MACs), IPv6 neighbour-table MAC-tagging, deeper mDNS (direct
+queries, passive announcement listener, `_device-info` models), SSDP/UPnP
+friendly names, a passive DHCP broadcast listener (hostname/vendor-class,
+explicitly a listener — never a DHCP server), traffic-pattern OS hints as
+a clearly-labelled last resort, and provenance ("where did this name come
+from") on every identity field.
 
 Maintainer-gated (explicit decision needed before any code): **replica
 config sync** (bounded one-way push; the docs-only keepalived + API-sync
-recipe can ship anytime), and **DNS-over-QUIC** (parked on the quic-go
-dependency weight).
+recipe can ship anytime), **DNS-over-QUIC** (parked on the quic-go
+dependency weight), and **router-assisted identity** (UPnP IGD/SNMP to the
+gateway — scope decision needed).
 
 ## Under consideration
 
