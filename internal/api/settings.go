@@ -152,7 +152,8 @@ type settingsUpdate struct {
 		DigestDay  *string `json:"digest_day"`
 	} `json:"notifications"`
 	Discovery *struct {
-		SSDP *bool `json:"ssdp"`
+		SSDP       *bool `json:"ssdp"`
+		DHCPListen *bool `json:"dhcp_listen"`
 	} `json:"discovery"`
 }
 
@@ -260,8 +261,13 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 				c.Notifications.DigestDay = *upd.Notifications.DigestDay
 			}
 		}
-		if upd.Discovery != nil && upd.Discovery.SSDP != nil {
-			c.Discovery.SSDP = *upd.Discovery.SSDP
+		if upd.Discovery != nil {
+			if upd.Discovery.SSDP != nil {
+				c.Discovery.SSDP = *upd.Discovery.SSDP
+			}
+			if upd.Discovery.DHCPListen != nil {
+				c.Discovery.DHCPListen = *upd.Discovery.DHCPListen
+			}
 		}
 		return nil
 	})

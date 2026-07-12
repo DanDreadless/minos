@@ -85,6 +85,7 @@ type device struct {
 	mac       atomic.Pointer[string]    // from the neighbour tables
 	hostname  atomic.Pointer[nameInfo]  // best discovered name + source
 	model     atomic.Pointer[modelInfo] // best discovered self-description
+	hint      atomic.Pointer[string]    // coarse OS/type guess, never a fact
 	// fresh marks a device first discovered by live traffic (not seeded
 	// from history); consumed once by the new-device notification.
 	fresh atomic.Bool
@@ -109,7 +110,10 @@ type Device struct {
 	NameSource string `json:"name_source,omitempty"`
 	// Model is the device's discovered self-description (e.g. an mDNS
 	// device-info model or UPnP modelName), when any source offered one.
-	Model     string     `json:"model,omitempty"`
+	Model string `json:"model,omitempty"`
+	// Hint is a coarse OS/type guess (DHCP fingerprint, traffic patterns)
+	// for devices nothing else names — the UI must present it as a guess.
+	Hint      string     `json:"hint,omitempty"`
 	Name      string     `json:"name,omitempty"`
 	Group     string     `json:"group"`
 	Blocked   bool       `json:"blocked"`
@@ -126,6 +130,9 @@ type Registry struct {
 	policies atomic.Pointer[map[string]*Policy]
 	cfg      atomic.Pointer[config.Config] // snapshot for scheduled rebuilds
 	enrichCh chan string                   // newly seen IPs awaiting enrichment
+	// pendingDHCP parks lease-time introductions (keyed by MAC) until the
+	// neighbour table associates the MAC with an IP. Bounded by TTL.
+	pendingDHCP sync.Map // mac string → dhcpIdentity
 	// revResolvers is the ordered list of resolvers used for PTR enrichment
 	// (gateway first, then system); built once when Run starts.
 	revResolvers []*net.Resolver
@@ -462,8 +469,12 @@ func (r *Registry) Devices(cfg *config.Config) []Device {
 		if m := d.model.Load(); m != nil {
 			model = *m
 		}
+		hint := ""
+		if h := d.hint.Load(); h != nil {
+			hint = *h
+		}
 		a := accFor(accs, deviceKey(ip, mac))
-		a.addLive(ip, mac, host, model, d.total.Load(), d.blocked.Load(),
+		a.addLive(ip, mac, host, model, hint, d.total.Load(), d.blocked.Load(),
 			d.firstSeen.Load(), d.lastSeen.Load())
 		return true
 	})
@@ -533,6 +544,7 @@ type deviceAcc struct {
 	primaryLast int64 // unix nanos of the primary IP's last-seen
 	host        nameInfo
 	model       modelInfo
+	hint        string
 	total       uint64
 	blocked     uint64
 	first       int64 // unix nanos, min across IPs (0 = unset)
@@ -550,7 +562,10 @@ func (a *deviceAcc) addIP(ip string) {
 	}
 }
 
-func (a *deviceAcc) addLive(ip, mac string, host nameInfo, model modelInfo, total, blocked uint64, first, last int64) {
+func (a *deviceAcc) addLive(ip, mac string, host nameInfo, model modelInfo, hint string, total, blocked uint64, first, last int64) {
+	if hint != "" {
+		a.hint = hint
+	}
 	a.addIP(ip)
 	a.seen = true
 	if mac != "" {
@@ -610,6 +625,7 @@ func (a *deviceAcc) device() Device {
 		Hostname:   a.host.name,
 		NameSource: a.host.source,
 		Model:      a.model.model,
+		Hint:       a.hint,
 		Name:       a.name,
 		Group:      group,
 		Blocked:    a.blockedDev,
@@ -687,6 +703,8 @@ func (r *Registry) setMAC(ip, mac string) {
 		return // unchanged: no policy consequence
 	}
 	d.mac.Store(&mac)
+	// A lease-time DHCP introduction parked on this MAC can now attach.
+	r.drainPendingDHCP(ip, mac)
 	// A group/block keyed on this MAC must take effect on this IP promptly:
 	// the hot-path table is IP-keyed and built from MAC assignments, so a
 	// freshly learned association needs a rebuild. Beyond a newly configured
@@ -731,6 +749,14 @@ func (r *Registry) setHostname(ip, name, source string) {
 		return
 	}
 	d.hostname.Store(&nameInfo{name: name, source: source})
+}
+
+// setHint records a coarse OS/type guess. Last write wins — hints are all
+// the same (low) grade and never compete with real identity sources.
+func (r *Registry) setHint(ip, hint string) {
+	if v, ok := r.seen.Load(ip); ok && hint != "" {
+		v.(*device).hint.Store(&hint)
+	}
 }
 
 // setModel records a discovered manufacturer/model self-description under

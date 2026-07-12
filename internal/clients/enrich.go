@@ -23,6 +23,7 @@ const (
 func (r *Registry) Run(ctx context.Context) {
 	r.revResolvers = reverseResolvers(defaultGateway())
 	go r.listenMDNS(ctx) // passive announcements; read-only
+	go r.listenDHCP(ctx) // lease-time introductions; read-only (Linux)
 	r.refreshMACs()
 	go r.sweepSSDP() // name UPnP gear soon after boot, not in 5 minutes
 	ticker := time.NewTicker(arpRefreshInterval)

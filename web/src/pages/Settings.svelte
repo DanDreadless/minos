@@ -39,6 +39,7 @@
   let digestTime = '09:00';
   let digestDay = 'monday';
   let ssdp = true;
+  let dhcpListen = true;
 
   interface RouteRow {
     domains: string;
@@ -72,6 +73,7 @@
     digestTime = c.notifications.digest_time;
     digestDay = c.notifications.digest_day;
     ssdp = c.discovery.ssdp;
+    dhcpListen = c.discovery.dhcp_listen;
     routeRows = c.dns.routes.map((r) => ({
       domains: r.domains.join(', '),
       address: r.upstream.address,
@@ -550,6 +552,15 @@
       {copy.settings.discoverySSDP}
     </label>
     <p class="note">{copy.settings.discoverySSDPHint}</p>
+    <label class="radio">
+      <input
+        type="checkbox"
+        bind:checked={dhcpListen}
+        on:change={() => void save({ discovery: { dhcp_listen: dhcpListen } })}
+      />
+      {copy.settings.discoveryDHCP}
+    </label>
+    <p class="note">{copy.settings.discoveryDHCPHint}</p>
   </section>
 
   <section class="card">

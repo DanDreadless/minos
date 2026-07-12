@@ -316,6 +316,9 @@ export const copy = {
     discoverySSDP: 'Ask UPnP devices to introduce themselves (SSDP)',
     discoverySSDPHint:
       'One small multicast search every few minutes, plus a description fetch from each responding device — names smart TVs, consoles, and IoT gear by friendly name, manufacturer, and model. Local network only; nothing leaves the LAN.',
+    discoveryDHCP: 'Listen for DHCP introductions (Linux)',
+    discoveryDHCPHint:
+      'Devices announce their own name when they join the network or renew a lease. Minos only listens — it never answers, never hands out addresses, and steps aside if this machine runs a DHCP server.',
     updatesTitle: 'Updates',
     updateCheck: 'Check for new releases once a day',
     updateCheckHint:

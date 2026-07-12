@@ -371,6 +371,11 @@ type DiscoveryConfig struct {
 	// search every few minutes, plus one description fetch from each
 	// responding device. Default on.
 	SSDP bool `yaml:"ssdp" json:"ssdp"`
+	// DHCPListen passively reads DHCP client broadcasts on UDP :67 (Linux;
+	// only when the port is free — never when a DHCP server runs here) for
+	// lease-time hostnames and OS hints. A listener, never a server:
+	// nothing is transmitted, allocated, or answered. Default on.
+	DHCPListen bool `yaml:"dhcp_listen" json:"dhcp_listen"`
 }
 
 type Config struct {
@@ -438,7 +443,7 @@ func Default() *Config {
 			RetentionDays: 90,
 		},
 		API:       APIConfig{Listen: "0.0.0.0:8080"},
-		Discovery: DiscoveryConfig{SSDP: true},
+		Discovery: DiscoveryConfig{SSDP: true, DHCPListen: true},
 	}
 }
 
