@@ -84,6 +84,23 @@ export const copy = {
     headerPill: 'In recess',
   },
 
+  setup: {
+    // The one lore touch on this card; everything below it is plain.
+    title: "Every query gets judged. Let's arraign your first.",
+    hint: 'three minutes from empty to blocking',
+    dismiss: 'Dismiss',
+    dismissTitle: "Hide this checklist for good — it won't come back.",
+    step1: (addr: string) =>
+      `Point a device at Minos: set its DNS server to this machine${addr ? ` (listening on ${addr})` : ''}, or set your router's DHCP DNS option so every device follows.`,
+    step1Link: 'setup guide',
+    step2: 'Choose your blocklists — the catalog has curated, verified picks with one-click subscribe.',
+    step2Link: 'open the Codex',
+    step3: 'Check your upstreams — the default, Cloudflare over encrypted DNS, is already a good choice.',
+    step3Link: 'Settings',
+    step4: 'Optional: turn on the update check and notifications.',
+    step4Link: 'Settings',
+  },
+
   lists: {
     title: 'The Codex',
     subtitle: 'subscribed blocklists',
