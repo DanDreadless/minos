@@ -364,6 +364,15 @@ func parseWeekday(s string) (time.Weekday, error) {
 	return 0, fmt.Errorf("must be a lowercase day name (monday…sunday), got %q", s)
 }
 
+// DiscoveryConfig switches the *active* device-discovery probes (passive
+// techniques need no switch — they only listen).
+type DiscoveryConfig struct {
+	// SSDP names UPnP devices (TVs, consoles, IoT): one small multicast
+	// search every few minutes, plus one description fetch from each
+	// responding device. Default on.
+	SSDP bool `yaml:"ssdp" json:"ssdp"`
+}
+
 type Config struct {
 	DNS           DNSConfig           `yaml:"dns"`
 	Blocking      BlockingConfig      `yaml:"blocking"`
@@ -373,6 +382,7 @@ type Config struct {
 	QueryLog      QueryLogConfig      `yaml:"querylog"`
 	API           APIConfig           `yaml:"api"`
 	Notifications NotificationsConfig `yaml:"notifications,omitempty"`
+	Discovery     DiscoveryConfig     `yaml:"discovery"`
 	// UpdateCheck, when true, asks the GitHub releases API for the latest
 	// version once a day. Strictly opt-in (default false): nothing is
 	// sent beyond the request itself, and nothing is sent at all unless
@@ -427,7 +437,8 @@ func Default() *Config {
 			RingSize:      10000,
 			RetentionDays: 90,
 		},
-		API: APIConfig{Listen: "0.0.0.0:8080"},
+		API:       APIConfig{Listen: "0.0.0.0:8080"},
+		Discovery: DiscoveryConfig{SSDP: true},
 	}
 }
 

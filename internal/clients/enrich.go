@@ -24,10 +24,13 @@ func (r *Registry) Run(ctx context.Context) {
 	r.revResolvers = reverseResolvers(defaultGateway())
 	go r.listenMDNS(ctx) // passive announcements; read-only
 	r.refreshMACs()
+	go r.sweepSSDP() // name UPnP gear soon after boot, not in 5 minutes
 	ticker := time.NewTicker(arpRefreshInterval)
 	defer ticker.Stop()
 	schedTicker := time.NewTicker(scheduleTick)
 	defer schedTicker.Stop()
+	ssdpTicker := time.NewTicker(ssdpInterval)
+	defer ssdpTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -37,11 +40,21 @@ func (r *Registry) Run(ctx context.Context) {
 			r.emitNew(ip) // after enrichment so MAC/hostname ride along
 		case <-ticker.C:
 			r.refreshMACs()
+		case <-ssdpTicker.C:
+			go r.sweepSSDP() // ~3s of socket reads; keep the worker free
 		case now := <-schedTicker.C:
 			if r.hasSchedules() {
 				r.rebuildPolicies(now)
 			}
 		}
+	}
+}
+
+// sweepSSDP runs one SSDP discovery pass when the config allows it —
+// re-read each time so the Settings toggle applies live.
+func (r *Registry) sweepSSDP() {
+	if cfg := r.cfg.Load(); cfg != nil && cfg.Discovery.SSDP {
+		r.discoverSSDP()
 	}
 }
 
