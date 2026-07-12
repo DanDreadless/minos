@@ -117,7 +117,7 @@ Technitium, NextDNS). Headlines, roughly in build order:
   spanning all its IPs (AdGuard's headline advantage, matched) *(shipped)*
 - **Weekly digest** through the existing webhook/ntfy notifier *(shipped —
   daily or weekly)*
-- **First-run checklist** on the Tribunal
+- **First-run checklist** on the Tribunal *(shipped)*
 
 Maintainer-gated (explicit decision needed before any code): **replica
 config sync** (bounded one-way push; the docs-only keepalived + API-sync

@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { api, type Stats, type Status } from '../lib/api';
   import BarList from '../lib/components/BarList.svelte';
+  import SetupCard from '../lib/components/SetupCard.svelte';
   import StatTile from '../lib/components/StatTile.svelte';
   import TimelineChart from '../lib/components/TimelineChart.svelte';
   import { copy } from '../lib/copy';
@@ -14,6 +15,11 @@
   let stats: Stats | null = null;
   let customPause = '';
   let timer: ReturnType<typeof setInterval> | null = null;
+
+  // A fresh instance: nothing judged in the last 24 h. The setup checklist
+  // shows until traffic arrives or the user dismisses it (SetupCard also
+  // honours its own localStorage flag, so dismissal is permanent).
+  $: fresh = stats !== null && stats.timeline.every((b) => b.total === 0);
 
   function fmtPercent(total: number, blocked: number): string {
     if (total === 0) return '—';
@@ -62,6 +68,10 @@
     if (timer) clearInterval(timer);
   });
 </script>
+
+{#if fresh}
+  <SetupCard />
+{/if}
 
 {#if status}
   <section class="controls card">

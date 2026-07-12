@@ -42,6 +42,8 @@ port 53 needs root/admin on most systems; on Linux prefer the systemd unit in
 `deploy/minos.service`, which grants only `CAP_NET_BIND_SERVICE`.
 
 Then point a client (or your router's DHCP DNS option) at the machine's IP.
+The dashboard shows a short setup checklist until the first queries arrive
+— it walks through exactly these steps and links the relevant pages.
 
 ## CLI
 
