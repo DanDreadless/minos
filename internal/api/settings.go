@@ -50,6 +50,7 @@ type configView struct {
 		WebhookURL   string `json:"webhook_url"`
 		NtfyURL      string `json:"ntfy_url"`
 		NtfyTokenSet bool   `json:"ntfy_token_set"`
+		Digest       string `json:"digest"`
 	} `json:"notifications"`
 }
 
@@ -83,6 +84,10 @@ func viewOf(c *config.Config) configView {
 	v.Notifications.WebhookURL = c.Notifications.WebhookURL
 	v.Notifications.NtfyURL = c.Notifications.NtfyURL
 	v.Notifications.NtfyTokenSet = c.Notifications.NtfyToken != ""
+	v.Notifications.Digest = c.Notifications.Digest
+	if v.Notifications.Digest == "" {
+		v.Notifications.Digest = "off"
+	}
 	return v
 }
 
@@ -129,6 +134,7 @@ type settingsUpdate struct {
 		WebhookURL *string `json:"webhook_url"`
 		NtfyURL    *string `json:"ntfy_url"`
 		NtfyToken  *string `json:"ntfy_token"`
+		Digest     *string `json:"digest"`
 	} `json:"notifications"`
 }
 
@@ -225,6 +231,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			if upd.Notifications.NtfyToken != nil {
 				c.Notifications.NtfyToken = *upd.Notifications.NtfyToken
+			}
+			if upd.Notifications.Digest != nil {
+				c.Notifications.Digest = *upd.Notifications.Digest
 			}
 		}
 		return nil

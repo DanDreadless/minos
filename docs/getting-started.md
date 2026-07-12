@@ -578,13 +578,18 @@ notifications:              # optional; nothing is sent unless a URL is set
   webhook_url: ""           # each event POSTed as JSON
   ntfy_url: ""              # e.g. https://ntfy.sh/my-topic (or self-hosted)
   ntfy_token: ""            # bearer token for protected topics
+  digest: off               # off | daily | weekly: a traffic summary at
+                            # 09:00 server time (Mondays for weekly)
 ```
 
 Notifications cover three low-volume events: a **new device** makes its
 first DNS query (suppressed for the first five minutes after startup so a
 fresh install doesn't flood you), an **upstream resolver** trips the
 failure breaker or recovers, and — with the update check enabled — a
-**new release**. Webhook payloads look like:
+**new release**. An opt-in **digest** adds a daily or weekly summary —
+totals, block rate, top blocked domains, busiest client, new devices —
+the self-hosted answer to the summary emails hosted DNS services send.
+Webhook payloads look like:
 
 ```json
 {"type":"device_new","title":"New device on your network",

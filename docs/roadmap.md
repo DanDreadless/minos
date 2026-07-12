@@ -115,7 +115,8 @@ Technitium, NextDNS). Headlines, roughly in build order:
   blockable per group *(shipped)*
 - **Per-client dashboard** — aggregated top allowed/blocked per device,
   spanning all its IPs (AdGuard's headline advantage, matched) *(shipped)*
-- **Weekly digest** through the existing webhook/ntfy notifier
+- **Weekly digest** through the existing webhook/ntfy notifier *(shipped —
+  daily or weekly)*
 - **First-run checklist** on the Tribunal
 
 Maintainer-gated (explicit decision needed before any code): **replica

@@ -35,6 +35,7 @@
   let ntfyURL = '';
   let ntfyToken = '';
   let ntfyTokenSet = false;
+  let digest: 'off' | 'daily' | 'weekly' = 'off';
 
   interface RouteRow {
     domains: string;
@@ -64,6 +65,7 @@
     ntfyURL = c.notifications.ntfy_url;
     ntfyTokenSet = c.notifications.ntfy_token_set;
     ntfyToken = '';
+    digest = c.notifications.digest;
     routeRows = c.dns.routes.map((r) => ({
       domains: r.domains.join(', '),
       address: r.upstream.address,
@@ -469,6 +471,14 @@
       <span>{copy.settings.ntfyURL} <small>{copy.settings.ntfyHint}</small></span>
       <input placeholder="https://ntfy.sh/my-topic" bind:value={ntfyURL} />
     </label>
+    <label class="field">
+      <span>{copy.settings.digest} <small>{copy.settings.digestHint}</small></span>
+      <select bind:value={digest}>
+        <option value="off">off</option>
+        <option value="daily">daily</option>
+        <option value="weekly">weekly</option>
+      </select>
+    </label>
     <label class="field wide">
       <span>{copy.settings.ntfyToken} <small>{copy.settings.ntfyTokenHint}</small></span>
       <input
@@ -487,6 +497,7 @@
             notifications: {
               webhook_url: webhookURL.trim(),
               ntfy_url: ntfyURL.trim(),
+              digest,
               // Only send a typed token; an untouched field never clobbers
               // the stored one. Clearing ntfy_url makes any token inert.
               ...(ntfyToken.trim() ? { ntfy_token: ntfyToken.trim() } : {}),

@@ -390,6 +390,87 @@ func (l *Log) ClientsSummary(ctx context.Context) ([]ClientSummary, error) {
 	return out, rows.Err()
 }
 
+// The methods below are the digest's data source (internal/notify declares
+// the matching interface with builtin-typed signatures so it never has to
+// import this package; *Log satisfies it structurally at the wiring site).
+
+// Totals counts queries and blocks since the given time.
+func (l *Log) Totals(ctx context.Context, since time.Time) (total, blocked int, err error) {
+	if l.db != nil {
+		err = l.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(verdict = ?), 0)
+			FROM querylog WHERE ts >= ?`, VerdictBlocked, since.UnixMilli()).
+			Scan(&total, &blocked)
+		if err != nil {
+			return 0, 0, fmt.Errorf("totals query: %w", err)
+		}
+		return total, blocked, nil
+	}
+	l.scanRing(since, func(e Entry) {
+		total++
+		if e.Verdict == VerdictBlocked {
+			blocked++
+		}
+	})
+	return total, blocked, nil
+}
+
+// TopBlockedSummary is TopBlockedDomains flattened to parallel slices of
+// builtin types, for the digest interface.
+func (l *Log) TopBlockedSummary(ctx context.Context, since time.Time, n int) (domains []string, counts []int, err error) {
+	top, err := l.TopBlockedDomains(ctx, since, n)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, d := range top {
+		domains = append(domains, d.QName)
+		counts = append(counts, d.Count)
+	}
+	return domains, counts, nil
+}
+
+// BusiestClient names the client with the most queries since the given time.
+// Empty when there was no traffic.
+func (l *Log) BusiestClient(ctx context.Context, since time.Time) (client string, queries int, err error) {
+	top, err := l.TopClients(ctx, since, 1)
+	if err != nil {
+		return "", 0, err
+	}
+	if len(top) == 0 {
+		return "", 0, nil
+	}
+	return top[0].Client, top[0].Total, nil
+}
+
+// NewClientsSince counts clients whose first-ever logged query falls at or
+// after since. In ephemeral mode "first-ever" is bounded by the ring.
+func (l *Log) NewClientsSince(ctx context.Context, since time.Time) (int, error) {
+	if l.db != nil {
+		var n int
+		err := l.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM
+			(SELECT client, MIN(ts) AS first FROM querylog GROUP BY client)
+			WHERE first >= ?`, since.UnixMilli()).Scan(&n)
+		if err != nil {
+			return 0, fmt.Errorf("new clients query: %w", err)
+		}
+		return n, nil
+	}
+	// Ring mode: walk everything (not just >= since) so a client with older
+	// in-ring traffic doesn't count as new.
+	first := make(map[string]time.Time)
+	for _, e := range l.Recent(0) {
+		if t, ok := first[e.Client]; !ok || e.Time.Before(t) {
+			first[e.Client] = e.Time
+		}
+	}
+	n := 0
+	for _, t := range first {
+		if !t.Before(since) {
+			n++
+		}
+	}
+	return n, nil
+}
+
 // scanRing visits ring entries at or after since, under the read lock.
 func (l *Log) scanRing(since time.Time, visit func(Entry)) {
 	l.ringMu.RLock()

@@ -270,11 +270,15 @@ Configured via `notifications` in the config or Settings; each event is
 POSTed to your webhook as:
 
 ```json
-{"type": "device_new | upstream_sick | upstream_recovered | update_available",
+{"type": "device_new | upstream_sick | upstream_recovered | update_available | digest",
  "title": "New device on your network",
  "message": "192.168.1.77 (phone.lan) [aa:bb:cc:dd:ee:ff] made its first DNS query through Minos.",
  "time": "2026-07-05T10:12:03Z"}
 ```
+
+`digest` events are the opt-in traffic summary (`notifications.digest:
+daily|weekly`): totals, block rate, top blocked domains, busiest client,
+and new-device count for the period, as a plain-text `message`.
 
 ## Errors
 

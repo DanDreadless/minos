@@ -315,6 +315,10 @@ type NotificationsConfig struct {
 	NtfyURL string `yaml:"ntfy_url,omitempty" json:"ntfy_url"`
 	// NtfyToken is sent as a bearer token for protected topics.
 	NtfyToken string `yaml:"ntfy_token,omitempty" json:"-"`
+	// Digest sends a periodic traffic summary through the sinks above:
+	// "off" (default, also the empty value), "daily", or "weekly" —
+	// delivered at 09:00 server time, Mondays for weekly.
+	Digest string `yaml:"digest,omitempty" json:"digest"`
 }
 
 type Config struct {
@@ -698,6 +702,11 @@ func (c *Config) Validate() error {
 		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 			return fmt.Errorf("%s: must be an http(s) URL, got %q", name, u)
 		}
+	}
+	switch c.Notifications.Digest {
+	case "", "off", "daily", "weekly":
+	default:
+		return fmt.Errorf("notifications.digest: must be off, daily, or weekly, got %q", c.Notifications.Digest)
 	}
 	switch c.UpdateInstallMethod {
 	case "", "binary", "docker", "source":
