@@ -68,18 +68,22 @@ type Device struct {
 	IP string `json:"ip"` // the primary (most recently active) IP
 	// IPs lists every IP this device has used, primary included, so a
 	// drill-down can span them all. Sorted numerically.
-	IPs       []string   `json:"ips,omitempty"`
-	MAC       string     `json:"mac,omitempty"`
-	Vendor    string     `json:"vendor,omitempty"` // derived from MAC via the OUI table
-	Hostname  string     `json:"hostname,omitempty"`
-	Name      string     `json:"name,omitempty"`
-	Group     string     `json:"group"`
-	Blocked   bool       `json:"blocked"`
-	Seen      bool       `json:"seen"`
-	Queries   uint64     `json:"queries"`
-	QBlocked  uint64     `json:"queries_blocked"`
-	FirstSeen *time.Time `json:"first_seen,omitempty"`
-	LastSeen  *time.Time `json:"last_seen,omitempty"`
+	IPs    []string `json:"ips,omitempty"`
+	MAC    string   `json:"mac,omitempty"`
+	Vendor string   `json:"vendor,omitempty"` // derived from MAC via the OUI table
+	// PrivateMAC marks a locally-administered (randomized) MAC — the
+	// per-network "private addresses" modern devices generate, which no
+	// vendor registry can name.
+	PrivateMAC bool       `json:"private_mac,omitempty"`
+	Hostname   string     `json:"hostname,omitempty"`
+	Name       string     `json:"name,omitempty"`
+	Group      string     `json:"group"`
+	Blocked    bool       `json:"blocked"`
+	Seen       bool       `json:"seen"`
+	Queries    uint64     `json:"queries"`
+	QBlocked   uint64     `json:"queries_blocked"`
+	FirstSeen  *time.Time `json:"first_seen,omitempty"`
+	LastSeen   *time.Time `json:"last_seen,omitempty"`
 }
 
 // Registry is safe for concurrent use.
@@ -566,7 +570,10 @@ func (a *deviceAcc) device() Device {
 		QBlocked: a.blocked,
 	}
 	if a.mac != "" {
-		d.Vendor = oui.Vendor(a.mac) // "" for prefixes not in the curated table
+		d.Vendor = oui.Vendor(a.mac) // "" when no registry prefix covers it
+		// A randomized "private address" can never match a registry — the
+		// blank vendor cell is itself information, so say so.
+		d.PrivateMAC = oui.IsLocallyAdministered(a.mac)
 	}
 	if a.first != 0 {
 		t := time.Unix(0, a.first)
