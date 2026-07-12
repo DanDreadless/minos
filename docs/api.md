@@ -211,9 +211,11 @@ always beats deny.
   last_seen}`. A device is identified by its MAC when known, so all the IPs
   it has held across DHCP leases fold into one entry — `ip` is the primary
   (most recently active) address and `ips` lists them all (used by the Docket
-  drill-down); counts are summed across them. `vendor` is derived from the MAC
-  (OUI); `hostname` comes from reverse DNS via the gateway, falling back to
-  NetBIOS then mDNS `.local` — all best-effort.
+  drill-down); counts are summed across them. `vendor` is derived from the
+  MAC via the full IEEE registry (MA-L/MA-M/MA-S/IAB, longest prefix wins);
+  `private_mac: true` marks a randomized locally-administered MAC that no
+  registry can name. `hostname` comes from reverse DNS via the gateway,
+  falling back to NetBIOS then mDNS `.local` — all best-effort.
 - `PUT /api/clients/{key}` — upsert any of `{"name", "mac", "group",
   "blocked"}` (`"group": "default"` unassigns). `{key}` is the device's **MAC**
   when it has one (so the assignment follows it across DHCP leases) or its

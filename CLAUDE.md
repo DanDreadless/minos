@@ -324,8 +324,17 @@ This is security software; hold it to that standard.
   input: names are bounds-checked and sanitised to printable ASCII before use.
   All off the hot path; Windows (dev-only) skips gateway detection. Separately,
   every device with a known MAC also gets a **vendor label** from
-  `internal/oui` (a curated IEEE-OUI subset, embedded). Still roadmapped:
-  DHCP-lease ingestion.
+  `internal/oui` — the **full IEEE registry** (MA-L/MA-M/MA-S/IAB, ~58k
+  assignments) compiled by gen.go into a ~1.1 MB embedded binary slab
+  (sorted prefix arrays + dedup name blob; the old "curated subset for the
+  memory budget" claim assumed a naive map and is superseded). Lookups are
+  longest-prefix, so MA-S/MA-M carve-outs shadow their parent MA-L block;
+  big consumer brands get clean labels via gen.go rules, the long tail keeps
+  suffix-trimmed IEEE names. Randomized (locally administered) MACs can
+  never match a registry — `oui.IsLocallyAdministered` feeds
+  `Device.PrivateMAC` and the UI shows "Private address" instead of a blank
+  cell. `.gitattributes` pins `*.bin -text` so autocrlf can't mangle the
+  blob. Still roadmapped: DHCP-lease ingestion.
 - **Service pardons semantics** (fixed decisions): a pardoned service
   compiles `services.AllowDomains(name)` as `AddAllow("service:"+name, …)` —
   the deny bundle plus curated `allowExtra` playback/sign-in hosts, so

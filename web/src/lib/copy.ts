@@ -182,6 +182,9 @@ export const copy = {
     subtitle: 'every client that queries this resolver',
     empty: 'No devices yet. Point something at this resolver and it appears here.',
     neverSeen: 'never',
+    privateMAC: 'Private address',
+    privateMACTitle:
+      'This device uses a randomized (locally administered) MAC address — a privacy feature of iOS, Android, and Windows — so no manufacturer registry can name it.',
     blockAction: 'Block DNS',
     blockHint: 'refuse all DNS from this device',
     unblockAction: 'Unblock',

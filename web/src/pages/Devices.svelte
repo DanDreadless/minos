@@ -277,7 +277,15 @@
               {/if}
             </td>
             <td>{d.mac ?? ''}</td>
-            <td>{d.vendor ?? ''}</td>
+            <td>
+              {#if d.vendor}
+                {d.vendor}
+              {:else if d.private_mac}
+                <span class="private-mac" title={copy.devices.privateMACTitle}>
+                  {copy.devices.privateMAC}
+                </span>
+              {/if}
+            </td>
             <td title={d.hostname}>{d.hostname ?? ''}</td>
             <td>
               <input
@@ -558,6 +566,13 @@
     margin-left: 0.35rem;
     font-size: 0.7rem;
     color: var(--text-dim);
+    cursor: help;
+  }
+
+  .private-mac {
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 0.82rem;
     cursor: help;
   }
 

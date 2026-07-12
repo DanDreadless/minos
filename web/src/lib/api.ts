@@ -179,6 +179,7 @@ export interface Device {
   ips?: string[]; // every address this device has used; primary included
   mac?: string;
   vendor?: string;
+  private_mac?: boolean; // randomized (locally administered) MAC
   hostname?: string;
   name?: string;
   group: string;
