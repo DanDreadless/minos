@@ -54,6 +54,7 @@ type configView struct {
 		DigestTime   string `json:"digest_time"`
 		DigestDay    string `json:"digest_day"`
 	} `json:"notifications"`
+	Discovery config.DiscoveryConfig `json:"discovery"`
 }
 
 func viewOf(c *config.Config) configView {
@@ -99,6 +100,7 @@ func viewOf(c *config.Config) configView {
 	if v.Notifications.DigestDay == "" {
 		v.Notifications.DigestDay = "monday"
 	}
+	v.Discovery = c.Discovery
 	return v
 }
 
@@ -149,6 +151,9 @@ type settingsUpdate struct {
 		DigestTime *string `json:"digest_time"`
 		DigestDay  *string `json:"digest_day"`
 	} `json:"notifications"`
+	Discovery *struct {
+		SSDP *bool `json:"ssdp"`
+	} `json:"discovery"`
 }
 
 func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
@@ -254,6 +259,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			if upd.Notifications.DigestDay != nil {
 				c.Notifications.DigestDay = *upd.Notifications.DigestDay
 			}
+		}
+		if upd.Discovery != nil && upd.Discovery.SSDP != nil {
+			c.Discovery.SSDP = *upd.Discovery.SSDP
 		}
 		return nil
 	})

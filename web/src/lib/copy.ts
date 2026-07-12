@@ -311,6 +311,11 @@ export const copy = {
     digestDay: 'On',
     digestTime: 'At',
     digestTimeHint: 'server time',
+    discoveryTitle: 'Device discovery',
+    discoveryHint: 'how Minos names the devices on your network',
+    discoverySSDP: 'Ask UPnP devices to introduce themselves (SSDP)',
+    discoverySSDPHint:
+      'One small multicast search every few minutes, plus a description fetch from each responding device — names smart TVs, consoles, and IoT gear by friendly name, manufacturer, and model. Local network only; nothing leaves the LAN.',
     updatesTitle: 'Updates',
     updateCheck: 'Check for new releases once a day',
     updateCheckHint:

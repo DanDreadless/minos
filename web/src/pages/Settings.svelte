@@ -38,6 +38,7 @@
   let digest: 'off' | 'daily' | 'weekly' = 'off';
   let digestTime = '09:00';
   let digestDay = 'monday';
+  let ssdp = true;
 
   interface RouteRow {
     domains: string;
@@ -70,6 +71,7 @@
     digest = c.notifications.digest;
     digestTime = c.notifications.digest_time;
     digestDay = c.notifications.digest_day;
+    ssdp = c.discovery.ssdp;
     routeRows = c.dns.routes.map((r) => ({
       domains: r.domains.join(', '),
       address: r.upstream.address,
@@ -535,6 +537,19 @@
         {copy.settings.save}
       </button>
     </div>
+  </section>
+
+  <section class="card">
+    <h2>{copy.settings.discoveryTitle} <small>{copy.settings.discoveryHint}</small></h2>
+    <label class="radio">
+      <input
+        type="checkbox"
+        bind:checked={ssdp}
+        on:change={() => void save({ discovery: { ssdp } })}
+      />
+      {copy.settings.discoverySSDP}
+    </label>
+    <p class="note">{copy.settings.discoverySSDPHint}</p>
   </section>
 
   <section class="card">
