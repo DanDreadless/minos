@@ -129,7 +129,7 @@ export interface ConfigView {
     digest_time: string; // 24h "HH:MM", server-local
     digest_day: string; // lowercase day name, weekly only
   };
-  discovery: { ssdp: boolean };
+  discovery: { ssdp: boolean; dhcp_listen: boolean };
 }
 
 // Partial settings update; omitted fields are left untouched by the server.
@@ -160,7 +160,7 @@ export interface SettingsUpdate {
     digest_time?: string;
     digest_day?: string;
   };
-  discovery?: { ssdp?: boolean };
+  discovery?: { ssdp?: boolean; dhcp_listen?: boolean };
 }
 
 export interface ListStatus {
