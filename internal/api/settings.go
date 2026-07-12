@@ -51,6 +51,8 @@ type configView struct {
 		NtfyURL      string `json:"ntfy_url"`
 		NtfyTokenSet bool   `json:"ntfy_token_set"`
 		Digest       string `json:"digest"`
+		DigestTime   string `json:"digest_time"`
+		DigestDay    string `json:"digest_day"`
 	} `json:"notifications"`
 }
 
@@ -87,6 +89,15 @@ func viewOf(c *config.Config) configView {
 	v.Notifications.Digest = c.Notifications.Digest
 	if v.Notifications.Digest == "" {
 		v.Notifications.Digest = "off"
+	}
+	// Echo the resolved schedule so the UI shows the effective values.
+	v.Notifications.DigestTime = c.Notifications.DigestTime
+	if v.Notifications.DigestTime == "" {
+		v.Notifications.DigestTime = "09:00"
+	}
+	v.Notifications.DigestDay = c.Notifications.DigestDay
+	if v.Notifications.DigestDay == "" {
+		v.Notifications.DigestDay = "monday"
 	}
 	return v
 }
@@ -135,6 +146,8 @@ type settingsUpdate struct {
 		NtfyURL    *string `json:"ntfy_url"`
 		NtfyToken  *string `json:"ntfy_token"`
 		Digest     *string `json:"digest"`
+		DigestTime *string `json:"digest_time"`
+		DigestDay  *string `json:"digest_day"`
 	} `json:"notifications"`
 }
 
@@ -234,6 +247,12 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			if upd.Notifications.Digest != nil {
 				c.Notifications.Digest = *upd.Notifications.Digest
+			}
+			if upd.Notifications.DigestTime != nil {
+				c.Notifications.DigestTime = *upd.Notifications.DigestTime
+			}
+			if upd.Notifications.DigestDay != nil {
+				c.Notifications.DigestDay = *upd.Notifications.DigestDay
 			}
 		}
 		return nil

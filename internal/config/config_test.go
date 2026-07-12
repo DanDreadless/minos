@@ -164,6 +164,10 @@ func TestValidateCatchesBadValues(t *testing.T) {
 		func(c *Config) { c.API.Listen = "" },
 		func(c *Config) { c.UpdateInstallMethod = "snap" },
 		func(c *Config) { c.Notifications.Digest = "hourly" },
+		func(c *Config) { c.Notifications.DigestTime = "25:00" },
+		func(c *Config) { c.Notifications.DigestTime = "9am" },
+		func(c *Config) { c.Notifications.DigestDay = "Monday" }, // lowercase only
+		func(c *Config) { c.Notifications.DigestDay = "someday" },
 	}
 	for i, mutate := range bad {
 		c := Default()
@@ -219,6 +223,24 @@ func TestEncryptedDNSUpstreamWarnings(t *testing.T) {
 		if w := qc.encryptedDNSUpstreamWarnings(); len(w) != 0 {
 			t.Errorf("quiet case %d: unexpected warnings %v", i, w)
 		}
+	}
+}
+
+// DigestSchedule applies defaults for empty fields and never chokes on a
+// hand-edited file (validation catches bad values up front, but the
+// scheduler must stay panic-free regardless).
+func TestDigestScheduleDefaults(t *testing.T) {
+	var n NotificationsConfig
+	if h, m, d := n.DigestSchedule(); h != 9 || m != 0 || d != time.Monday {
+		t.Errorf("defaults = %d:%02d %v, want 09:00 Monday", h, m, d)
+	}
+	n.DigestTime, n.DigestDay = "21:30", "friday"
+	if h, m, d := n.DigestSchedule(); h != 21 || m != 30 || d != time.Friday {
+		t.Errorf("custom = %d:%02d %v, want 21:30 Friday", h, m, d)
+	}
+	n.DigestTime, n.DigestDay = "junk", "junk"
+	if h, m, d := n.DigestSchedule(); h != 9 || m != 0 || d != time.Monday {
+		t.Errorf("garbage fallback = %d:%02d %v, want 09:00 Monday", h, m, d)
 	}
 }
 

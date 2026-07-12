@@ -80,23 +80,30 @@ func TestNextDigestFire(t *testing.T) {
 		return time.Date(y, m, d, h, min, 0, 0, loc)
 	}
 	cases := []struct {
-		name    string
-		cadence string
-		after   time.Time
-		want    time.Time
+		name         string
+		cadence      string
+		hour, minute int
+		day          time.Weekday
+		after        time.Time
+		want         time.Time
 	}{
 		// 2026-07-08 is a Wednesday.
-		{"daily before 9", "daily", at(2026, 7, 8, 8, 30), at(2026, 7, 8, 9, 0)},
-		{"daily at 9 exactly", "daily", at(2026, 7, 8, 9, 0), at(2026, 7, 9, 9, 0)},
-		{"daily after 9", "daily", at(2026, 7, 8, 10, 0), at(2026, 7, 9, 9, 0)},
+		{"daily before 9", "daily", 9, 0, time.Monday, at(2026, 7, 8, 8, 30), at(2026, 7, 8, 9, 0)},
+		{"daily at 9 exactly", "daily", 9, 0, time.Monday, at(2026, 7, 8, 9, 0), at(2026, 7, 9, 9, 0)},
+		{"daily after 9", "daily", 9, 0, time.Monday, at(2026, 7, 8, 10, 0), at(2026, 7, 9, 9, 0)},
 		// Next Monday from Wednesday is 2026-07-13.
-		{"weekly midweek", "weekly", at(2026, 7, 8, 10, 0), at(2026, 7, 13, 9, 0)},
+		{"weekly midweek", "weekly", 9, 0, time.Monday, at(2026, 7, 8, 10, 0), at(2026, 7, 13, 9, 0)},
 		// Monday before 9 fires the same day; at/after 9 waits a week.
-		{"weekly monday early", "weekly", at(2026, 7, 13, 7, 0), at(2026, 7, 13, 9, 0)},
-		{"weekly monday late", "weekly", at(2026, 7, 13, 9, 0), at(2026, 7, 20, 9, 0)},
+		{"weekly monday early", "weekly", 9, 0, time.Monday, at(2026, 7, 13, 7, 0), at(2026, 7, 13, 9, 0)},
+		{"weekly monday late", "weekly", 9, 0, time.Monday, at(2026, 7, 13, 9, 0), at(2026, 7, 20, 9, 0)},
+		// Custom time: an evening daily digest.
+		{"daily custom time", "daily", 21, 30, time.Monday, at(2026, 7, 8, 21, 30), at(2026, 7, 9, 21, 30)},
+		// Custom day: Friday-evening weekly; 2026-07-10 is the next Friday.
+		{"weekly custom day", "weekly", 18, 0, time.Friday, at(2026, 7, 8, 10, 0), at(2026, 7, 10, 18, 0)},
+		{"weekly custom same day late", "weekly", 18, 0, time.Friday, at(2026, 7, 10, 19, 0), at(2026, 7, 17, 18, 0)},
 	}
 	for _, tc := range cases {
-		if got := nextDigestFire(tc.cadence, tc.after); !got.Equal(tc.want) {
+		if got := nextDigestFire(tc.cadence, tc.hour, tc.minute, tc.day, tc.after); !got.Equal(tc.want) {
 			t.Errorf("%s: nextDigestFire = %v, want %v", tc.name, got, tc.want)
 		}
 	}
@@ -105,7 +112,7 @@ func TestNextDigestFire(t *testing.T) {
 	// (2026-03-30) must still fire at 09:00 local.
 	if lon, err := time.LoadLocation("Europe/London"); err == nil {
 		after := time.Date(2026, 3, 28, 12, 0, 0, 0, lon) // Saturday before
-		got := nextDigestFire("weekly", after)
+		got := nextDigestFire("weekly", 9, 0, time.Monday, after)
 		want := time.Date(2026, 3, 30, 9, 0, 0, 0, lon)
 		if !got.Equal(want) {
 			t.Errorf("DST: nextDigestFire = %v, want %v", got, want)

@@ -126,6 +126,8 @@ export interface ConfigView {
     ntfy_url: string;
     ntfy_token_set: boolean;
     digest: 'off' | 'daily' | 'weekly';
+    digest_time: string; // 24h "HH:MM", server-local
+    digest_day: string; // lowercase day name, weekly only
   };
 }
 
@@ -154,6 +156,8 @@ export interface SettingsUpdate {
     ntfy_url?: string;
     ntfy_token?: string;
     digest?: string;
+    digest_time?: string;
+    digest_day?: string;
   };
 }
 
