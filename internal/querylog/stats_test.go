@@ -183,6 +183,31 @@ func assertBlocksByList(t *testing.T, l *Log) {
 	}
 }
 
+func TestRecentQNames(t *testing.T) {
+	l, err := Open(Options{RingSize: 100, Ephemeral: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	now := time.Now()
+	record(l, "a.example.com", "10.0.0.1", VerdictAllowed, now.Add(-3*time.Minute))
+	record(l, "b.example.com", "10.0.0.1", VerdictAllowed, now.Add(-2*time.Minute))
+	record(l, "b.example.com", "10.0.0.1", VerdictAllowed, now.Add(-time.Minute)) // dupe
+	record(l, "other.example.com", "10.0.0.2", VerdictAllowed, now)
+	drain(t, l, 4)
+
+	got := l.RecentQNames("10.0.0.1", 10)
+	if len(got) != 2 || got[0] != "b.example.com" || got[1] != "a.example.com" {
+		t.Errorf("RecentQNames = %v, want [b.example.com a.example.com] (distinct, newest first)", got)
+	}
+	if got := l.RecentQNames("10.0.0.1", 1); len(got) != 1 {
+		t.Errorf("n=1 returned %v", got)
+	}
+	if got := l.RecentQNames("10.0.0.9", 10); len(got) != 0 {
+		t.Errorf("unknown client returned %v", got)
+	}
+}
+
 func TestBlocksByListFromRing(t *testing.T) {
 	l, err := Open(Options{RingSize: 100, Ephemeral: true})
 	if err != nil {

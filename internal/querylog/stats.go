@@ -471,6 +471,31 @@ func (l *Log) NewClientsSince(ctx context.Context, since time.Time) (int, error)
 	return n, nil
 }
 
+// RecentQNames returns up to n distinct query names the client asked for,
+// newest first, from the in-memory ring only — the bounded read behind the
+// device-registry traffic hints. Enrichment-ticker cadence, never the hot
+// path, and deliberately not a SQLite query: the ring's recent window is
+// exactly the "what is this device doing right now" signal a hint wants.
+func (l *Log) RecentQNames(client string, n int) []string {
+	if n <= 0 || n > 1000 {
+		n = 200
+	}
+	seen := make(map[string]bool, n)
+	out := make([]string, 0, n)
+	l.ringMu.RLock()
+	defer l.ringMu.RUnlock()
+	for i := 0; i < l.count && len(out) < n; i++ {
+		idx := (l.head - 1 - i + len(l.ring)*2) % len(l.ring)
+		e := l.ring[idx]
+		if e.Client != client || seen[e.QName] {
+			continue
+		}
+		seen[e.QName] = true
+		out = append(out, e.QName)
+	}
+	return out
+}
+
 // scanRing visits ring entries at or after since, under the read lock.
 func (l *Log) scanRing(since time.Time, visit func(Entry)) {
 	l.ringMu.RLock()

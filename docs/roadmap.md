@@ -124,14 +124,15 @@ complete 2026-07-12:
 
 Too many Devices rows still show no hostname or vendor. The
 implementation-ready plan is `../.claude/minos-device-identity-plan.md`:
-passive-first identity gathering with zero query-path cost — the full IEEE
-OUI registry as a compact slab (plus honest "Private address" labels for
-randomized MACs), IPv6 neighbour-table MAC-tagging, deeper mDNS (direct
-queries, passive announcement listener, `_device-info` models), SSDP/UPnP
-friendly names, a passive DHCP broadcast listener (hostname/vendor-class,
-explicitly a listener — never a DHCP server), traffic-pattern OS hints as
-a clearly-labelled last resort, and provenance ("where did this name come
-from") on every identity field.
+passive-first identity gathering with zero query-path cost. Tier 1 is
+built (July 2026): the full IEEE OUI registry as a compact slab plus
+honest "Private address" labels for randomized MACs *(shipped)*, IPv6
+neighbour-table MAC-tagging *(shipped)*, provenance & precedence on every
+identity field *(shipped)*, deeper mDNS — direct queries, passive
+announcement listener, `_device-info` models *(shipped)*, SSDP/UPnP
+friendly names *(shipped)*, a passive DHCP broadcast listener —
+explicitly a listener, never a DHCP server *(shipped)*, and
+traffic-pattern OS hints as a clearly-labelled last resort *(shipped)*.
 
 Maintainer-gated (explicit decision needed before any code): **replica
 config sync** (bounded one-way push; the docs-only keepalived + API-sync

@@ -185,6 +185,7 @@ export interface Device {
   hostname?: string;
   name_source?: string; // ptr | netbios | mdns | ssdp | dhcp
   model?: string; // discovered self-description (mDNS/UPnP)
+  hint?: string; // OS/type guess (traffic patterns, DHCP fingerprint)
   name?: string;
   group: string;
   blocked: boolean;

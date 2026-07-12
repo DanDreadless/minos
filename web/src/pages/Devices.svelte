@@ -283,6 +283,8 @@
                   <span class="model" title={d.model}>{d.model}</span>{/if}
               {:else if d.model}
                 {d.model}
+              {:else if d.hint}
+                <span class="hint" title={copy.devices.hintTitle}>{d.hint}</span>
               {:else if d.private_mac}
                 <span class="private-mac" title={copy.devices.privateMACTitle}>
                   {copy.devices.privateMAC}
@@ -586,6 +588,18 @@
     color: var(--text-dim);
     font-size: 0.78rem;
     cursor: help;
+  }
+
+  .hint {
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 0.82rem;
+    cursor: help;
+  }
+
+  .hint::after {
+    content: ' (guessed)';
+    font-size: 0.7rem;
   }
 
   tr.dns-blocked td {

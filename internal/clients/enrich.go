@@ -41,6 +41,7 @@ func (r *Registry) Run(ctx context.Context) {
 			r.emitNew(ip) // after enrichment so MAC/hostname ride along
 		case <-ticker.C:
 			r.refreshMACs()
+			r.sweepHints()
 		case <-ssdpTicker.C:
 			go r.sweepSSDP() // ~3s of socket reads; keep the worker free
 		case now := <-schedTicker.C:
