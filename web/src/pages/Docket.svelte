@@ -19,7 +19,7 @@
   // clientFilter holds a device's exact IP(s) when drilled in from Devices or
   // the Tribunal — whole-address matching, distinct from the substring search.
   let clientFilter: string[] = [];
-  let verdictFilter: 'all' | 'blocked' | 'allowed' = 'all';
+  let verdictFilter: 'all' | 'blocked' | 'allowed' | 'would_block' = 'all';
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let searchDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -29,7 +29,9 @@
   $: hasFilter = search.trim() !== '' || verdictFilter !== 'all' || clientFilter.length > 0;
 
   function clientMatch(e: LogEntry): boolean {
-    if (verdictFilter !== 'all' && e.verdict !== verdictFilter) return false;
+    if (verdictFilter === 'would_block') {
+      if (!e.audit_list) return false;
+    } else if (verdictFilter !== 'all' && e.verdict !== verdictFilter) return false;
     if (clientFilter.length && !clientFilter.includes(e.client)) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -52,7 +54,8 @@
       const rows = await api.querylogHistory({
         q: search.trim(),
         client: clientFilter.join(','),
-        verdict: verdictFilter,
+        verdict: verdictFilter === 'would_block' ? 'all' : verdictFilter,
+        would_block: verdictFilter === 'would_block',
         before,
         limit: HISTORY_PAGE,
       });
@@ -171,6 +174,7 @@
     <option value="all">{copy.docket.filterAll}</option>
     <option value="blocked">{copy.docket.filterBlocked}</option>
     <option value="allowed">{copy.docket.filterAllowed}</option>
+    <option value="would_block">{copy.docket.filterWouldBlock}</option>
   </select>
   {#if clientFilter.length}
     <span class="chip" title={clientFilter.join(', ')}>
@@ -221,7 +225,17 @@
                 </button>
               </td>
             {:else}
-              <td><span class="badge allowed">{copy.docket.verdictAllowed}</span></td>
+              <td>
+                <span class="badge allowed">{copy.docket.verdictAllowed}</span>
+                {#if e.audit_list}
+                  <span
+                    class="would-badge"
+                    title={copy.docket.wouldBlockTitle(e.audit_list, e.audit_rule ?? '')}
+                  >
+                    {copy.docket.wouldBlockBadge}
+                  </span>
+                {/if}
+              </td>
               <td>{e.upstream ?? ''}</td>
               <td>
                 <button
@@ -343,6 +357,20 @@
     position: sticky;
     top: 0;
     z-index: 1;
+  }
+
+  .would-badge {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0 0.4rem;
+    border: 1px solid var(--audit, #c9962e);
+    border-radius: 0.6rem;
+    color: var(--audit, #c9962e);
+    font-size: 0.68rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    vertical-align: middle;
+    cursor: help;
   }
 
   .row-action {

@@ -30,6 +30,8 @@ export interface LogEntry {
   rule?: string;
   upstream?: string;
   duration_ms: number;
+  audit_list?: string; // an audit-mode list would have blocked this
+  audit_rule?: string;
 }
 
 export interface UpdateInfo {
@@ -151,6 +153,7 @@ export interface ListStatus {
   format: 'hosts' | 'plain' | 'adblock';
   action: 'block' | 'allow';
   enabled: boolean;
+  audit: boolean;
   rules: number;
   skipped: number;
   last_refresh?: string;
@@ -302,6 +305,7 @@ export const api = {
     q?: string;
     client?: string; // exact address(es), comma-separated for a multi-IP device
     verdict?: string;
+    would_block?: boolean;
     before?: number;
     limit?: number;
   }) => {
@@ -309,6 +313,7 @@ export const api = {
     if (params.q) sp.set('q', params.q);
     if (params.client) sp.set('client', params.client);
     if (params.verdict && params.verdict !== 'all') sp.set('verdict', params.verdict);
+    if (params.would_block) sp.set('would_block', 'true');
     if (params.before) sp.set('before', String(params.before));
     sp.set('limit', String(params.limit ?? 200));
     return request<LogEntry[]>('GET', `/api/querylog/history?${sp.toString()}`);
@@ -331,9 +336,19 @@ export const api = {
   importConfig: (file: File) => uploadRaw<ConfigView>('/api/config/import', file),
 
   lists: () => request<ListStatus[]>('GET', '/api/lists'),
-  addList: (l: { name: string; url: string; format: string; action?: string; enabled: boolean }) =>
+  addList: (l: {
+    name: string;
+    url: string;
+    format: string;
+    action?: string;
+    audit?: boolean;
+    enabled: boolean;
+  }) =>
     request<ListStatus[]>('POST', '/api/lists', l),
-  updateList: (name: string, upd: { url?: string; format?: string; action?: string; enabled?: boolean }) =>
+  updateList: (
+    name: string,
+    upd: { url?: string; format?: string; action?: string; audit?: boolean; enabled?: boolean },
+  ) =>
     request<ListStatus[]>('PUT', `/api/lists/${encodeURIComponent(name)}`, upd),
   deleteList: (name: string) =>
     request<ListStatus[]>('DELETE', `/api/lists/${encodeURIComponent(name)}`),

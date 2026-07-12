@@ -298,6 +298,50 @@ func TestManagerAllowListShadowsBlockList(t *testing.T) {
 	}
 }
 
+// An audit:true source compiles into the audit engine only: the enforcing
+// matcher never sees its rules, and flipping audit off moves them over on
+// the next rebuild — the one-click "enforce it now" path.
+func TestManagerAuditSourceCompilesSeparately(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("0.0.0.0 strict.example.com\n"))
+	}))
+	defer srv.Close()
+
+	engine := filter.NewEngine()
+	store := newTestStore(t, func(c *config.Config) {
+		c.Lists.Sources = []config.ListSource{
+			{Name: "trial", URL: srv.URL, Format: "hosts", Enabled: true, Audit: true},
+		}
+	})
+	mgr := NewManager(engine, store)
+	mgr.Refresh(t.Context())
+
+	if r := engine.Match("strict.example.com"); r.Blocked {
+		t.Errorf("enforcing engine blocks %+v — audit rules must never enforce", r)
+	}
+	if r := mgr.AuditEngine().Match("strict.example.com"); !r.Blocked || r.List != "trial" {
+		t.Errorf("audit engine = %+v, want blocked by trial", r)
+	}
+	if st := mgr.Status(); len(st) != 1 || !st[0].Audit {
+		t.Errorf("status = %+v, want audit=true reported", st)
+	}
+
+	// Enforce it: audit off → rules move to the enforcing matcher.
+	if err := store.Update(func(c *config.Config) error {
+		c.Lists.Sources[0].Audit = false
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	mgr.rebuild(t.Context(), false)
+	if r := engine.Match("strict.example.com"); !r.Blocked || r.List != "trial" {
+		t.Errorf("after enforce: %+v, want blocked by trial", r)
+	}
+	if !mgr.AuditEngine().Empty() {
+		t.Error("audit engine should be empty once the list enforces")
+	}
+}
+
 func TestManagerKeepsCacheOnFetchFailure(t *testing.T) {
 	healthy := true
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -275,6 +275,11 @@ type ListSource struct {
 	URL     string `yaml:"url"`
 	Format  string `yaml:"format"` // hosts, plain, adblock
 	Enabled bool   `yaml:"enabled"`
+	// Audit compiles the list's rules into the audit matcher instead of the
+	// enforcing one: matches are logged as "would block" in the query log
+	// but never enforced — try a strict list safely, then enforce it with
+	// one click. Meaningless on an allowlist (validation rejects it there).
+	Audit bool `yaml:"audit,omitempty"`
 }
 
 type ListsConfig struct {
@@ -661,6 +666,9 @@ func (c *Config) Validate() error {
 			case "hosts", "plain", "adblock":
 			default:
 				return fmt.Errorf("%s[%d].format: must be hosts, plain, or adblock, got %q", key, i, s.Format)
+			}
+			if s.Audit && key == "lists.allow_sources" {
+				return fmt.Errorf("%s[%d].audit: auditing an allowlist is meaningless — allows are never enforced against", key, i)
 			}
 		}
 	}

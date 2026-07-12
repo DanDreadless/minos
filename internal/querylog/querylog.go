@@ -30,6 +30,10 @@ type Entry struct {
 	Rule       string    `json:"rule,omitempty"`
 	Upstream   string    `json:"upstream,omitempty"`
 	DurationMs float64   `json:"duration_ms"`
+	// AuditList/AuditRule mark an allowed query an audit-mode list would
+	// have condemned ("would block") — attribution without enforcement.
+	AuditList string `json:"audit_list,omitempty"`
+	AuditRule string `json:"audit_rule,omitempty"`
 }
 
 const (
@@ -127,14 +131,57 @@ CREATE TABLE IF NOT EXISTS querylog (
 	list        TEXT NOT NULL DEFAULT '',
 	rule        TEXT NOT NULL DEFAULT '',
 	upstream    TEXT NOT NULL DEFAULT '',
-	duration_ms REAL NOT NULL DEFAULT 0
+	duration_ms REAL NOT NULL DEFAULT 0,
+	audit_list  TEXT NOT NULL DEFAULT '',
+	audit_rule  TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_querylog_ts ON querylog(ts);`
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("create query log schema: %w", err)
 	}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return db, nil
+}
+
+// migrate adds columns introduced after a database was first created.
+// Idempotent; ALTER TABLE ADD COLUMN is instant in SQLite (no table
+// rewrite), so old query logs upgrade in place — SD-card safe.
+func migrate(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(querylog)`)
+	if err != nil {
+		return fmt.Errorf("inspect query log schema: %w", err)
+	}
+	defer rows.Close()
+	have := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scan query log schema: %w", err)
+		}
+		have[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for col, ddl := range map[string]string{
+		"audit_list": `ALTER TABLE querylog ADD COLUMN audit_list TEXT NOT NULL DEFAULT ''`,
+		"audit_rule": `ALTER TABLE querylog ADD COLUMN audit_rule TEXT NOT NULL DEFAULT ''`,
+	} {
+		if have[col] {
+			continue
+		}
+		if _, err := db.Exec(ddl); err != nil {
+			return fmt.Errorf("add query log column %s: %w", col, err)
+		}
+	}
+	return nil
 }
 
 // Record enqueues an entry. It never blocks: if the writer is behind, the
@@ -313,15 +360,16 @@ func (l *Log) writeBatch(batch []Entry) error {
 	}
 	defer tx.Rollback() //nolint:errcheck // no-op after Commit
 	stmt, err := tx.Prepare(`INSERT INTO querylog
-		(ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		(ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms, audit_list, audit_rule)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare: %w", err)
 	}
 	defer stmt.Close()
 	for _, e := range batch {
 		if _, err := stmt.Exec(e.Time.UnixMilli(), e.Client, e.QName, e.QType,
-			e.Verdict, e.List, e.Rule, e.Upstream, e.DurationMs); err != nil {
+			e.Verdict, e.List, e.Rule, e.Upstream, e.DurationMs,
+			e.AuditList, e.AuditRule); err != nil {
 			return fmt.Errorf("insert: %w", err)
 		}
 	}
@@ -353,6 +401,9 @@ type HistoryFilter struct {
 	// device drill-down, where one physical device may have several IPs.
 	// Distinct from the substring Search.
 	Clients []string
+	// WouldBlock restricts to entries an audit-mode list flagged
+	// ("would block"): allowed queries carrying an audit attribution.
+	WouldBlock bool
 }
 
 // QueryHistory returns judged queries newest-first, older than `before`, that
@@ -391,8 +442,11 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 		}
 		where = append(where, "client IN ("+strings.Join(ph, ",")+")")
 	}
+	if f.WouldBlock {
+		where = append(where, "audit_list != ''")
+	}
 	args = append(args, limit)
-	query := `SELECT ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms
+	query := `SELECT ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms, audit_list, audit_rule
 		FROM querylog WHERE ` + strings.Join(where, " AND ") + ` ORDER BY ts DESC LIMIT ?`
 
 	rows, err := l.db.QueryContext(ctx, query, args...)
@@ -405,7 +459,8 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 		var e Entry
 		var ts int64
 		if err := rows.Scan(&ts, &e.Client, &e.QName, &e.QType, &e.Verdict,
-			&e.List, &e.Rule, &e.Upstream, &e.DurationMs); err != nil {
+			&e.List, &e.Rule, &e.Upstream, &e.DurationMs,
+			&e.AuditList, &e.AuditRule); err != nil {
 			return nil, fmt.Errorf("scan history: %w", err)
 		}
 		e.Time = time.UnixMilli(ts)

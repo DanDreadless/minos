@@ -25,6 +25,10 @@ func (e *Engine) Swap(m *Matcher) { e.matcher.Store(m) }
 // Current returns the active Matcher (for stats; do not mutate).
 func (e *Engine) Current() *Matcher { return e.matcher.Load() }
 
+// Empty reports whether the active matcher holds no rules — one atomic load
+// plus two length checks, cheap enough for a per-query gate.
+func (e *Engine) Empty() bool { return e.matcher.Load().Empty() }
+
 // Match judges qname (normalized: lowercase, no trailing dot).
 func (e *Engine) Match(qname string) Result {
 	if e.pausedNow() {

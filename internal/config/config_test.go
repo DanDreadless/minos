@@ -153,6 +153,9 @@ func TestValidateCatchesBadValues(t *testing.T) {
 		func(c *Config) { // allow sources are validated like block sources
 			c.Lists.AllowSources = []ListSource{{Name: "bad", URL: "ftp://x", Format: "plain", Enabled: true}}
 		},
+		func(c *Config) { // auditing an allowlist is meaningless
+			c.Lists.AllowSources = []ListSource{{Name: "aud", URL: "https://example.com/a.txt", Format: "plain", Enabled: true, Audit: true}}
+		},
 		func(c *Config) { c.Lists.Sources[0].URL = "ftp://old.example/list" },
 		func(c *Config) { c.Lists.RefreshInterval = Duration(time.Second) },
 		func(c *Config) { c.QueryLog.RingSize = 0 },

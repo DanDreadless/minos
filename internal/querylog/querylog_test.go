@@ -2,10 +2,15 @@ package querylog
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+// openRawForTest opens the SQLite file directly (the driver is registered by
+// the package's blank import), for building pre-migration schemas.
+func openRawForTest(path string) (*sql.DB, error) { return sql.Open("sqlite", path) }
 
 func testEntry(qname, verdict string) Entry {
 	return Entry{
@@ -28,6 +33,68 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("condition not met within deadline")
+}
+
+// TestMigrateAddsAuditColumns: a query-log database created before the audit
+// columns existed upgrades in place on open, and would-block entries then
+// persist and filter.
+func TestMigrateAddsAuditColumns(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "old.db")
+
+	// Recreate the pre-audit schema by hand.
+	old, err := openRawForTest(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(`CREATE TABLE querylog (
+		id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, client TEXT NOT NULL,
+		qname TEXT NOT NULL, qtype TEXT NOT NULL, verdict TEXT NOT NULL,
+		list TEXT NOT NULL DEFAULT '', rule TEXT NOT NULL DEFAULT '',
+		upstream TEXT NOT NULL DEFAULT '', duration_ms REAL NOT NULL DEFAULT 0)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(`INSERT INTO querylog (ts, client, qname, qtype, verdict)
+		VALUES (?, '10.0.0.1', 'legacy.example', 'A', 'allowed')`,
+		time.Now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	l, err := Open(Options{RingSize: 10, DBPath: dbPath, RetentionDays: 90})
+	if err != nil {
+		t.Fatalf("open pre-audit db: %v", err)
+	}
+	e := testEntry("strict.example", VerdictAllowed)
+	e.AuditList, e.AuditRule = "hagezi-pro", "strict.example"
+	l.Record(e)
+	if err := l.Close(); err != nil { // flushes the batch
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(Options{RingSize: 10, DBPath: dbPath, RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	got, err := reopened.QueryHistory(context.Background(), HistoryFilter{WouldBlock: true}, 10, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].QName != "strict.example" ||
+		got[0].AuditList != "hagezi-pro" || got[0].AuditRule != "strict.example" {
+		t.Errorf("would-block history = %+v, want the audited strict.example entry", got)
+	}
+	// The legacy row survives with empty audit fields and stays out of the
+	// would-block view.
+	all, err := reopened.QueryHistory(context.Background(), HistoryFilter{}, 10, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Errorf("full history = %d rows, want 2 (legacy + audited)", len(all))
+	}
 }
 
 func TestRingRecentNewestFirst(t *testing.T) {

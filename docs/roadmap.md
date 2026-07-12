@@ -109,7 +109,7 @@ Technitium, NextDNS). Headlines, roughly in build order:
   *(shipped)*
 - **Audit (dry-run) lists** — rules logged as "would block" but never
   enforced; try a strict list safely, then enforce with one click. Requested
-  around Pi-hole for years, shipped by nobody
+  around Pi-hole for years, shipped by nobody *(shipped)*
 - **Bypass resistance** — Firefox DoH canary answered by default, opt-in
   iCloud Private Relay block, and an `encrypted-dns` services-catalog bundle
   blockable per group *(shipped)*

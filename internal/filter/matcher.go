@@ -188,6 +188,11 @@ func (m *Matcher) AllowRules() int { return len(m.allow.idx) }
 // Skipped returns how many rules were dropped as invalid or unsupported.
 func (m *Matcher) Skipped() int { return m.skipped }
 
+// Empty reports whether the matcher holds no rules at all — the hot path's
+// cheap gate for skipping optional engines (the audit engine when no audit
+// lists are configured). Zero allocations.
+func (m *Matcher) Empty() bool { return len(m.deny.idx) == 0 && len(m.allow.idx) == 0 }
+
 // Match judges a query name. qname must already be normalized
 // (lowercase, no trailing dot); use NormalizeDomain for untrusted input.
 // It walks the name's parent domains from TLD to leaf via prefix slices of

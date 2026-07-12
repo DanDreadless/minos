@@ -30,6 +30,7 @@ type SourceStatus struct {
 	Format      string    `json:"format"`
 	Action      string    `json:"action"` // "block" or "allow" (empty config = block)
 	Enabled     bool      `json:"enabled"`
+	Audit       bool      `json:"audit"` // rules logged as "would block", never enforced
 	Rules       int       `json:"rules"`
 	Skipped     int       `json:"skipped"`
 	LastRefresh time.Time `json:"last_refresh,omitempty"`
@@ -39,10 +40,16 @@ type SourceStatus struct {
 // Manager owns list fetching and matcher rebuilds. A rebuild always
 // constructs a complete new matcher off the hot path, then swaps it into
 // the engine atomically — a live matcher is never mutated.
+//
+// It owns two engines: the enforcing one it was given, and a second audit
+// engine it creates, compiled from only the audit:true sources. Audit rules
+// are matched and attributed ("would block") but never enforced — the
+// enforcing matcher stays byte-identical whether audit lists exist or not.
 type Manager struct {
-	engine *filter.Engine
-	store  *config.Store
-	client *http.Client
+	engine      *filter.Engine
+	auditEngine *filter.Engine
+	store       *config.Store
+	client      *http.Client
 
 	mu     sync.Mutex
 	cached map[string][]byte // source name → last good raw body
@@ -53,18 +60,23 @@ type Manager struct {
 
 func NewManager(engine *filter.Engine, store *config.Store) *Manager {
 	m := &Manager{
-		engine:     engine,
-		store:      store,
-		client:     &http.Client{Timeout: fetchTimeout},
-		cached:     make(map[string][]byte),
-		status:     make(map[string]*SourceStatus),
-		refreshNow: make(chan struct{}, 1),
+		engine:      engine,
+		auditEngine: filter.NewEngine(),
+		store:       store,
+		client:      &http.Client{Timeout: fetchTimeout},
+		cached:      make(map[string][]byte),
+		status:      make(map[string]*SourceStatus),
+		refreshNow:  make(chan struct{}, 1),
 	}
 	// Config changes (new pardons/sentences, list edits) rebuild from cache
 	// immediately — no refetch needed, no restart ever.
 	store.OnChange(func(*config.Config) { m.TriggerRebuild() })
 	return m
 }
+
+// AuditEngine exposes the audit matcher for the DNS server's "would block"
+// attribution. Never nil; empty until an audit:true source compiles.
+func (m *Manager) AuditEngine() *filter.Engine { return m.auditEngine }
 
 // Run blocks: initial refresh, then periodic refreshes until ctx ends.
 func (m *Manager) Run(ctx context.Context) {
@@ -212,6 +224,10 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 		}
 	}
 
+	// Audit sources compile into their own builder: attribution without
+	// enforcement, and the enforcing matcher stays byte-identical.
+	ab := filter.NewBuilder()
+
 	m.mu.Lock()
 	for _, src := range allSources(cfg) {
 		if !src.Enabled {
@@ -221,7 +237,11 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 		if !ok {
 			continue
 		}
-		stats, err := Parse(src.Format, src.Name, src.allow, bytes.NewReader(body), b)
+		target := b
+		if src.Audit && !src.allow {
+			target = ab
+		}
+		stats, err := Parse(src.Format, src.Name, src.allow, bytes.NewReader(body), target)
 		if err != nil {
 			// Only a broken reader errors, and ours can't break; log anyway.
 			slog.Error("list parse failed", "list", src.Name, "err", err)
@@ -238,9 +258,12 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 	m.mu.Unlock()
 
 	matcher := b.Build()
+	audit := ab.Build()
 	m.engine.Swap(matcher)
+	m.auditEngine.Swap(audit)
 	slog.Info("matcher rebuilt",
 		"rules", matcher.Rules(), "allow_rules", matcher.AllowRules(),
+		"audit_rules", audit.Rules(),
 		"skipped", matcher.Skipped(), "took", time.Since(start).Round(time.Millisecond),
 		"refetched", refetch)
 }
@@ -264,6 +287,7 @@ func (m *Manager) ensureStatus(src annotated) *SourceStatus {
 	}
 	st.Name, st.URL, st.Format, st.Enabled = src.Name, src.URL, src.Format, src.Enabled
 	st.Action = src.actionLabel()
+	st.Audit = src.Audit
 	return st
 }
 
@@ -288,11 +312,12 @@ func (m *Manager) Status() []SourceStatus {
 			s := *st
 			s.Enabled = src.Enabled
 			s.Action = src.actionLabel()
+			s.Audit = src.Audit
 			out = append(out, s)
 		} else {
 			out = append(out, SourceStatus{
 				Name: src.Name, URL: src.URL, Format: src.Format,
-				Action: src.actionLabel(), Enabled: src.Enabled,
+				Action: src.actionLabel(), Enabled: src.Enabled, Audit: src.Audit,
 			})
 		}
 	}

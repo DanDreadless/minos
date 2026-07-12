@@ -124,16 +124,20 @@ Newest first, `limit` 1–10000, from the in-memory ring:
 ```
 
 Allowed entries carry `upstream` instead of `list`/`rule` — the resolver
-that answered, or `cache`, `stale`, `local`, or `safesearch`.
+that answered, or `cache`, `stale`, `local`, or `safesearch`. An allowed
+entry may also carry `audit_list`/`audit_rule`: an audit-mode list would
+have blocked it ("would block" in the UI). Cached answers skip judgment,
+so audit marks are sampled at resolution time, not on every hit.
 
-### `GET /api/querylog/history?q=&client=&verdict=&before=&limit=`
+### `GET /api/querylog/history?q=&client=&verdict=&would_block=&before=&limit=`
 
 The persisted log (SQLite), newest first — the full retained history behind
 search and the dashboard drill-downs, not just the in-memory ring. `q`
 matches a client IP or domain substring; `client` is an **exact** address
 filter, comma-separated for a device with several IPs (the Devices
 drill-down), distinct from the `q` substring; `verdict` is
-`blocked`/`allowed`/`all`; `before` is a unix-millis cursor for "load older"
+`blocked`/`allowed`/`all`; `would_block=true` narrows to entries an
+audit-mode list flagged; `before` is a unix-millis cursor for "load older"
 pagination; `limit` 1–1000. Returns `[]` in ephemeral mode (there the ring
 already backs both the log and the dashboard, so the UI filters it directly).
 
@@ -167,10 +171,15 @@ always beats deny.
 ## Lists
 
 - `GET /api/lists` — per-list status: `{name, url, format, action, enabled,
-  rules, skipped, last_refresh, last_error}`
+  audit, rules, skipped, last_refresh, last_error}`
 - `POST /api/lists` — add: `{"name", "url", "format": "hosts|plain|adblock",
-  "action": "block|allow", "enabled": true}` (fetches immediately). `action`
-  defaults to `block`; `allow` makes the source a subscribed allowlist —
+  "action": "block|allow", "audit": false, "enabled": true}` (fetches
+  immediately). `audit: true` puts a blocklist in **audit mode**: its rules
+  compile into a separate matcher that is consulted but never enforced —
+  matching queries are forwarded normally and logged with
+  `audit_list`/`audit_rule` ("would block"). Try a strict list safely, then
+  flip `audit` off to enforce it; auditing an `allow` list is rejected.
+  `action` defaults to `block`; `allow` makes the source a subscribed allowlist —
   every entry is always allowed, beating any blocklist, and a passing
   verdict names it in the query log. In an `allow` list, block-shaped
   AdBlock rules count as allows too (membership decides meaning, matching
@@ -178,7 +187,7 @@ always beats deny.
   config file, allowlists live under `lists.allow_sources` (block lists
   under `lists.sources`); names are unique across both.
 - `PUT /api/lists/{name}` — change any of `url`, `format`, `action`,
-  `enabled`; changing `action` moves the list between `sources` and
+  `audit`, `enabled`; changing `action` moves the list between `sources` and
   `allow_sources`
 - `DELETE /api/lists/{name}`
 - `POST /api/lists/refresh` — refetch everything now (synchronous)
