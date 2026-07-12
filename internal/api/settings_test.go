@@ -405,3 +405,42 @@ func TestClientStatsEndpoint(t *testing.T) {
 		t.Errorf("hours=999: status = %d, want 400", rec.Code)
 	}
 }
+
+func TestListStatsEndpoint(t *testing.T) {
+	s, _ := newTestServer(t, "")
+	r := s.Router()
+
+	now := time.Now()
+	s.qlog.Record(querylog.Entry{Time: now, Client: "10.0.0.9", QName: "ads.example.com", QType: "A", Verdict: "blocked", List: "hagezi"})
+	s.qlog.Record(querylog.Entry{Time: now, Client: "10.0.0.9", QName: "ads2.example.com", QType: "A", Verdict: "blocked", List: "hagezi"})
+	s.qlog.Record(querylog.Entry{Time: now, Client: "10.0.0.9", QName: "github.com", QType: "A", Verdict: "allowed", List: "allowlist"})
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(s.qlog.Recent(0)) < 3 {
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	rec := doJSON(t, r, "GET", "/api/stats/lists", "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+	}
+	var got struct {
+		WindowHours int `json:"window_hours"`
+		Lists       []struct {
+			List  string `json:"list"`
+			Count int    `json:"count"`
+		} `json:"lists"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.WindowHours != 168 {
+		t.Errorf("window_hours = %d, want 168 (7-day default)", got.WindowHours)
+	}
+	if len(got.Lists) != 1 || got.Lists[0].List != "hagezi" || got.Lists[0].Count != 2 {
+		t.Errorf("lists = %+v, want hagezi x2 only (allowed attribution excluded)", got.Lists)
+	}
+
+	if rec := doJSON(t, r, "GET", "/api/stats/lists?hours=999", "", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("hours=999: status = %d, want 400", rec.Code)
+	}
+}

@@ -87,6 +87,19 @@ several IPs across DHCP leases (pass everything from the device's `ips[]`).
 Like every aggregate, it reads the persisted log (or the ring in ephemeral
 mode), so entries not yet flushed (up to 30 s) are missing.
 
+### `GET /api/stats/lists?hours=168`
+
+Blocks attributed to each list, busiest first — which lists earn their
+keep. `hours` is 1–168 (default 168, a 7-day week). Names are whatever the
+docket's `list` field carries: subscribed list names plus the built-in
+pseudo-lists (`denylist`, `service:<name>`, `group:<name>`, `clients`).
+
+```json
+{"window_hours": 168, "lists": [
+  {"list": "StevenBlack", "count": 1893},
+  {"list": "service:youtube", "count": 240}]}
+```
+
 ### `GET /api/check?domain=ads.example.com`
 
 Judge a name without querying it:

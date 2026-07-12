@@ -100,12 +100,13 @@ Technitium, NextDNS). Headlines, roughly in build order:
 
 - **Curated blocklist catalog** on the Codex page (Hagezi / OISD /
   StevenBlack tiers, one-click subscribe — the Ferrymen-picker pattern
-  applied to the harder decision)
+  applied to the harder decision) *(shipped)*
 - **Subscribed allowlists** (`action: allow` list sources — Pi-hole v6
   "antigravity" parity; imports carry AdGuard whitelist filters and v6
   antigravity lists over) *(shipped)*
 - **Per-list effectiveness stats** — 7-day blocks attributed per list, so
   dead-weight lists are visible (the "why was this judged" data, aggregated)
+  *(shipped)*
 - **Audit (dry-run) lists** — rules logged as "would block" but never
   enforced; try a strict list safely, then enforce with one click. Requested
   around Pi-hole for years, shipped by nobody *(shipped)*

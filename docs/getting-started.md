@@ -336,11 +336,17 @@ Open `http://<host>:8080`. Six pages, one per concern:
   Gmail, Maps, and other subdomains are untouched.
 - **The Codex** (blocklists) — add, enable/disable, or remove list
   subscriptions and refresh them on demand, with per-list rule counts and
-  fetch errors. A list can run in **audit mode**: its rules are logged as
-  amber "would block" entries in the Docket but never enforced — subscribe
-  to a strict list, watch a week of would-be blocks break nothing, then
-  untick Audit to enforce it. The one dry-run mode Pi-hole users have asked
-  for for years. The **Blocked services** card blocks a whole service
+  fetch errors. The **Choose your blocklists** catalog offers curated,
+  verified lists (Hagezi, OISD, StevenBlack, threat feeds) in three plain
+  tiers — Balanced, Strict, Security — each card one click to subscribe,
+  with a size hint so you know what you're loading on a Pi. The manual
+  add-by-URL form below it takes any list the catalog doesn't carry
+  (see the YAML example in the configuration reference). A list can run
+  in **audit mode**: its rules are logged as amber "would block" entries
+  in the Docket but never enforced — subscribe to a strict list, watch a
+  week of would-be blocks break nothing, then untick Audit to enforce it.
+  The one dry-run mode Pi-hole users have asked for for years. The
+  **Blocked services** card blocks a whole service
   (TikTok, YouTube, Discord…) with one checkbox for every device. To block
   a service only for some devices, or only at certain times, set it on a
   **group** on the Devices page instead — a group's blocked services apply
