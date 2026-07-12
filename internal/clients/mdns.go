@@ -36,7 +36,7 @@ func lookupMDNS(ip string) string {
 	srcs := multicastSourceIPs()
 	found := make(chan string, len(srcs))
 	for _, src := range srcs {
-		go func(src string) { found <- queryMDNSFrom(query, src) }(src)
+		go func(src string) { found <- queryMDNSFrom(query, src, extractMDNSPTR) }(src)
 	}
 	timeout := time.After(mdnsTimeout + 250*time.Millisecond)
 	for range srcs {
@@ -52,9 +52,21 @@ func lookupMDNS(ip string) string {
 	return ""
 }
 
+// lookupMDNSDirect asks the device itself, unicast to ip:5353. Many stacks
+// (Apple, Android, printers, ESPHome) answer direct queries they ignore on
+// multicast, and the connected socket fast-fails on ICMP unreachable like
+// the NetBIOS client, so a non-mDNS host costs milliseconds, not the timer.
+func lookupMDNSDirect(ip string) string {
+	query, ok := buildMDNSQuery(ip)
+	if !ok {
+		return ""
+	}
+	return queryMDNSUnicast(query, ip, extractMDNSPTR)
+}
+
 // queryMDNSFrom sends the query bound to source IP src (empty = default
-// interface) and returns the first PTR name in a reply, or "" on timeout.
-func queryMDNSFrom(query []byte, src string) string {
+// interface) and returns the first extracted answer, or "" on timeout.
+func queryMDNSFrom(query []byte, src string, extract func(*dns.Msg) string) string {
 	conn, err := net.ListenPacket("udp4", net.JoinHostPort(src, "0"))
 	if err != nil {
 		return ""
@@ -63,23 +75,115 @@ func queryMDNSFrom(query []byte, src string) string {
 	if _, err := conn.WriteTo(query, mdnsGroup); err != nil {
 		return ""
 	}
+	return readMDNSReplies(conn, extract)
+}
+
+// queryMDNSUnicast sends the query on a connected socket straight to
+// ip:5353 and reads replies on it.
+func queryMDNSUnicast(query []byte, ip string, extract func(*dns.Msg) string) string {
+	conn, err := net.DialTimeout("udp4", net.JoinHostPort(ip, "5353"), mdnsTimeout)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.Write(query); err != nil {
+		return ""
+	}
+	return readMDNSReplies(replyReader{conn}, extract)
+}
+
+// replyReader adapts a connected net.Conn to the ReadFrom shape the shared
+// reply loop uses.
+type replyReader struct{ net.Conn }
+
+func (r replyReader) ReadFrom(b []byte) (int, net.Addr, error) {
+	n, err := r.Read(b)
+	return n, nil, err
+}
+
+func readMDNSReplies(conn interface {
+	ReadFrom([]byte) (int, net.Addr, error)
+	SetReadDeadline(time.Time) error
+}, extract func(*dns.Msg) string,
+) string {
 	_ = conn.SetReadDeadline(time.Now().Add(mdnsTimeout))
 	buf := make([]byte, 1500)
 	for {
 		n, _, err := conn.ReadFrom(buf)
 		if err != nil {
-			return "" // deadline reached, or read error
+			return "" // deadline reached, or ICMP-unreachable fast-fail
 		}
 		resp := new(dns.Msg)
 		if resp.Unpack(buf[:n]) != nil {
 			continue
 		}
-		for _, ans := range resp.Answer {
-			if ptr, ok := ans.(*dns.PTR); ok && ptr.Ptr != "" {
-				return strings.TrimSuffix(ptr.Ptr, ".")
+		if got := extract(resp); got != "" {
+			return got
+		}
+	}
+}
+
+// extractMDNSPTR pulls the first usable PTR target out of a reply.
+func extractMDNSPTR(m *dns.Msg) string {
+	for _, ans := range m.Answer {
+		if ptr, ok := ans.(*dns.PTR); ok && ptr.Ptr != "" {
+			return sanitizeDiscoveredName(strings.TrimSuffix(ptr.Ptr, "."))
+		}
+	}
+	return ""
+}
+
+// extractMDNSModel pulls a model= value from a _device-info TXT reply.
+// The record is attacker-controllable: only the first well-formed key in a
+// bounded record is considered, and the value is sanitised like any name.
+func extractMDNSModel(m *dns.Msg) string {
+	for _, ans := range m.Answer {
+		txt, ok := ans.(*dns.TXT)
+		if !ok {
+			continue
+		}
+		budget := 512 // bytes of TXT considered, total
+		for _, s := range txt.Txt {
+			if budget -= len(s); budget < 0 {
+				return ""
+			}
+			if v, found := strings.CutPrefix(s, "model="); found {
+				return sanitizeDiscoveredName(v)
 			}
 		}
 	}
+	return ""
+}
+
+// lookupMDNSModel fetches the device's self-reported hardware model from
+// its _device-info._tcp TXT record (an Apple convention much of the mDNS
+// world follows), given its already-discovered .local hostname. Direct
+// unicast first, multicast fallback, like hostname lookups.
+func lookupMDNSModel(ip, localName string) string {
+	instance := strings.TrimSuffix(localName, ".local")
+	if instance == "" || instance == localName {
+		return "" // only meaningful for mDNS .local names
+	}
+	m := new(dns.Msg)
+	m.Id = dns.Id()
+	m.Question = []dns.Question{{
+		Name:   dns.Fqdn(instance + "._device-info._tcp.local"),
+		Qtype:  dns.TypeTXT,
+		Qclass: dns.ClassINET | mdnsUnicastBit,
+	}}
+	query, err := m.Pack()
+	if err != nil {
+		return ""
+	}
+	if model := queryMDNSUnicast(query, ip, extractMDNSModel); model != "" {
+		return model
+	}
+	for _, src := range multicastSourceIPs() {
+		if model := queryMDNSFrom(query, src, extractMDNSModel); model != "" {
+			return model
+		}
+	}
+	return ""
 }
 
 // multicastSourceIPs returns one IPv4 address per up, multicast-capable,

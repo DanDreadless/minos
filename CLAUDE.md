@@ -333,13 +333,24 @@ This is security software; hold it to that standard.
   reads the device's own name table, returning the unique 0x00 Workstation
   name; it's the Windows/Samba source mDNS can't see, and uses a *connected*
   socket so a non-NBNS host fast-fails on ICMP unreachable instead of waiting
-  the 500ms deadline), and finally to **multicast DNS** (reverse PTR to
+  the 500ms deadline), then **mDNS direct** (the same
+  reverse-PTR query unicast to `ip:5353` on a connected socket — many stacks
+  answer direct queries they ignore on multicast, and ICMP-unreachable
+  fast-fails the rest), and finally **multicast DNS** (reverse PTR to
   224.0.0.251:5353 with the RFC 6762 unicast-response bit) — the one source
   that works when the router won't answer PTR (the common case). mDNS is sent
   bound to *every* up/multicast/non-loopback interface, concurrently, so a
   multi-homed host (eth+wlan, Docker) still reaches the LAN — a `:0` bind
-  silently egresses the wrong adapter. NetBIOS/mDNS responses are untrusted
-  input: names are bounds-checked and sanitised to printable ASCII before use.
+  silently egresses the wrong adapter. A device that yields a `.local` name
+  is also asked for its `_device-info._tcp` TXT `model=` (feeds `setModel`),
+  and a **passive announcement listener** (mdns_listen.go, read-only, joins
+  the group on every eligible interface) harvests names/models the moment a
+  device joins — accepting **self-claims only**: an address record counts
+  only when it names the packet's own source IP, only for already-seen
+  devices, and only for `.local` names (mDNS must never spoof LAN DNS
+  names). NetBIOS/mDNS responses are untrusted input: names are
+  bounds-checked and sanitised to printable ASCII before use
+  (`sanitizeDiscoveredName` is the shared vet for all discovered strings).
   All off the hot path; Windows (dev-only) skips gateway detection. Separately,
   every device with a known MAC also gets a **vendor label** from
   `internal/oui` — the **full IEEE registry** (MA-L/MA-M/MA-S/IAB, ~58k
