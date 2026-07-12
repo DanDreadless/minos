@@ -48,8 +48,8 @@ func (r *Registry) enrichOne(ctx context.Context, ip string) {
 	if mac, ok := neighborTable()[ip]; ok {
 		r.setMAC(ip, mac)
 	}
-	if name := r.lookupHostname(ctx, ip); name != "" {
-		r.setHostname(ip, name)
+	if name, source := r.lookupHostname(ctx, ip); name != "" {
+		r.setHostname(ip, name, source)
 	}
 }
 
@@ -70,26 +70,27 @@ func neighborTable() map[string]string {
 	return table
 }
 
-// lookupHostname reverse-resolves ip, trying each source in turn and taking the
-// first non-empty answer: unicast PTR (gateway, then system resolver), then a
-// NetBIOS node-status query, then multicast DNS. NetBIOS comes before mDNS
-// because it's a cheap unicast that fast-fails on non-Windows hosts and gives
-// the canonical machine name for the Windows/Samba boxes mDNS can't see; mDNS
-// remains the fallback for Apple/IoT/.local devices and the case where the
-// router won't answer PTR.
-func (r *Registry) lookupHostname(ctx context.Context, ip string) string {
+// lookupHostname reverse-resolves ip, trying each source in turn and taking
+// the first non-empty answer (with its provenance): unicast PTR (gateway,
+// then system resolver), then a NetBIOS node-status query, then multicast
+// DNS. NetBIOS comes before mDNS because it's a cheap unicast that
+// fast-fails on non-Windows hosts and gives the canonical machine name for
+// the Windows/Samba boxes mDNS can't see; mDNS remains the fallback for
+// Apple/IoT/.local devices and the case where the router won't answer PTR.
+// Try-order is about cost; setHostname's trust order decides what sticks.
+func (r *Registry) lookupHostname(ctx context.Context, ip string) (name, source string) {
 	for _, res := range r.revResolvers {
 		lookupCtx, cancel := context.WithTimeout(ctx, ptrTimeout)
 		names, err := res.LookupAddr(lookupCtx, ip)
 		cancel()
 		if err == nil && len(names) > 0 {
-			return strings.TrimSuffix(names[0], ".")
+			return strings.TrimSuffix(names[0], "."), SourcePTR
 		}
 	}
 	if name := lookupNetBIOS(ip); name != "" {
-		return name
+		return name, SourceNetBIOS
 	}
-	return lookupMDNS(ip)
+	return lookupMDNS(ip), SourceMDNS
 }
 
 // reverseResolvers returns the resolvers to try for PTR lookups, in order:

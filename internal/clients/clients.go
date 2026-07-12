@@ -49,14 +49,42 @@ func (p *Policy) Refuses() bool { return p != nil && (p.Blocked || p.Mode == Mod
 // Bypasses reports whether this device skips filtering entirely.
 func (p *Policy) Bypasses() bool { return p != nil && !p.Blocked && p.Mode == ModeBypass }
 
+// Identity sources, in ascending trust. A later-arriving value only
+// replaces one of equal or lower trust (and anything fills empty), so
+// re-running enrichment is idempotent and a weaker source can never
+// downgrade a better name. Rationale: DHCP is what the device asked to be
+// called; SSDP/mDNS are live self-descriptions; NetBIOS is a
+// self-description from an aging protocol; PTR is second-hand. The
+// user-set label lives in config and always wins at display time.
+const (
+	SourcePTR     = "ptr"
+	SourceNetBIOS = "netbios"
+	SourceMDNS    = "mdns"
+	SourceSSDP    = "ssdp"
+	SourceDHCP    = "dhcp"
+)
+
+var sourceRank = map[string]int{
+	SourcePTR: 1, SourceNetBIOS: 2, SourceMDNS: 3, SourceSSDP: 4, SourceDHCP: 5,
+}
+
+// nameInfo is a discovered hostname plus where it came from.
+type nameInfo struct{ name, source string }
+
+// modelInfo is a discovered self-description (SSDP device XML, mDNS
+// _device-info TXT) — distinct from the OUI-derived vendor, which is a
+// registry fact about the MAC, not a claim by the device.
+type modelInfo struct{ manufacturer, model, source string }
+
 // device is the live (hot-path-updated) state for one client IP.
 type device struct {
 	firstSeen atomic.Int64 // unix nanos
 	lastSeen  atomic.Int64
 	total     atomic.Uint64
 	blocked   atomic.Uint64
-	mac       atomic.Pointer[string] // from ARP enrichment
-	hostname  atomic.Pointer[string] // from reverse DNS
+	mac       atomic.Pointer[string]    // from the neighbour tables
+	hostname  atomic.Pointer[nameInfo]  // best discovered name + source
+	model     atomic.Pointer[modelInfo] // best discovered self-description
 	// fresh marks a device first discovered by live traffic (not seeded
 	// from history); consumed once by the new-device notification.
 	fresh atomic.Bool
@@ -74,16 +102,22 @@ type Device struct {
 	// PrivateMAC marks a locally-administered (randomized) MAC — the
 	// per-network "private addresses" modern devices generate, which no
 	// vendor registry can name.
-	PrivateMAC bool       `json:"private_mac,omitempty"`
-	Hostname   string     `json:"hostname,omitempty"`
-	Name       string     `json:"name,omitempty"`
-	Group      string     `json:"group"`
-	Blocked    bool       `json:"blocked"`
-	Seen       bool       `json:"seen"`
-	Queries    uint64     `json:"queries"`
-	QBlocked   uint64     `json:"queries_blocked"`
-	FirstSeen  *time.Time `json:"first_seen,omitempty"`
-	LastSeen   *time.Time `json:"last_seen,omitempty"`
+	PrivateMAC bool   `json:"private_mac,omitempty"`
+	Hostname   string `json:"hostname,omitempty"`
+	// NameSource says where Hostname came from: ptr, netbios, mdns, ssdp,
+	// or dhcp — "where did this name come from" is part of the product.
+	NameSource string `json:"name_source,omitempty"`
+	// Model is the device's discovered self-description (e.g. an mDNS
+	// device-info model or UPnP modelName), when any source offered one.
+	Model     string     `json:"model,omitempty"`
+	Name      string     `json:"name,omitempty"`
+	Group     string     `json:"group"`
+	Blocked   bool       `json:"blocked"`
+	Seen      bool       `json:"seen"`
+	Queries   uint64     `json:"queries"`
+	QBlocked  uint64     `json:"queries_blocked"`
+	FirstSeen *time.Time `json:"first_seen,omitempty"`
+	LastSeen  *time.Time `json:"last_seen,omitempty"`
 }
 
 // Registry is safe for concurrent use.
@@ -122,7 +156,7 @@ func (r *Registry) emitNew(ip string) {
 		mac = *m
 	}
 	if h := d.hostname.Load(); h != nil {
-		hostname = *h
+		hostname = h.name
 	}
 	if mac != "" && r.macKnownElsewhere(ip, mac) {
 		return // a known device on a new lease, not a new device
@@ -420,12 +454,16 @@ func (r *Registry) Devices(cfg *config.Config) []Device {
 		if m := d.mac.Load(); m != nil {
 			mac = *m
 		}
-		host := ""
+		var host nameInfo
 		if h := d.hostname.Load(); h != nil {
 			host = *h
 		}
+		var model modelInfo
+		if m := d.model.Load(); m != nil {
+			model = *m
+		}
 		a := accFor(accs, deviceKey(ip, mac))
-		a.addLive(ip, mac, host, d.total.Load(), d.blocked.Load(),
+		a.addLive(ip, mac, host, model, d.total.Load(), d.blocked.Load(),
 			d.firstSeen.Load(), d.lastSeen.Load())
 		return true
 	})
@@ -493,7 +531,8 @@ type deviceAcc struct {
 	mac         string
 	primaryIP   string
 	primaryLast int64 // unix nanos of the primary IP's last-seen
-	primaryHost string
+	host        nameInfo
+	model       modelInfo
 	total       uint64
 	blocked     uint64
 	first       int64 // unix nanos, min across IPs (0 = unset)
@@ -511,7 +550,7 @@ func (a *deviceAcc) addIP(ip string) {
 	}
 }
 
-func (a *deviceAcc) addLive(ip, mac, host string, total, blocked uint64, first, last int64) {
+func (a *deviceAcc) addLive(ip, mac string, host nameInfo, model modelInfo, total, blocked uint64, first, last int64) {
 	a.addIP(ip)
 	a.seen = true
 	if mac != "" {
@@ -525,14 +564,21 @@ func (a *deviceAcc) addLive(ip, mac, host string, total, blocked uint64, first, 
 	if last > a.last {
 		a.last = last
 	}
-	if a.primaryIP == "" || last > a.primaryLast {
+	isNewPrimary := a.primaryIP == "" || last > a.primaryLast
+	if isNewPrimary {
 		a.primaryIP, a.primaryLast = ip, last
-		if host != "" {
-			a.primaryHost = host
-		}
 	}
-	if a.primaryHost == "" && host != "" {
-		a.primaryHost = host
+	// Across a device's IPs the best-trusted name wins; on equal trust the
+	// most recently active IP's value takes over (matching the old
+	// primary-host behaviour when everything came from PTR).
+	if host.name != "" &&
+		(a.host.name == "" || sourceRank[host.source] > sourceRank[a.host.source] ||
+			(sourceRank[host.source] == sourceRank[a.host.source] && isNewPrimary)) {
+		a.host = host
+	}
+	if (model.manufacturer != "" || model.model != "") &&
+		(a.model == (modelInfo{}) || sourceRank[model.source] >= sourceRank[a.model.source]) {
+		a.model = model
 	}
 }
 
@@ -558,22 +604,30 @@ func (a *deviceAcc) device() Device {
 		group = "default"
 	}
 	d := Device{
-		IP:       a.primaryIP,
-		IPs:      a.ips,
-		MAC:      a.mac,
-		Hostname: a.primaryHost,
-		Name:     a.name,
-		Group:    group,
-		Blocked:  a.blockedDev,
-		Seen:     a.seen,
-		Queries:  a.total,
-		QBlocked: a.blocked,
+		IP:         a.primaryIP,
+		IPs:        a.ips,
+		MAC:        a.mac,
+		Hostname:   a.host.name,
+		NameSource: a.host.source,
+		Model:      a.model.model,
+		Name:       a.name,
+		Group:      group,
+		Blocked:    a.blockedDev,
+		Seen:       a.seen,
+		Queries:    a.total,
+		QBlocked:   a.blocked,
 	}
 	if a.mac != "" {
 		d.Vendor = oui.Vendor(a.mac) // "" when no registry prefix covers it
 		// A randomized "private address" can never match a registry — the
 		// blank vendor cell is itself information, so say so.
 		d.PrivateMAC = oui.IsLocallyAdministered(a.mac)
+	}
+	// A device's own claim about its maker beats the registry fact about
+	// its MAC — and can name a randomized-MAC device the registry never
+	// could (an SSDP TV on a private address still says who made it).
+	if a.model.manufacturer != "" {
+		d.Vendor = a.model.manufacturer
 	}
 	if a.first != 0 {
 		t := time.Unix(0, a.first)
@@ -663,8 +717,33 @@ func (r *Registry) lastKnownIPConfigured(ip string) bool {
 	return false
 }
 
-func (r *Registry) setHostname(ip, name string) {
-	if v, ok := r.seen.Load(ip); ok {
-		v.(*device).hostname.Store(&name)
+// setHostname records a discovered name with its source, honouring the
+// trust order: equal-or-higher sources replace, lower ones never downgrade,
+// anything fills empty. Enrichment-worker only, like setMAC.
+func (r *Registry) setHostname(ip, name, source string) {
+	v, ok := r.seen.Load(ip)
+	if !ok || name == "" {
+		return
 	}
+	d := v.(*device)
+	cur := d.hostname.Load()
+	if cur != nil && sourceRank[source] < sourceRank[cur.source] {
+		return
+	}
+	d.hostname.Store(&nameInfo{name: name, source: source})
+}
+
+// setModel records a discovered manufacturer/model self-description under
+// the same precedence rules as names.
+func (r *Registry) setModel(ip, manufacturer, model, source string) {
+	v, ok := r.seen.Load(ip)
+	if !ok || (manufacturer == "" && model == "") {
+		return
+	}
+	d := v.(*device)
+	cur := d.model.Load()
+	if cur != nil && sourceRank[source] < sourceRank[cur.source] {
+		return
+	}
+	d.model.Store(&modelInfo{manufacturer: manufacturer, model: model, source: source})
 }

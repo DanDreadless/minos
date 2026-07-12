@@ -215,7 +215,11 @@ always beats deny.
   MAC via the full IEEE registry (MA-L/MA-M/MA-S/IAB, longest prefix wins);
   `private_mac: true` marks a randomized locally-administered MAC that no
   registry can name. `hostname` comes from reverse DNS via the gateway,
-  falling back to NetBIOS then mDNS `.local` — all best-effort.
+  falling back to NetBIOS then mDNS `.local` — all best-effort — and
+  `name_source` says which source it was (`ptr`, `netbios`, `mdns`, `ssdp`,
+  `dhcp`; a stronger source is never overwritten by a weaker one). `model`
+  carries a device's own self-description when a source offered one, and a
+  self-reported manufacturer overrides the registry-derived `vendor`.
 - `PUT /api/clients/{key}` — upsert any of `{"name", "mac", "group",
   "blocked"}` (`"group": "default"` unassigns). `{key}` is the device's **MAC**
   when it has one (so the assignment follows it across DHCP leases) or its

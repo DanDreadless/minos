@@ -279,14 +279,19 @@
             <td>{d.mac ?? ''}</td>
             <td>
               {#if d.vendor}
-                {d.vendor}
+                {d.vendor}{#if d.model}
+                  <span class="model" title={d.model}>{d.model}</span>{/if}
+              {:else if d.model}
+                {d.model}
               {:else if d.private_mac}
                 <span class="private-mac" title={copy.devices.privateMACTitle}>
                   {copy.devices.privateMAC}
                 </span>
               {/if}
             </td>
-            <td title={d.hostname}>{d.hostname ?? ''}</td>
+            <td title={d.name_source ? copy.devices.nameSource(d.name_source) : d.hostname}>
+              {d.hostname ?? ''}
+            </td>
             <td>
               <input
                 class="label-input"
@@ -573,6 +578,13 @@
     color: var(--text-dim);
     font-style: italic;
     font-size: 0.82rem;
+    cursor: help;
+  }
+
+  .model {
+    margin-left: 0.4rem;
+    color: var(--text-dim);
+    font-size: 0.78rem;
     cursor: help;
   }
 

@@ -181,6 +181,8 @@ export interface Device {
   vendor?: string;
   private_mac?: boolean; // randomized (locally administered) MAC
   hostname?: string;
+  name_source?: string; // ptr | netbios | mdns | ssdp | dhcp
+  model?: string; // discovered self-description (mDNS/UPnP)
   name?: string;
   group: string;
   blocked: boolean;

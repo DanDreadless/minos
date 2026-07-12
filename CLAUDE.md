@@ -308,6 +308,20 @@ This is security software; hold it to that standard.
   deliberately kept: they carry the merging MAC. `clients.NormalizeMAC`
   canonicalises to lowercase colon form so table-derived and user-entered
   MACs compare equal.
+- **Identity provenance & precedence** (fixed decisions): every discovered
+  hostname carries a source — ascending trust `ptr < netbios < mdns <
+  ssdp < dhcp` (DHCP is what the device *asked* to be called; PTR is
+  second-hand). `setHostname`/`setModel` let equal-or-higher sources
+  replace, never lower — so re-running enrichment is idempotent and the
+  lookup chain's try-order is about *cost* while the trust order decides
+  what *sticks*. The user-set config label always wins at display time and
+  lives where it always has. Discovered manufacturer/model
+  (mDNS `_device-info`, UPnP — items 3/4 feed `setModel`) are distinct
+  from the OUI vendor, and a self-reported manufacturer **overrides** the
+  registry vendor in the Device view (it can name a randomized-MAC device
+  the registry never could). Merged rows take the best-trusted name across
+  the device's IPs, equal trust falling to the most recently active IP.
+  API fields: `name_source`, `model` — literal words, no theming.
 - **PTR enrichment targets the gateway first** (fixed decision): a bare
   `net.DefaultResolver.LookupAddr` in production goes to the system
   resolver — usually Minos itself — which answers private reverse zones
