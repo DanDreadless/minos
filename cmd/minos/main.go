@@ -110,6 +110,7 @@ func serve(args []string) error {
 	started := time.Now()
 
 	reg := clients.NewRegistry()
+	reg.SetQNameSource(qlog.RecentQNames) // traffic hints read the ring
 	reg.ApplyConfig(cfg)
 	reg.OnNewDevice(func(ip, mac, hostname string) {
 		// Grace period: on a first boot (or after history loss) every

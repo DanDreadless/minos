@@ -185,6 +185,8 @@ export const copy = {
     privateMAC: 'Private address',
     privateMACTitle:
       'This device uses a randomized (locally administered) MAC address — a privacy feature of iOS, Android, and Windows — so no manufacturer registry can name it.',
+    hintTitle:
+      'A guess from this device’s traffic patterns or DHCP fingerprint — not something the device reported. Any real identity source replaces it.',
     nameSource: (source: string): string => {
       const labels: Record<string, string> = {
         ptr: 'reverse DNS',

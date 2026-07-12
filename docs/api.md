@@ -220,6 +220,9 @@ always beats deny.
   `dhcp`; a stronger source is never overwritten by a weaker one). `model`
   carries a device's own self-description when a source offered one, and a
   self-reported manufacturer overrides the registry-derived `vendor`.
+  `hint` is a coarse OS/type guess (DHCP fingerprint or traffic patterns)
+  for devices nothing else names — presented in the UI as a guess, never a
+  fact, and outranked by every real source.
 - `PUT /api/clients/{key}` — upsert any of `{"name", "mac", "group",
   "blocked"}` (`"group": "default"` unassigns). `{key}` is the device's **MAC**
   when it has one (so the assignment follows it across DHCP leases) or its

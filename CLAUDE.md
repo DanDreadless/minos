@@ -308,6 +308,24 @@ This is security software; hold it to that standard.
   deliberately kept: they carry the merging MAC. `clients.NormalizeMAC`
   canonicalises to lowercase colon form so table-derived and user-entered
   MACs compare equal.
+- **Discovery semantics** (fixed decisions, items 4–6 of the identity
+  plan): SSDP is the one *active* probe — one M-SEARCH per 5-minute sweep,
+  and a LOCATION is fetched **only when it points at the responding
+  device's own IP** (anything else is SSRF bait), plain http, no
+  redirects, 64 KB cap, 1-fetch/device/hour; `discovery.ssdp` (default on)
+  is read per sweep. The DHCP listener (Linux, `discovery.dhcp_listen`,
+  default on) is **a listener, never a server** — the "no DHCP server"
+  rule stands; it binds :67 only while enabled (minute-cadence reconcile
+  releases the port live) and backs off silently if the port is owned. A
+  DISCOVER precedes any address, so its identity parks on the MAC (1 h
+  TTL) and `setMAC` drains it. Traffic hints (`hints.go`) are the last
+  resort: curated first-party OS-check signatures matched at label
+  boundaries against the querylog ring (injected via `SetQNameSource` —
+  clients must not import querylog), one anonymous device per enrichment
+  tick, skipped the moment anything real (name/model/OUI vendor/hint)
+  exists, and always rendered as a guess. Every discovered string passes
+  `sanitizeDiscoveredName`; nothing ever creates a row for a device that
+  hasn't queried Minos.
 - **Identity provenance & precedence** (fixed decisions): every discovered
   hostname carries a source — ascending trust `ptr < netbios < mdns <
   ssdp < dhcp` (DHCP is what the device *asked* to be called; PTR is

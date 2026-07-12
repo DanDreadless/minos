@@ -133,6 +133,10 @@ type Registry struct {
 	// pendingDHCP parks lease-time introductions (keyed by MAC) until the
 	// neighbour table associates the MAC with an IP. Bounded by TTL.
 	pendingDHCP sync.Map // mac string → dhcpIdentity
+	// qnameSource reads a client's recent query names from the querylog
+	// ring for traffic hints (injected in main — clients must not import
+	// querylog; enrichment-ticker only).
+	qnameSource func(ip string, n int) []string
 	// revResolvers is the ordered list of resolvers used for PTR enrichment
 	// (gateway first, then system); built once when Run starts.
 	revResolvers []*net.Resolver
