@@ -22,6 +22,7 @@ const (
 // off-subnet client simply yields blank fields.
 func (r *Registry) Run(ctx context.Context) {
 	r.revResolvers = reverseResolvers(defaultGateway())
+	go r.listenMDNS(ctx) // passive announcements; read-only
 	r.refreshMACs()
 	ticker := time.NewTicker(arpRefreshInterval)
 	defer ticker.Stop()
@@ -48,8 +49,16 @@ func (r *Registry) enrichOne(ctx context.Context, ip string) {
 	if mac, ok := neighborTable()[ip]; ok {
 		r.setMAC(ip, mac)
 	}
-	if name, source := r.lookupHostname(ctx, ip); name != "" {
+	name, source := r.lookupHostname(ctx, ip)
+	if name != "" {
 		r.setHostname(ip, name, source)
+	}
+	// A .local name means the device speaks mDNS — ask it for its hardware
+	// model too (the _device-info convention).
+	if source == SourceMDNS && strings.HasSuffix(strings.ToLower(name), ".local") {
+		if model := lookupMDNSModel(ip, name); model != "" {
+			r.setModel(ip, "", model, SourceMDNS)
+		}
 	}
 }
 
@@ -89,6 +98,9 @@ func (r *Registry) lookupHostname(ctx context.Context, ip string) (name, source 
 	}
 	if name := lookupNetBIOS(ip); name != "" {
 		return name, SourceNetBIOS
+	}
+	if name := lookupMDNSDirect(ip); name != "" {
+		return name, SourceMDNS
 	}
 	return lookupMDNS(ip), SourceMDNS
 }
