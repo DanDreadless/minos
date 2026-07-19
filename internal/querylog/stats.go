@@ -197,6 +197,53 @@ func (l *Log) BlocksByList(ctx context.Context, since time.Time) ([]ListStat, er
 	return out, nil
 }
 
+// ListNames returns every distinct list name attributed in the window —
+// enforcing and audit — sorted, for the Docket's list-filter dropdown.
+// Bounded by the ts index (SQLite) or the ring (ephemeral mode). Like
+// BlocksByList, lists are few by nature; the cap is defensive only.
+func (l *Log) ListNames(ctx context.Context, since time.Time) ([]string, error) {
+	const maxLists = 200
+	if l.db != nil {
+		rows, err := l.db.QueryContext(ctx, `SELECT list FROM querylog
+			WHERE ts >= ? AND list != ''
+			UNION SELECT audit_list FROM querylog
+			WHERE ts >= ? AND audit_list != ''
+			ORDER BY 1 LIMIT ?`,
+			since.UnixMilli(), since.UnixMilli(), maxLists)
+		if err != nil {
+			return nil, fmt.Errorf("list names query: %w", err)
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				return nil, fmt.Errorf("list names scan: %w", err)
+			}
+			out = append(out, name)
+		}
+		return out, rows.Err()
+	}
+	set := make(map[string]bool)
+	l.scanRing(since, func(e Entry) {
+		if e.List != "" {
+			set[e.List] = true
+		}
+		if e.AuditList != "" {
+			set[e.AuditList] = true
+		}
+	})
+	out := make([]string, 0, len(set))
+	for name := range set {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	if len(out) > maxLists {
+		out = out[:maxLists]
+	}
+	return out, nil
+}
+
 // TopClients returns the busiest clients since the given time.
 func (l *Log) TopClients(ctx context.Context, since time.Time, n int) ([]ClientStat, error) {
 	if n <= 0 || n > 100 {

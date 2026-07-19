@@ -199,4 +199,26 @@ func TestQueryLogHistoryEndpoint(t *testing.T) {
 			t.Errorf("%s: status = %d, want 400", bad, rec.Code)
 		}
 	}
+	// list is a pass-through filter; any string is a valid (if unmatched) name.
+	rec = doJSON(t, s.Router(), "GET", "/api/querylog/history?list=service:netflix", "", nil)
+	if rec.Code != http.StatusOK {
+		t.Errorf("list param: status = %d, want 200", rec.Code)
+	}
+}
+
+func TestQueryLogListsEndpoint(t *testing.T) {
+	s, _ := newTestServer(t, "")
+	rec := doJSON(t, s.Router(), "GET", "/api/querylog/lists", "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if body := strings.TrimSpace(rec.Body.String()); body != "[]" {
+		t.Errorf("empty lists body = %q, want []", body)
+	}
+	for _, bad := range []string{"?hours=0", "?hours=2161", "?hours=x"} {
+		rec := doJSON(t, s.Router(), "GET", "/api/querylog/lists"+bad, "", nil)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400", bad, rec.Code)
+		}
+	}
 }
