@@ -499,6 +499,13 @@ This is security software; hold it to that standard.
   block, gets a `config.Validate` **warning, never an error** (the OS
   resolver on a production box is usually Minos itself, so the block would
   starve the upstream of its own address).
+- **Query-log rows have no unique identity** (fixed decision): a client
+  retrying a blocked query inside one millisecond produces rows identical
+  in time+qname+client+qtype, so never use entry fields as a Svelte keyed
+  {#each} key — duplicate keys throw at runtime and freeze the whole page
+  (field bug, v0.16.5). The Docket and device-page tables are deliberately
+  unkeyed; keep any future entry list that way (or add a synthetic
+  client-side counter id).
 - **Query-log read indexes** (fixed decisions): the log carries
   `(client, ts)`, `(list, ts)`, and `(audit_list, ts)` composite indexes —
   without them the device page and Docket list filter walk the whole time
