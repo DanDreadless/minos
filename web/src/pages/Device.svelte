@@ -370,7 +370,9 @@
             </tr>
           </thead>
           <tbody>
-            {#each history as e (e.time + e.qname + e.client + e.qtype)}
+            <!-- Unkeyed on purpose — same-millisecond retries make these
+                 fields non-unique, and duplicate keys crash the page. -->
+            {#each history as e}
               <tr>
                 <td>{fmtTime(e.time)}</td>
                 <td>{e.client}</td>
