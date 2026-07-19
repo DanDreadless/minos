@@ -222,3 +222,27 @@ func TestQueryLogListsEndpoint(t *testing.T) {
 		}
 	}
 }
+
+// The stats windows accept up to 90 days (the default retention).
+func TestStatsHoursBounds(t *testing.T) {
+	s, _ := newTestServer(t, "")
+	r := s.Router()
+	for _, path := range []string{
+		"/api/stats?hours=2160",
+		"/api/stats/client?client=10.0.0.1&hours=2160",
+		"/api/stats/lists?hours=2160",
+	} {
+		if rec := doJSON(t, r, "GET", path, "", nil); rec.Code != http.StatusOK {
+			t.Errorf("%s: status = %d, want 200: %s", path, rec.Code, rec.Body)
+		}
+	}
+	for _, path := range []string{
+		"/api/stats?hours=2161",
+		"/api/stats/client?client=10.0.0.1&hours=0",
+		"/api/stats/lists?hours=9999",
+	} {
+		if rec := doJSON(t, r, "GET", path, "", nil); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400", path, rec.Code)
+		}
+	}
+}

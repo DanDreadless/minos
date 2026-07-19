@@ -65,18 +65,19 @@ never runs the command itself.
 
 ### `GET /api/stats?hours=24`
 
-Dashboard aggregates for a 1–168 hour window: a `timeline` of
-`{time, total, blocked}` buckets (10-minute buckets up to 24 h, hourly
-beyond), `top_blocked` as `{qname, count}`, and `top_clients` as
-`{client, total, blocked}`. Entries not yet flushed to disk (up to 30 s)
-are not included.
+Dashboard aggregates for a 1–2160 hour window (up to 90 days): a
+`timeline` of `{time, total, blocked}` buckets (10-minute buckets up to
+24 h, hourly to 7 days, daily beyond), `top_blocked` as `{qname, count}`,
+and `top_clients` as `{client, total, blocked}`. Entries not yet flushed
+to disk (up to 30 s) are not included.
 
 ### `GET /api/stats/client?client=192.168.1.50,192.168.1.51&hours=24`
 
-One device's traffic, aggregated for the Devices activity panel. `client`
-is required: exact addresses, comma-separated because a device can span
-several IPs across DHCP leases (pass everything from the device's `ips[]`).
-`hours` is 1–168 (default 24).
+One device's traffic, aggregated for the device page's activity section.
+`client` is required: exact addresses, comma-separated because a device can
+span several IPs across DHCP leases (pass everything from the device's
+`ips[]`). `hours` is 1–2160 (default 24) — 2160 covers the default 90-day
+retention.
 
 ```json
 {"window_hours": 24, "total": 1042, "blocked": 87,
@@ -90,7 +91,7 @@ mode), so entries not yet flushed (up to 30 s) are missing.
 ### `GET /api/stats/lists?hours=168`
 
 Blocks attributed to each list, busiest first — which lists earn their
-keep. `hours` is 1–168 (default 168, a 7-day week). Names are whatever the
+keep. `hours` is 1–2160 (default 168, a 7-day week). Names are whatever the
 docket's `list` field carries: subscribed list names plus the built-in
 pseudo-lists (`denylist`, `service:<name>`, `group:<name>`, `clients`).
 
@@ -246,7 +247,7 @@ services.
 
 - `GET /api/clients` — every device that has queried plus every configured
   one, **one row per physical device**: `{ip, ips, mac, vendor, hostname,
-  name, group, blocked, seen, queries, queries_blocked, first_seen,
+  name, notes, group, blocked, seen, queries, queries_blocked, first_seen,
   last_seen}`. A device is identified by its MAC when known, so all the IPs
   it has held across DHCP leases fold into one entry — `ip` is the primary
   (most recently active) address and `ips` lists them all (used by the Docket
@@ -263,7 +264,9 @@ services.
   for devices nothing else names — presented in the UI as a guess, never a
   fact, and outranked by every real source.
 - `PUT /api/clients/{key}` — upsert any of `{"name", "mac", "group",
-  "blocked"}` (`"group": "default"` unassigns). `{key}` is the device's **MAC**
+  "blocked", "notes"}` (`"group": "default"` unassigns; `notes` is
+  free-form user text up to 4096 chars, persisted with the assignment and
+  shown on the device page). `{key}` is the device's **MAC**
   when it has one (so the assignment follows it across DHCP leases) or its
   **IP** otherwise; a MAC key resolves the device's current IP automatically,
   or accepts an `"ip"` field as a last-known-address hint when it's offline.

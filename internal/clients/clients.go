@@ -113,8 +113,10 @@ type Device struct {
 	Model string `json:"model,omitempty"`
 	// Hint is a coarse OS/type guess (DHCP fingerprint, traffic patterns)
 	// for devices nothing else names — the UI must present it as a guess.
-	Hint      string     `json:"hint,omitempty"`
-	Name      string     `json:"name,omitempty"`
+	Hint string `json:"hint,omitempty"`
+	Name string `json:"name,omitempty"`
+	// Notes is the user's free-form text from the configured assignment.
+	Notes     string     `json:"notes,omitempty"`
 	Group     string     `json:"group"`
 	Blocked   bool       `json:"blocked"`
 	Seen      bool       `json:"seen"`
@@ -574,6 +576,7 @@ type deviceAcc struct {
 	last        int64 // unix nanos, max across IPs
 	seen        bool
 	name        string
+	notes       string
 	group       string
 	blockedDev  bool
 }
@@ -622,6 +625,7 @@ func (a *deviceAcc) addLive(ip, mac string, host nameInfo, model modelInfo, hint
 
 func (a *deviceAcc) applyConfig(cl config.Client) {
 	a.name = cl.Name
+	a.notes = cl.Notes
 	a.blockedDev = cl.Blocked
 	if cl.Group != "" {
 		a.group = cl.Group
@@ -650,6 +654,7 @@ func (a *deviceAcc) device() Device {
 		Model:      a.model.model,
 		Hint:       a.hint,
 		Name:       a.name,
+		Notes:      a.notes,
 		Group:      group,
 		Blocked:    a.blockedDev,
 		Seen:       a.seen,

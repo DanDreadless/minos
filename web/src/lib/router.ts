@@ -2,7 +2,14 @@
 // ('#/querylog?client=1.2.3.4&verdict=blocked') for deep links. No dependency.
 import { readable } from 'svelte/store';
 
-export type Route = 'dashboard' | 'querylog' | 'devices' | 'lists' | 'domains' | 'settings';
+export type Route =
+  | 'dashboard'
+  | 'querylog'
+  | 'devices'
+  | 'device'
+  | 'lists'
+  | 'domains'
+  | 'settings';
 
 // The hash without its query string, e.g. '#/querylog?client=x' → '#/querylog'.
 function hashPath(): string {
@@ -12,6 +19,8 @@ function hashPath(): string {
 }
 
 function parse(): Route {
+  // Detail pages carry their key in the path: '#/device/<mac-or-ip>'.
+  if (hashPath().startsWith('#/device/')) return 'device';
   switch (hashPath()) {
     case '#/querylog':
       return 'querylog';
@@ -69,7 +78,22 @@ export const hrefFor: Record<Route, string> = {
   dashboard: '#/',
   querylog: '#/querylog',
   devices: '#/devices',
+  device: '#/devices', // detail pages aren't nav destinations; fall back to the list
   lists: '#/lists',
   domains: '#/domains',
   settings: '#/settings',
 };
+
+// deviceHref links to a device's detail page. key is the device's MAC when
+// it has one (stable across DHCP leases), else its IP.
+export function deviceHref(key: string): string {
+  return `#/device/${encodeURIComponent(key)}`;
+}
+
+// currentDeviceKey reads the '#/device/<key>' path segment at call time
+// (one-shot on mount, like currentParams), or '' when absent.
+export function currentDeviceKey(): string {
+  const path = hashPath();
+  if (!path.startsWith('#/device/')) return '';
+  return decodeURIComponent(path.slice('#/device/'.length));
+}

@@ -1,16 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import {
-    api,
-    type ClientOverview,
-    type CustomService,
-    type Device,
-    type Group,
-    type Service,
-  } from '../lib/api';
-  import BarList from '../lib/components/BarList.svelte';
+  import { api, type CustomService, type Device, type Group, type Service } from '../lib/api';
   import { copy } from '../lib/copy';
-  import { docketHref } from '../lib/router';
+  import { deviceHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
   let devices: Device[] = [];
@@ -238,28 +230,6 @@
     return devices.filter((d) => d.group === name).length;
   }
 
-  // --- per-device activity panel ---
-
-  let statsFor: Device | null = null;
-  let statsHours = 24;
-  let overview: ClientOverview | null = null;
-
-  async function showStats(d: Device, hours = statsHours): Promise<void> {
-    statsFor = d;
-    statsHours = hours;
-    overview = null;
-    try {
-      overview = await api.clientStats(d.ips ?? [d.ip], hours);
-    } catch (e) {
-      notifyError(e);
-      statsFor = null;
-    }
-  }
-
-  function deviceLabel(d: Device): string {
-    return d.name || d.hostname || d.ip;
-  }
-
   onMount(() => {
     void load();
     void api
@@ -302,11 +272,7 @@
         {#each devices as d (d.mac || d.ip)}
           <tr class:dns-blocked={d.blocked}>
             <td>
-              <a
-                class="ip-link"
-                href={docketHref({ clients: d.ips ?? [d.ip] })}
-                title={copy.devices.viewInDocket}
-              >
+              <a class="ip-link" href={deviceHref(d.mac || d.ip)} title={copy.devices.openDevice}>
                 {d.ip}
               </a>
               {#if d.ips && d.ips.length > 1}
@@ -349,13 +315,13 @@
               </select>
             </td>
             <td class="num">
-              <button
+              <a
                 class="count-link"
                 title={copy.devices.activityHint}
-                on:click={() => showStats(d)}
+                href={deviceHref(d.mac || d.ip)}
               >
                 {d.queries.toLocaleString()}
-              </button>
+              </a>
             </td>
             <td class="num">{d.queries_blocked.toLocaleString()}</td>
             <td>{fmtLastSeen(d.last_seen)}</td>
@@ -374,7 +340,7 @@
                   {copy.devices.blockAction}
                 </button>
               {/if}
-              {#if d.name || d.group !== 'default'}
+              {#if d.name || d.notes || d.group !== 'default'}
                 <button
                   class="row-action subtle"
                   title={copy.devices.forgetHint}
@@ -389,61 +355,6 @@
       </tbody>
     </table>
   </div>
-{/if}
-
-{#if statsFor}
-  <section class="card activity">
-    <div class="activity-head">
-      <h2>
-        {deviceLabel(statsFor)}
-        <small>{copy.devices.activityTitle(statsHours)}</small>
-      </h2>
-      <div class="activity-controls">
-        <button class="row-action" class:active={statsHours === 24} on:click={() => showStats(statsFor!, 24)}>
-          24h
-        </button>
-        <button class="row-action" class:active={statsHours === 168} on:click={() => showStats(statsFor!, 168)}>
-          7d
-        </button>
-        <a class="row-action" href={docketHref({ clients: statsFor.ips ?? [statsFor.ip] })}>
-          {copy.devices.viewInDocket}
-        </a>
-        <button class="row-action subtle" on:click={() => (statsFor = null)}>✕</button>
-      </div>
-    </div>
-    {#if overview}
-      <p class="activity-totals">
-        {copy.devices.activityTotals(overview.total, overview.blocked)}
-      </p>
-      <div class="activity-grid">
-        <div>
-          <h3>{copy.devices.activityAllowed}</h3>
-          <BarList
-            empty={copy.devices.activityEmpty}
-            items={overview.top_allowed.map((x) => ({
-              label: x.qname,
-              count: x.count,
-              href: docketHref({ clients: statsFor?.ips ?? [statsFor?.ip ?? ''], qname: x.qname }),
-            }))}
-          />
-        </div>
-        <div>
-          <h3>{copy.devices.activityBlocked}</h3>
-          <BarList
-            tone="blocked"
-            empty={copy.devices.activityEmpty}
-            items={overview.top_blocked.map((x) => ({
-              label: x.qname,
-              count: x.count,
-              href: docketHref({ clients: statsFor?.ips ?? [statsFor?.ip ?? ''], qname: x.qname }),
-            }))}
-          />
-        </div>
-      </div>
-    {:else}
-      <p class="empty">{copy.devices.activityLoading}</p>
-    {/if}
-  </section>
 {/if}
 
 <section class="groups">
@@ -693,64 +604,14 @@
   }
 
   .count-link {
-    background: none;
-    border: none;
-    padding: 0;
-    font: inherit;
     font-variant-numeric: tabular-nums;
     color: inherit;
-    cursor: pointer;
+    text-decoration: none;
   }
 
   .count-link:hover {
     color: var(--accent);
     text-decoration: underline;
-  }
-
-  .activity {
-    margin-top: 1.5rem;
-  }
-
-  .activity-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-  }
-
-  .activity-controls {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-  }
-
-  .activity-controls a.row-action {
-    text-decoration: none;
-  }
-
-  .activity-controls .row-action.active {
-    color: var(--accent);
-    border-color: var(--accent);
-  }
-
-  .activity-totals {
-    color: var(--text-dim);
-    font-size: 0.82rem;
-    margin: 0.3rem 0 1rem;
-  }
-
-  .activity-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-    gap: 1.5rem;
-  }
-
-  .activity-grid h3 {
-    font-size: 0.82rem;
-    color: var(--text-dim);
-    margin: 0 0 0.6rem;
-    font-weight: 600;
   }
 
   .groups {

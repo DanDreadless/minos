@@ -7,6 +7,7 @@
   import { notify, notifyError, toasts } from './lib/toast';
   import Codex from './pages/Codex.svelte';
   import Dashboard from './pages/Dashboard.svelte';
+  import DevicePage from './pages/Device.svelte';
   import Devices from './pages/Devices.svelte';
   import Docket from './pages/Docket.svelte';
   import Judgments from './pages/Judgments.svelte';
@@ -107,6 +108,8 @@
         <Docket />
       {:else if $route === 'devices'}
         <Devices />
+      {:else if $route === 'device'}
+        <DevicePage />
       {:else if $route === 'lists'}
         <Codex />
       {:else if $route === 'domains'}

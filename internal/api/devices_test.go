@@ -238,3 +238,45 @@ func TestClientsListsSeenDevices(t *testing.T) {
 }
 
 func timeNowMinus(sec int) time.Time { return time.Now().Add(-time.Duration(sec) * time.Second) }
+
+// Notes ride the same upsert as name/group and persist in config.
+func TestClientNotesPersist(t *testing.T) {
+	s, store := newTestServer(t, "")
+	r := s.Router()
+	rec := doJSON(t, r, "PUT", "/api/clients/192.168.1.77",
+		`{"notes":"kid's tablet, lives in the kitchen"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("set notes: status = %d: %s", rec.Code, rec.Body)
+	}
+	cl := store.Get().Clients
+	if len(cl) != 1 || cl[0].Notes != "kid's tablet, lives in the kitchen" {
+		t.Fatalf("persisted clients = %+v, want one with notes", cl)
+	}
+	// Partial update: changing the group leaves notes alone.
+	rec = doJSON(t, r, "PUT", "/api/clients/192.168.1.77", `{"name":"tablet"}`, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("set name: status = %d: %s", rec.Code, rec.Body)
+	}
+	cl = store.Get().Clients
+	if cl[0].Notes == "" || cl[0].Name != "tablet" {
+		t.Errorf("after name update: %+v, want notes preserved", cl[0])
+	}
+	// The merged device view carries them through.
+	var devices []struct {
+		IP    string `json:"ip"`
+		Notes string `json:"notes"`
+	}
+	rec = doJSON(t, r, "GET", "/api/clients", "", nil)
+	if err := json.Unmarshal(rec.Body.Bytes(), &devices); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, d := range devices {
+		if d.IP == "192.168.1.77" && d.Notes != "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("device view missing notes: %+v", devices)
+	}
+}
