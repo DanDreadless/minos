@@ -499,6 +499,21 @@ This is security software; hold it to that standard.
   block, gets a `config.Validate` **warning, never an error** (the OS
   resolver on a production box is usually Minos itself, so the block would
   starve the upstream of its own address).
+- **Query-log read indexes** (fixed decisions): the log carries
+  `(client, ts)`, `(list, ts)`, and `(audit_list, ts)` composite indexes —
+  without them the device page and Docket list filter walk the whole time
+  index hunting for a sparse client/list (measured 1 s per page at 2M rows
+  on NVMe; tens of seconds on Pi/SD). Two traps, both measured: **SQLite
+  ignores a partial index when the query binds the filtered column as a
+  parameter** (it can't prove `list = ?` implies `WHERE list != ''` at
+  prepare time — the scan silently returns), so these are full indexes; and
+  an `(a = ? OR b = ?)` clause can't ride either index, so the list filter
+  compiles to two UNION ALL halves each walking its own index. ListNames
+  skip-walks distinct names via repeated `MIN(col) > ?` seeks — O(lists),
+  never O(rows); plain DISTINCT visits every index entry (146 ms at 2M).
+  Index migration (`migrateIndexes`) is announced in the log: the one-time
+  build on a large existing DB takes minutes on SD. Cost: ~+45% file size
+  at 2M rows — disk-only, bounded by retention; accepted.
 - **Audit-list semantics** (fixed decisions): audit mode is **two matchers,
   never a flag inside one** — `lists.Manager` owns a second audit engine
   (`AuditEngine()`), compiled from only `audit: true` sources, so the

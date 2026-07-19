@@ -249,6 +249,43 @@ func TestQueryHistoryFilters(t *testing.T) {
 	}
 }
 
+// The read-path indexes must exist on both fresh and migrated databases —
+// without them the device page and list filter degrade to full time-index
+// scans (seconds per page on an SD-card-sized log).
+func TestMigrateBuildsIndexes(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	for round := 0; round < 2; round++ { // fresh, then reopened (idempotent)
+		l, err := Open(Options{RingSize: 10, DBPath: dbPath, RetentionDays: 90})
+		if err != nil {
+			t.Fatal(err)
+		}
+		have := map[string]bool{}
+		rows, err := l.db.Query(`SELECT name FROM sqlite_master WHERE type = 'index'`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				t.Fatal(err)
+			}
+			have[name] = true
+		}
+		rows.Close()
+		if err := l.Close(); err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{
+			"idx_querylog_ts", "idx_querylog_client_ts",
+			"idx_querylog_list_ts", "idx_querylog_audit_ts",
+		} {
+			if !have[want] {
+				t.Errorf("round %d: index %s missing (have %v)", round, want, have)
+			}
+		}
+	}
+}
+
 func TestQueryHistoryListFilter(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	l, err := Open(Options{RingSize: 50, DBPath: dbPath, RetentionDays: 90})
