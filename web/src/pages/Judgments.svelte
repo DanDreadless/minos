@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api, type CheckResult, type CustomService, type LocalRecord, type Service } from '../lib/api';
+  import CustomServiceForm from '../lib/components/CustomServiceForm.svelte';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
@@ -59,6 +60,65 @@
     } catch (e) {
       notifyError(e);
       await load();
+    }
+  }
+
+  // --- custom-service management (pardon context: creations start allowed,
+  // and the allow-extra hosts are editable here) ---
+
+  let editingCustom: CustomService | null = null;
+  let manageOpen = false;
+  let showCustomForm = false;
+
+  function startEditCustom(c: CustomService): void {
+    editingCustom = c;
+    showCustomForm = true;
+  }
+
+  function closeCustomForm(): void {
+    editingCustom = null;
+    showCustomForm = false;
+  }
+
+  async function saveCustom(
+    e: CustomEvent<{ label: string; name: string; domains: string[]; allow_extra?: string[] }>,
+  ): Promise<void> {
+    const d = e.detail;
+    try {
+      if (editingCustom) {
+        const view = await api.updateCustomService(editingCustom.name, {
+          label: d.label,
+          domains: d.domains,
+          allow_extra: d.allow_extra ?? [],
+        });
+        customs = view.custom;
+        notify(`Custom service "${d.label || editingCustom.name}" updated.`);
+      } else {
+        // Created from the pardon context → starts allowed.
+        const view = await api.addCustomService({
+          label: d.label,
+          domains: d.domains,
+          allow_extra: d.allow_extra ?? [],
+          allowed: true,
+          ...(d.name ? { name: d.name } : {}),
+        });
+        customs = view.custom;
+        notify(`Custom service "${d.label || d.name}" created and pardoned.`);
+      }
+      closeCustomForm();
+    } catch (err) {
+      notifyError(err);
+    }
+  }
+
+  async function removeCustom(c: CustomService): Promise<void> {
+    if (!window.confirm(copy.lists.customConfirmDelete(c.label || c.name))) return;
+    try {
+      const view = await api.deleteCustomService(c.name);
+      customs = view.custom;
+      if (editingCustom?.name === c.name) closeCustomForm();
+    } catch (e) {
+      notifyError(e);
     }
   }
 
@@ -202,6 +262,49 @@
       </label>
     {/each}
   </div>
+  <details class="custom-manage" bind:open={manageOpen}>
+    <summary>
+      {copy.lists.customManage}
+      {#if customs.length}
+        <span class="count">({customs.length})</span>
+      {/if}
+      <small>{copy.lists.customManagePardonHint}</small>
+    </summary>
+    {#if customs.length}
+      <ul class="custom-list">
+        {#each customs as c (c.name)}
+          <li>
+            <span class="custom-name">{c.label || c.name}</span>
+            <span class="custom-domains" title={c.domains.join(', ')}>
+              {copy.lists.serviceDomains(c.domains.length)}
+            </span>
+            <button class="row-action" on:click={() => startEditCustom(c)}>
+              {copy.lists.customEdit}
+            </button>
+            <button class="row-action danger" on:click={() => removeCustom(c)}>Remove</button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    {#if showCustomForm}
+      {#if editingCustom}
+        <p class="note editing">
+          {copy.lists.customEditing(editingCustom.label || editingCustom.name)}
+        </p>
+      {/if}
+      <CustomServiceForm
+        editing={editingCustom}
+        showAllowExtra
+        on:save={saveCustom}
+        on:cancel={closeCustomForm}
+      />
+    {:else}
+      <button class="row-action add-custom" on:click={() => (showCustomForm = true)}>
+        + {copy.lists.customAdd}
+      </button>
+    {/if}
+    <p class="note">{copy.lists.customSharedNote}</p>
+  </details>
   <p class="note">
     {copy.domains.servicePardonsNote}
     <a href="#/devices">{copy.domains.servicePardonsNoteLink}</a>
@@ -394,6 +497,66 @@
     border-radius: 999px;
     padding: 0 0.4rem;
     cursor: help;
+  }
+
+  .custom-manage {
+    margin-top: 1rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.8rem;
+  }
+
+  .custom-manage summary {
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 0.82rem;
+  }
+
+  .custom-manage summary .count {
+    color: var(--accent);
+  }
+
+  .custom-manage summary small {
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .custom-list {
+    list-style: none;
+    margin: 0.7rem 0 0;
+    padding: 0;
+    max-width: 34rem;
+  }
+
+  .custom-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+
+  .custom-list li:last-child {
+    border-bottom: none;
+  }
+
+  .custom-name {
+    font-weight: 600;
+  }
+
+  .custom-domains {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    flex: 1;
+    cursor: help;
+  }
+
+  .add-custom {
+    margin-top: 0.7rem;
+  }
+
+  .editing {
+    color: var(--accent);
   }
 
   .local-add {
