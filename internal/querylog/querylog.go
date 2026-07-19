@@ -404,6 +404,10 @@ type HistoryFilter struct {
 	// WouldBlock restricts to entries an audit-mode list flagged
 	// ("would block"): allowed queries carrying an audit attribution.
 	WouldBlock bool
+	// List restricts to entries attributed to this exact list name —
+	// enforcing (blocked, or allowed via a pardon list) or audit
+	// ("would block"). Matches the Docket's List column semantics.
+	List string
 }
 
 // QueryHistory returns judged queries newest-first, older than `before`, that
@@ -444,6 +448,10 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 	}
 	if f.WouldBlock {
 		where = append(where, "audit_list != ''")
+	}
+	if f.List != "" {
+		where = append(where, "(list = ? OR audit_list = ?)")
+		args = append(args, f.List, f.List)
 	}
 	args = append(args, limit)
 	query := `SELECT ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms, audit_list, audit_rule

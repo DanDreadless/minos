@@ -56,6 +56,8 @@ export const copy = {
     filterBlocked: 'Condemned only',
     filterAllowed: 'Passed only',
     filterWouldBlock: 'Would block only',
+    filterListAll: 'All lists',
+    filterListTitle: 'show only queries this list matched',
     wouldBlockBadge: 'would block',
     wouldBlockTitle: (list: string, rule: string) =>
       `An audit-mode list would have condemned this: "${rule}" in ${list}. Not enforced.`,
@@ -121,6 +123,7 @@ export const copy = {
     auditBadge: 'audit',
     auditBadgeTitle: 'Logged as "would block", never enforced.',
     blocksHeader: 'Blocked (7d)',
+    blocksLinkTitle: 'view these queries in the Docket',
     noBlocks: 'no blocks this week',
     noBlocksTitle:
       'No queries matched this list in the last 7 days. It may still be a quiet safety net — security lists often are.',

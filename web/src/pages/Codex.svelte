@@ -3,6 +3,7 @@
   import { api, type ListStats, type ListStatus, type Service } from '../lib/api';
   import { blocklistPresets, blocklistTiers, type BlocklistPreset } from '../lib/blocklists';
   import { copy } from '../lib/copy';
+  import { docketHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
   let lists: ListStatus[] = [];
@@ -232,7 +233,13 @@
                 <span class="quiet" title={copy.lists.allowStatTitle}>—</span>
               {:else if listStats}
                 {#if blocksByList.get(l.name)}
-                  {blocksByList.get(l.name)?.toLocaleString()}
+                  <a
+                    class="count-link"
+                    href={docketHref({ list: l.name })}
+                    title={copy.lists.blocksLinkTitle}
+                  >
+                    {blocksByList.get(l.name)?.toLocaleString()}
+                  </a>
                 {:else}
                   <span class="quiet" title={copy.lists.noBlocksTitle}>{copy.lists.noBlocks}</span>
                 {/if}
@@ -259,7 +266,9 @@
   <p class="builtin">
     {copy.lists.builtinStatsTitle}
     {#each builtinStats as s, i (s.list)}{i > 0 ? ' · ' : ' '}{builtinLabel(s.list)}:
-      {s.count.toLocaleString()}{/each}
+      <a class="count-link" href={docketHref({ list: s.list })} title={copy.lists.blocksLinkTitle}
+        >{s.count.toLocaleString()}</a
+      >{/each}
   </p>
 {/if}
 
@@ -368,6 +377,16 @@
 
   .err {
     color: var(--blocked);
+  }
+
+  .count-link {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .count-link:hover {
+    color: var(--accent);
+    text-decoration: underline;
   }
 
   .quiet {

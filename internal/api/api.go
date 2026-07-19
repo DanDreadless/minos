@@ -90,6 +90,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/update", s.handleUpdate)
 		r.Get("/querylog", s.handleQueryLog)
 		r.Get("/querylog/history", s.handleQueryLogHistory)
+		r.Get("/querylog/lists", s.handleQueryLogLists)
 		r.Get("/querylog/stream", s.handleQueryLogStream)
 		r.Get("/stats", s.handleStats)
 		r.Get("/stats/client", s.handleClientStats)
@@ -253,7 +254,7 @@ func (s *Server) handleQueryLogHistory(w http.ResponseWriter, r *http.Request) {
 	if verdict == "all" {
 		verdict = ""
 	}
-	filter := querylog.HistoryFilter{Search: q.Get("q"), Verdict: verdict}
+	filter := querylog.HistoryFilter{Search: q.Get("q"), Verdict: verdict, List: q.Get("list")}
 	// would_block narrows to entries an audit-mode list flagged.
 	switch v := q.Get("would_block"); v {
 	case "", "false":
@@ -284,6 +285,30 @@ func (s *Server) handleQueryLogHistory(w http.ResponseWriter, r *http.Request) {
 		entries = []querylog.Entry{}
 	}
 	writeJSON(w, http.StatusOK, entries)
+}
+
+// handleQueryLogLists serves the distinct list names attributed in the
+// window (enforcing and audit), for the Docket's list-filter dropdown.
+func (s *Server) handleQueryLogLists(w http.ResponseWriter, r *http.Request) {
+	hours := 168
+	if v := r.URL.Query().Get("hours"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 2160 {
+			writeError(w, http.StatusBadRequest, "hours must be 1-2160")
+			return
+		}
+		hours = n
+	}
+	since := time.Now().Add(-time.Duration(hours) * time.Hour)
+	names, err := s.qlog.ListNames(r.Context(), since)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if names == nil {
+		names = []string{}
+	}
+	writeJSON(w, http.StatusOK, names)
 }
 
 func (s *Server) handleQueryLogStream(w http.ResponseWriter, r *http.Request) {

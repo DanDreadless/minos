@@ -236,6 +236,67 @@ func TestBlocksByListFromSQLite(t *testing.T) {
 	assertBlocksByList(t, reopened)
 }
 
+// seedListNames covers all three attribution shapes: a condemning list, a
+// pardoning list on an allowed entry, and an audit ("would block") mark.
+func seedListNames(t *testing.T, l *Log) {
+	t.Helper()
+	now := time.Now()
+	l.Record(Entry{Time: now.Add(-30 * time.Minute), Client: "10.0.0.1", QName: "ads.example.com", Verdict: VerdictBlocked, List: "hagezi"})
+	l.Record(Entry{Time: now.Add(-20 * time.Minute), Client: "10.0.0.1", QName: "cdn.example.com", Verdict: VerdictAllowed, List: "service:netflix"})
+	l.Record(Entry{Time: now.Add(-10 * time.Minute), Client: "10.0.0.1", QName: "maybe.example.com", Verdict: VerdictAllowed, AuditList: "strict-audit"})
+	l.Record(Entry{Time: now.Add(-5 * time.Minute), Client: "10.0.0.1", QName: "plain.example.com", Verdict: VerdictAllowed})
+	drain(t, l, 4)
+}
+
+func assertListNames(t *testing.T, l *Log) {
+	t.Helper()
+	got, err := l.ListNames(t.Context(), time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"hagezi", "service:netflix", "strict-audit"} // sorted, deduped, no ""
+	if len(got) != len(want) {
+		t.Fatalf("ListNames = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("ListNames[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	// Outside the window: nothing.
+	if names, err := l.ListNames(t.Context(), time.Now().Add(time.Minute)); err != nil || len(names) != 0 {
+		t.Errorf("ListNames(future window) = %v (err %v), want empty", names, err)
+	}
+}
+
+func TestListNamesFromRing(t *testing.T) {
+	l, err := Open(Options{RingSize: 100, Ephemeral: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	seedListNames(t, l)
+	assertListNames(t, l)
+}
+
+func TestListNamesFromSQLite(t *testing.T) {
+	path := t.TempDir() + "/q.db"
+	l, err := Open(Options{RingSize: 100, DBPath: path, RetentionDays: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedListNames(t, l)
+	if err := l.Close(); err != nil { // Close flushes the batch to SQLite
+		t.Fatal(err)
+	}
+	reopened, err := Open(Options{RingSize: 100, DBPath: path, RetentionDays: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	assertListNames(t, reopened)
+}
+
 func TestResizePreservesNewest(t *testing.T) {
 	l, err := Open(Options{RingSize: 10, Ephemeral: true})
 	if err != nil {
