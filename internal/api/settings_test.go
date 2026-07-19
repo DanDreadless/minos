@@ -356,8 +356,8 @@ func TestStatsEndpoint(t *testing.T) {
 		t.Error("top lists must be [] not null")
 	}
 
-	if rec := doJSON(t, r, "GET", "/api/stats?hours=999", "", nil); rec.Code != http.StatusBadRequest {
-		t.Errorf("hours=999: status = %d, want 400", rec.Code)
+	if rec := doJSON(t, r, "GET", "/api/stats?hours=9999", "", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("hours=9999: status = %d, want 400", rec.Code)
 	}
 }
 
@@ -401,8 +401,8 @@ func TestClientStatsEndpoint(t *testing.T) {
 	if rec := doJSON(t, r, "GET", "/api/stats/client", "", nil); rec.Code != http.StatusBadRequest {
 		t.Errorf("missing client: status = %d, want 400", rec.Code)
 	}
-	if rec := doJSON(t, r, "GET", "/api/stats/client?client=10.0.0.9&hours=999", "", nil); rec.Code != http.StatusBadRequest {
-		t.Errorf("hours=999: status = %d, want 400", rec.Code)
+	if rec := doJSON(t, r, "GET", "/api/stats/client?client=10.0.0.9&hours=9999", "", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("hours=9999: status = %d, want 400", rec.Code)
 	}
 }
 
@@ -440,7 +440,7 @@ func TestListStatsEndpoint(t *testing.T) {
 		t.Errorf("lists = %+v, want hagezi x2 only (allowed attribution excluded)", got.Lists)
 	}
 
-	if rec := doJSON(t, r, "GET", "/api/stats/lists?hours=999", "", nil); rec.Code != http.StatusBadRequest {
-		t.Errorf("hours=999: status = %d, want 400", rec.Code)
+	if rec := doJSON(t, r, "GET", "/api/stats/lists?hours=9999", "", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("hours=9999: status = %d, want 400", rec.Code)
 	}
 }

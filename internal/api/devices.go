@@ -36,6 +36,7 @@ type clientUpdate struct {
 	MAC     *string `json:"mac"`
 	Group   *string `json:"group"`
 	Blocked *bool   `json:"blocked"`
+	Notes   *string `json:"notes"`
 	// IP is a last-known-address hint used only when creating a MAC-keyed
 	// assignment for a device that isn't currently in the ARP table, so the
 	// stored Client still carries a valid IP (config validation requires one).
@@ -153,6 +154,9 @@ func applyClientUpdate(cl *config.Client, upd clientUpdate) {
 	}
 	if upd.Blocked != nil {
 		cl.Blocked = *upd.Blocked
+	}
+	if upd.Notes != nil {
+		cl.Notes = *upd.Notes
 	}
 }
 

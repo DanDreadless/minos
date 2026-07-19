@@ -187,6 +187,7 @@ export interface Device {
   model?: string; // discovered self-description (mDNS/UPnP)
   hint?: string; // OS/type guess (traffic patterns, DHCP fingerprint)
   name?: string;
+  notes?: string; // free-form user text, persisted with the assignment
   group: string;
   blocked: boolean;
   seen: boolean;
@@ -408,7 +409,14 @@ export const api = {
   // only when creating a MAC-keyed assignment for a device that's offline.
   updateClient: (
     key: string,
-    upd: { name?: string; mac?: string; group?: string; blocked?: boolean; ip?: string },
+    upd: {
+      name?: string;
+      mac?: string;
+      group?: string;
+      blocked?: boolean;
+      notes?: string;
+      ip?: string;
+    },
   ) => request<Device[]>('PUT', `/api/clients/${encodeURIComponent(key)}`, upd),
   deleteClient: (key: string) =>
     request<Device[]>('DELETE', `/api/clients/${encodeURIComponent(key)}`),

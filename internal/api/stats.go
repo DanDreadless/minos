@@ -24,8 +24,8 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	hours := 24
 	if v := r.URL.Query().Get("hours"); v != "" {
 		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > 168 {
-			writeError(w, http.StatusBadRequest, "hours must be 1-168")
+		if err != nil || n < 1 || n > 2160 {
+			writeError(w, http.StatusBadRequest, "hours must be 1-2160")
 			return
 		}
 		hours = n
@@ -34,6 +34,9 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	bucket := 10 * time.Minute
 	if hours > 24 {
 		bucket = time.Hour
+	}
+	if hours > 168 {
+		bucket = 24 * time.Hour // month-scale windows chart per day
 	}
 	ctx := r.Context()
 	timeline, err := s.qlog.Timeline(ctx, since, bucket)
@@ -87,8 +90,8 @@ func (s *Server) handleClientStats(w http.ResponseWriter, r *http.Request) {
 	hours := 24
 	if v := q.Get("hours"); v != "" {
 		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > 168 {
-			writeError(w, http.StatusBadRequest, "hours must be 1-168")
+		if err != nil || n < 1 || n > 2160 {
+			writeError(w, http.StatusBadRequest, "hours must be 1-2160")
 			return
 		}
 		hours = n
@@ -112,8 +115,8 @@ func (s *Server) handleListStats(w http.ResponseWriter, r *http.Request) {
 	hours := 168
 	if v := r.URL.Query().Get("hours"); v != "" {
 		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > 168 {
-			writeError(w, http.StatusBadRequest, "hours must be 1-168")
+		if err != nil || n < 1 || n > 2160 {
+			writeError(w, http.StatusBadRequest, "hours must be 1-2160")
 			return
 		}
 		hours = n

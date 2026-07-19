@@ -24,7 +24,11 @@
   <ul>
     {#each items as item (item.key)}
       <li>
-        <a href={hrefFor[item.key]} class:active={$route === item.key} title={item.hint}>
+        <a
+          href={hrefFor[item.key]}
+          class:active={$route === item.key || ($route === 'device' && item.key === 'devices')}
+          title={item.hint}
+        >
           <span class="label">{item.label}</span>
           <span class="hint">{item.hint}</span>
         </a>

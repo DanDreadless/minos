@@ -25,6 +25,9 @@ At or beyond parity with the field:
   *(shipped)*
 - **Custom services** — define your own named domain bundle and block or
   pardon it like any catalog service, globally or per group *(shipped)*
+- **Device pages** — a detail page per physical device: identity, every
+  IP it has held, persistent notes, activity windows up to 90 days, and
+  its full retained query history across all its addresses *(shipped)*
 - **Migration importer** — `minos import pihole|adguard` carries over
   blocklists, allow/deny rules, local records, blocked services *(shipped)*
 - **Prometheus metrics** — `/metrics` with query, cache, per-upstream, and

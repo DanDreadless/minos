@@ -248,14 +248,43 @@ export const copy = {
     forgetHint: 'remove the saved label/group for this device',
     viewInDocket: 'View this device’s queries in the Docket',
     activityHint: 'show what this device queried',
-    activityTitle: (hours: number) =>
-      hours >= 168 ? 'activity, last 7 days' : `activity, last ${hours} hours`,
     activityTotals: (total: number, blocked: number) =>
       `${total.toLocaleString()} queries, ${blocked.toLocaleString()} blocked`,
     activityAllowed: 'Top allowed domains',
     activityBlocked: 'Top blocked domains',
     activityEmpty: 'Nothing in this window.',
     activityLoading: 'Loading…',
+    openDevice: 'Open this device’s page',
+  },
+
+  device: {
+    notFound: 'No device with this address has been seen.',
+    backToList: 'All devices',
+    identityTitle: 'Identity',
+    ipsLabel: 'Addresses',
+    primaryTag: 'current',
+    macLabel: 'MAC',
+    vendorLabel: 'Vendor',
+    modelLabel: 'Model',
+    hostnameLabel: 'Hostname',
+    hintLabel: 'Guess',
+    firstSeenLabel: 'First seen',
+    lastSeenLabel: 'Last seen',
+    queriesLabel: 'Queries',
+    notesTitle: 'Notes',
+    notesPlaceholder: 'Anything worth remembering about this device — owner, room, model…',
+    notesSaved: 'Notes saved.',
+    activityWindow: (hours: number): string => {
+      if (hours >= 2160) return 'activity, last 90 days';
+      if (hours >= 720) return 'activity, last 30 days';
+      if (hours >= 168) return 'activity, last 7 days';
+      return `activity, last ${hours} hours`;
+    },
+    historyTitle: 'Query history',
+    historyHint: 'the full retained log for this device, every address included',
+    historyEmpty: 'No persisted queries for this device.',
+    loadOlder: 'Load older',
+    loading: 'Loading…',
   },
 
   settings: {

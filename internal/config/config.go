@@ -276,6 +276,10 @@ type Client struct {
 	Group string `yaml:"group,omitempty" json:"group,omitempty"`
 	// Blocked refuses all DNS from this device, overriding any group.
 	Blocked bool `yaml:"blocked,omitempty" json:"blocked"`
+	// Notes is free-form user text about the device (location, owner,
+	// model — whatever is worth remembering). Persisted in config; shown
+	// on the device page. An older binary's tolerant loader drops it.
+	Notes string `yaml:"notes,omitempty" json:"notes,omitempty"`
 }
 
 // ListSource is one remote list subscription. Whether its entries block or
@@ -774,6 +778,9 @@ func (c *Config) Validate() error {
 		}
 		if cl.Group != "" && cl.Group != "default" && !groupNames[cl.Group] {
 			return fmt.Errorf("clients[%d].group: no group named %q", i, cl.Group)
+		}
+		if len(cl.Notes) > 4096 {
+			return fmt.Errorf("clients[%d].notes: must be at most 4096 characters", i)
 		}
 	}
 	listNames := make(map[string]bool, len(c.Lists.Sources)+len(c.Lists.AllowSources))

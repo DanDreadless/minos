@@ -382,6 +382,15 @@ This is security software; hold it to that standard.
   `Device.PrivateMAC` and the UI shows "Private address" instead of a blank
   cell. `.gitattributes` pins `*.bin -text` so autocrlf can't mangle the
   blob. Still roadmapped: DHCP-lease ingestion.
+- **Device-page semantics** (fixed decisions): the detail page keys on
+  `#/device/<mac-else-ip>` (MAC keeps the URL stable across leases); its
+  query history is just `querylog/history?client=<ips[] joined>` — the
+  existing exact-IN filter spans the full retention, no new plumbing. The
+  stats `hours` caps are 2160 (90 days) with day-sized timeline buckets
+  past 168 h. `Client.Notes` (≤4096 chars) is the persistent user field;
+  an old binary's tolerant load drops it (and a subsequent old-binary save
+  loses it — `.bak` recovers). The Devices list's inline activity panel
+  moved to the device page; don't resurrect it.
 - **Service pardons semantics** (fixed decisions): a pardoned service
   compiles `services.AllowDomains(name)` as `AddAllow("service:"+name, …)` —
   the deny bundle plus curated `allowExtra` playback/sign-in hosts, so

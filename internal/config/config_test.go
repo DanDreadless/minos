@@ -482,3 +482,15 @@ func TestCustomServicesStayOutOfCatalogKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateClientNotes(t *testing.T) {
+	c := Default()
+	c.Clients = []Client{{IP: "192.168.1.10", Notes: strings.Repeat("x", 4096)}}
+	if err := c.Validate(); err != nil {
+		t.Errorf("4096-char notes should validate: %v", err)
+	}
+	c.Clients[0].Notes = strings.Repeat("x", 4097)
+	if err := c.Validate(); err == nil {
+		t.Error("4097-char notes should fail validation")
+	}
+}
