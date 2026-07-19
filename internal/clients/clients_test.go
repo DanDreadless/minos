@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"minos/internal/config"
+	"minos/internal/services"
 )
 
 func testConfig() *config.Config {
@@ -217,6 +218,42 @@ func TestGroupAllowedServices(t *testing.T) {
 	res := kids.Overlay.Match("beacon.netflix.com")
 	if res.Blocked || res.Rule == "" || res.List != "service:netflix" {
 		t.Errorf("beacon.netflix.com = %+v, want allow verdict from service:netflix", res)
+	}
+}
+
+// TestGroupCustomServices proves group-selected custom services build the
+// overlay like catalog ones: blocks and pardons resolve against the config
+// definitions, and a dangling name (healed config) is skipped, not fatal.
+func TestGroupCustomServices(t *testing.T) {
+	cfg := testConfig()
+	cfg.Blocking.CustomServices = []services.Custom{
+		{Name: "my-game", Domains: []string{"mygame.example"}},
+		{Name: "my-tv", Domains: []string{"mytv.example"}, AllowExtra: []string{"cdn.mytv.example"}},
+	}
+	cfg.Groups[0].CustomServices = []string{"my-game"}
+	cfg.Groups[0].AllowedCustomServices = []string{"my-tv"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry()
+	r.ApplyConfig(cfg)
+
+	kids := r.PolicyFor("10.0.0.10")
+	if kids == nil || kids.Overlay == nil {
+		t.Fatal("kids policy missing overlay (custom services alone must build one)")
+	}
+	if res := kids.Overlay.Match("play.mygame.example"); !res.Blocked || res.List != "service:my-game" {
+		t.Errorf("play.mygame.example = %+v, want blocked by service:my-game", res)
+	}
+	res := kids.Overlay.Match("cdn.mytv.example")
+	if res.Blocked || res.Rule == "" || res.List != "service:my-tv" {
+		t.Errorf("cdn.mytv.example = %+v, want allow verdict from service:my-tv extras", res)
+	}
+	// A dangling reference (post-heal config) must not panic the rebuild.
+	cfg.Groups[0].CustomServices = []string{"ghost"}
+	r.ApplyConfig(cfg)
+	if p := r.PolicyFor("10.0.0.10"); p == nil {
+		t.Fatal("policy vanished on dangling custom-service name")
 	}
 }
 

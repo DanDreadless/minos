@@ -258,7 +258,8 @@ func (r *Registry) rebuildPolicies(now time.Time) {
 			p.SafeSearch = g.SafeSearch
 		}
 		if g.Mode == ModeFilter && (len(g.Allowlist) > 0 || len(g.Denylist) > 0 ||
-			len(g.Services) > 0 || len(g.AllowedServices) > 0) {
+			len(g.Services) > 0 || len(g.AllowedServices) > 0 ||
+			len(g.CustomServices) > 0 || len(g.AllowedCustomServices) > 0) {
 			b := filter.NewBuilder()
 			list := "group:" + g.Name
 			for _, d := range g.Allowlist {
@@ -279,6 +280,24 @@ func (r *Registry) rebuildPolicies(now time.Time) {
 			for _, name := range g.AllowedServices {
 				for _, d := range services.AllowDomains(name) {
 					b.AddAllow("service:"+name, d)
+				}
+			}
+			// Group-selected custom services resolve against the config
+			// definitions. A nil lookup is skipped defensively: validation
+			// forbids dangling names, but a hand-edited config that the
+			// tolerant loader healed must not panic a rebuild.
+			for _, name := range g.CustomServices {
+				if cs := services.FindCustom(cfg.Blocking.CustomServices, name); cs != nil {
+					for _, d := range cs.Domains {
+						b.AddDeny("service:"+name, d)
+					}
+				}
+			}
+			for _, name := range g.AllowedCustomServices {
+				if cs := services.FindCustom(cfg.Blocking.CustomServices, name); cs != nil {
+					for _, d := range services.CustomAllowDomains(cs) {
+						b.AddAllow("service:"+name, d)
+					}
 				}
 			}
 			p.Overlay = b.Build()

@@ -195,7 +195,12 @@ type groupBody struct {
 	Denylist        *[]string `json:"denylist"`
 	Services        *[]string `json:"services"`
 	AllowedServices *[]string `json:"allowed_services"`
-	SafeSearch      *bool     `json:"safe_search"`
+	// Custom-service selections ride separate fields end to end (API and
+	// YAML): mixing them into Services would put custom names in a key an
+	// older binary validates against its compiled-in catalog.
+	CustomServices        *[]string `json:"custom_services"`
+	AllowedCustomServices *[]string `json:"allowed_custom_services"`
+	SafeSearch            *bool     `json:"safe_search"`
 	// Schedule distinguishes three states: absent (untouched), JSON null
 	// (clear the schedule), or an object (set it).
 	Schedule json.RawMessage `json:"schedule"`
@@ -243,6 +248,12 @@ func (s *Server) handleAddGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.AllowedServices != nil {
 		g.AllowedServices = *body.AllowedServices
+	}
+	if body.CustomServices != nil {
+		g.CustomServices = *body.CustomServices
+	}
+	if body.AllowedCustomServices != nil {
+		g.AllowedCustomServices = *body.AllowedCustomServices
 	}
 	if body.SafeSearch != nil {
 		g.SafeSearch = *body.SafeSearch
@@ -294,6 +305,12 @@ func (s *Server) handleUpdateGroup(w http.ResponseWriter, r *http.Request) {
 			}
 			if body.AllowedServices != nil {
 				g.AllowedServices = *body.AllowedServices
+			}
+			if body.CustomServices != nil {
+				g.CustomServices = *body.CustomServices
+			}
+			if body.AllowedCustomServices != nil {
+				g.AllowedCustomServices = *body.AllowedCustomServices
 			}
 			if body.SafeSearch != nil {
 				g.SafeSearch = *body.SafeSearch

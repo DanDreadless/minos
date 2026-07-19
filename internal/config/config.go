@@ -171,6 +171,13 @@ type BlockingConfig struct {
 	// allowed. A service both blocked and allowed ends up allowed — allow
 	// wins at every label depth in the matcher.
 	AllowedServices []string `yaml:"allowed_services,omitempty"`
+	// CustomServices are user-defined service bundles. Their global
+	// block/allow toggles live inside each definition, and group selections
+	// live in the groups' own custom keys — never in Services or
+	// AllowedServices above, whose names an older binary validates against
+	// its compiled-in catalog. Keeping customs out of those keys is what
+	// lets a downgrade boot (the unknown keys are dropped whole).
+	CustomServices []services.Custom `yaml:"custom_services,omitempty"`
 	// SafeSearch rewrites search engines (and YouTube) to their
 	// enforced-safe variants for every device.
 	SafeSearch bool `yaml:"safe_search,omitempty"`
@@ -200,6 +207,14 @@ type Group struct {
 	// (filter mode only); like group allowlist entries, they beat global
 	// denies.
 	AllowedServices []string `yaml:"allowed_services,omitempty" json:"allowed_services"`
+	// CustomServices / AllowedCustomServices name blocking.custom_services
+	// definitions blocked or pardoned for this group's members (filter mode
+	// only). Deliberately separate keys from Services/AllowedServices: an
+	// older binary validates those against its compiled-in catalog, so a
+	// custom name there would brick a downgrade's boot; an unknown key is
+	// merely dropped.
+	CustomServices        []string `yaml:"custom_services,omitempty" json:"custom_services"`
+	AllowedCustomServices []string `yaml:"allowed_custom_services,omitempty" json:"allowed_custom_services"`
 	// SafeSearch enforces safe search for this group's members
 	// (filter mode only; global blocking.safe_search covers everyone).
 	SafeSearch bool `yaml:"safe_search,omitempty" json:"safe_search"`
@@ -454,6 +469,12 @@ func (c *Config) Clone() *Config {
 	out.Blocking.Denylist = append([]string(nil), c.Blocking.Denylist...)
 	out.Blocking.Services = append([]string(nil), c.Blocking.Services...)
 	out.Blocking.AllowedServices = append([]string(nil), c.Blocking.AllowedServices...)
+	out.Blocking.CustomServices = make([]services.Custom, len(c.Blocking.CustomServices))
+	for i, cs := range c.Blocking.CustomServices {
+		out.Blocking.CustomServices[i] = cs
+		out.Blocking.CustomServices[i].Domains = append([]string(nil), cs.Domains...)
+		out.Blocking.CustomServices[i].AllowExtra = append([]string(nil), cs.AllowExtra...)
+	}
 	out.Lists.Sources = append([]ListSource(nil), c.Lists.Sources...)
 	out.Lists.AllowSources = append([]ListSource(nil), c.Lists.AllowSources...)
 	out.Groups = make([]Group, len(c.Groups))
@@ -463,6 +484,8 @@ func (c *Config) Clone() *Config {
 		out.Groups[i].Denylist = append([]string(nil), g.Denylist...)
 		out.Groups[i].Services = append([]string(nil), g.Services...)
 		out.Groups[i].AllowedServices = append([]string(nil), g.AllowedServices...)
+		out.Groups[i].CustomServices = append([]string(nil), g.CustomServices...)
+		out.Groups[i].AllowedCustomServices = append([]string(nil), g.AllowedCustomServices...)
 		if g.Schedule != nil {
 			sch := *g.Schedule
 			sch.Days = append([]string(nil), g.Schedule.Days...)
@@ -637,6 +660,41 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("blocking.allowed_services[%d]: unknown service %q", i, s)
 		}
 	}
+	customNames := make(map[string]bool, len(c.Blocking.CustomServices))
+	for i, cs := range c.Blocking.CustomServices {
+		if !validSlug(cs.Name) {
+			return fmt.Errorf("blocking.custom_services[%d].name: %q must be a lowercase slug (a-z, 0-9, hyphens; max 40 chars)", i, cs.Name)
+		}
+		if services.Exists(cs.Name) {
+			return fmt.Errorf("blocking.custom_services[%d].name: %q collides with a built-in catalog service", i, cs.Name)
+		}
+		if customNames[cs.Name] {
+			return fmt.Errorf("blocking.custom_services[%d].name: duplicate custom service %q", i, cs.Name)
+		}
+		customNames[cs.Name] = true
+		if len(cs.Label) > 100 {
+			return fmt.Errorf("blocking.custom_services[%d].label: must be at most 100 characters", i)
+		}
+		if len(cs.Domains) == 0 {
+			return fmt.Errorf("blocking.custom_services[%d].domains: at least one domain is required", i)
+		}
+		if len(cs.Domains) > 200 {
+			return fmt.Errorf("blocking.custom_services[%d].domains: at most 200 domains, got %d", i, len(cs.Domains))
+		}
+		for j, d := range cs.Domains {
+			if !validDomain(d) {
+				return fmt.Errorf("blocking.custom_services[%d].domains[%d]: %q is not a valid domain", i, j, d)
+			}
+		}
+		if len(cs.AllowExtra) > 50 {
+			return fmt.Errorf("blocking.custom_services[%d].allow_extra: at most 50 domains, got %d", i, len(cs.AllowExtra))
+		}
+		for j, d := range cs.AllowExtra {
+			if !validDomain(d) {
+				return fmt.Errorf("blocking.custom_services[%d].allow_extra[%d]: %q is not a valid domain", i, j, d)
+			}
+		}
+	}
 	groupNames := make(map[string]bool, len(c.Groups))
 	for i, g := range c.Groups {
 		if g.Name == "" {
@@ -662,6 +720,16 @@ func (c *Config) Validate() error {
 		for j, s := range g.AllowedServices {
 			if !services.Exists(s) {
 				return fmt.Errorf("groups[%d].allowed_services[%d]: unknown service %q", i, j, s)
+			}
+		}
+		for j, s := range g.CustomServices {
+			if !customNames[s] {
+				return fmt.Errorf("groups[%d].custom_services[%d]: no custom service named %q", i, j, s)
+			}
+		}
+		for j, s := range g.AllowedCustomServices {
+			if !customNames[s] {
+				return fmt.Errorf("groups[%d].allowed_custom_services[%d]: no custom service named %q", i, j, s)
 			}
 		}
 		if sch := g.Schedule; sch != nil {
@@ -807,7 +875,8 @@ func validateUpstream(u Upstream) error {
 // passes the filter, but resolving a hostname upstream goes through the OS
 // resolver — usually Minos itself in production — so the block would starve
 // the upstream of its own address. Warn, never reject: the operator may
-// resolve it elsewhere.
+// resolve it elsewhere. Catalog domains only: a custom service covering an
+// upstream hostname gets no warning (curating that is the user's business).
 func (c *Config) encryptedDNSUpstreamWarnings() []string {
 	enabled := slices.Contains(c.Blocking.Services, "encrypted-dns")
 	for _, g := range c.Groups {
@@ -853,6 +922,25 @@ func (c *Config) encryptedDNSUpstreamWarnings() []string {
 		}
 	}
 	return out
+}
+
+// validSlug reports whether s is a lowercase slug: [a-z0-9] then up to 39
+// more of [a-z0-9-]. Custom-service names become YAML values, API path
+// segments, and "service:<name>" pseudo-list names, so they stay strict.
+func validSlug(s string) bool {
+	if len(s) == 0 || len(s) > 40 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= '0' && c <= '9':
+		case c == '-' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // validDomain reports whether s looks like a DNS name: labels of 1-63 bytes

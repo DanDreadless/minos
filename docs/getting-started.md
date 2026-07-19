@@ -532,6 +532,13 @@ blocking:
   denylist: []              # sentences: always blocked
   services: [onlyfans]      # curated service bundles, blocked for everyone
   allowed_services: [netflix]  # service bundles pardoned for everyone (allow beats deny)
+  custom_services:          # your own service bundles (see below)
+    - name: my-game         # lowercase slug; must not shadow a catalog name
+      label: My Game
+      domains: [mygame.example]
+      allow_extra: [login.mygame.example]  # pardoned only when allowed
+      blocked: true         # global block toggle (lives here, not in services:)
+      allowed: false        # global pardon toggle
   safe_search: false        # rewrite search engines to enforced-safe variants
 groups:                     # device policies (all optional)
   - name: kids
@@ -539,6 +546,8 @@ groups:                     # device policies (all optional)
     denylist: [tiktok.com]  # extra blocks for members only
     services: [snapchat]    # service bundles for members only
     allowed_services: []    # service bundles pardoned for members only
+    custom_services: []     # custom bundles blocked for members only
+    allowed_custom_services: []  # custom bundles pardoned for members only
     safe_search: true       # enforce safe search for members only
     schedule:               # optional: group active only in this window
       days: [sun, mon, tue, wed, thu]   # empty/omitted = every day

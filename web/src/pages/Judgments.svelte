@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type CheckResult, type LocalRecord, type Service } from '../lib/api';
+  import { api, type CheckResult, type CustomService, type LocalRecord, type Service } from '../lib/api';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
   let allowlist: string[] = [];
   let denylist: string[] = [];
   let catalog: Service[] = [];
+  let customs: CustomService[] = [];
   let allowedServices = new Set<string>();
   let newPardon = '';
   let newSentence = '';
@@ -30,6 +31,7 @@
       denylist = dl;
       localRecords = cfg.dns.local_records;
       catalog = svcs.catalog;
+      customs = svcs.custom;
       allowedServices = new Set(svcs.allowed);
     } catch (e) {
       notifyError(e);
@@ -43,6 +45,17 @@
     try {
       const view = await api.updateServices({ allowed: [...next] });
       allowedServices = new Set(view.allowed);
+    } catch (e) {
+      notifyError(e);
+      await load();
+    }
+  }
+
+  // Customs carry their global pardon flag on the definition itself.
+  async function togglePardonCustom(c: CustomService): Promise<void> {
+    try {
+      const view = await api.updateCustomService(c.name, { allowed: !c.allowed });
+      customs = view.custom;
     } catch (e) {
       notifyError(e);
       await load();
@@ -177,6 +190,15 @@
           on:change={() => togglePardonService(svc.name)}
         />
         {svc.label}
+      </label>
+    {/each}
+    {#each customs as c (c.name)}
+      <label class="service" title={copy.lists.serviceDomains(c.domains.length)}>
+        <input type="checkbox" checked={c.allowed} on:change={() => togglePardonCustom(c)} />
+        {c.label || c.name}
+        <span class="custom-badge" title={copy.lists.customBadgeTitle}>
+          {copy.lists.customBadge}
+        </span>
       </label>
     {/each}
   </div>
@@ -361,6 +383,17 @@
     cursor: pointer;
     font-size: 0.88rem;
     padding: 0.15rem 0;
+  }
+
+  .custom-badge {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 0.4rem;
+    cursor: help;
   }
 
   .local-add {
