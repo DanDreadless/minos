@@ -52,6 +52,8 @@ export const copy = {
     verdictBlocked: 'condemned', // API value: "blocked"
     verdictAllowed: 'passed', //    API value: "allowed"
     searchPlaceholder: 'Filter by domain or client…',
+    searchScopeHint:
+      'The search box matches domain and client names. To filter by blocklist, use the list dropdown instead — it is much faster too.',
     filterAll: 'All verdicts',
     filterBlocked: 'Condemned only',
     filterAllowed: 'Passed only',

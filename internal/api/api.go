@@ -280,6 +280,10 @@ func (s *Server) handleQueryLogHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	entries, err := s.qlog.QueryHistory(r.Context(), filter, limit, before)
+	if errors.Is(err, querylog.ErrSearchTimeout) {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
