@@ -116,8 +116,8 @@ type Device struct {
 	Hint string `json:"hint,omitempty"`
 	Name string `json:"name,omitempty"`
 	// Notes is the user's free-form text from the configured assignment.
-	Notes string `json:"notes,omitempty"`
-	Group string `json:"group"`
+	Notes     string     `json:"notes,omitempty"`
+	Group     string     `json:"group"`
 	Blocked   bool       `json:"blocked"`
 	Seen      bool       `json:"seen"`
 	Queries   uint64     `json:"queries"`
