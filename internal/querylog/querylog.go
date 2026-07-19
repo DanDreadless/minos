@@ -192,12 +192,12 @@ func migrate(db *sql.DB) error {
 // Docket's list filter, which otherwise walk the whole time index hunting
 // for a sparse client or list (seconds per page on SD).
 //
-// Deliberately NOT partial indexes (`WHERE list != ''`): the reads bind the
-// name as a parameter, and SQLite can only use a partial index when the
-// query's constraints provably imply the index predicate — a bound
-// parameter never does, so a partial index here is silently ignored and the
-// scan comes back. The empty-string entries cost some size; correctness of
-// the plan beats it.
+// Deliberately NOT partial indexes (with a WHERE excluding the empty
+// string): the reads bind the name as a parameter, and SQLite can only use
+// a partial index when the query's constraints provably imply the index
+// predicate — a bound parameter never does, so a partial index here is
+// silently ignored and the scan comes back. The empty-string entries cost
+// some size; correctness of the plan beats it.
 func migrateIndexes(db *sql.DB) error {
 	have := make(map[string]bool)
 	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'index'`)
