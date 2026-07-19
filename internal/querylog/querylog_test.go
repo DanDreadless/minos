@@ -3,7 +3,9 @@ package querylog
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -350,5 +352,80 @@ func TestEphemeralWritesNothing(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("ephemeral log returned history: %+v", got)
+	}
+}
+
+// A free-text search is an unindexable LIKE scan; when the caller's context
+// deadline expires mid-scan the query is interrupted and reported as the
+// user-facing search-timeout error, promptly — never a hung "Searching…".
+func TestSearchHonorsDeadline(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "big.db")
+	l, err := Open(Options{RingSize: 10, DBPath: dbPath, RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	// Bulk rows straight through the writer's connection (test-only) so the
+	// scan has something to chew on.
+	if _, err := l.db.Exec(`WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x < 300000)
+		INSERT INTO querylog (ts, client, qname, qtype, verdict)
+		SELECT x, '10.0.0.1', 'host' || x || '.example', 'A', 'allowed' FROM c`); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err = l.QueryHistory(ctx, HistoryFilter{Search: "zz-no-such-substring"}, 200, time.Time{})
+	elapsed := time.Since(start)
+	if err == nil {
+		// The scan may legitimately finish under the deadline on a fast
+		// machine; only a hang or a wrong error class is a failure.
+		return
+	}
+	if !errors.Is(err, ErrSearchTimeout) {
+		t.Fatalf("err = %v, want ErrSearchTimeout", err)
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("deadline took %s to enforce — the scan was not interrupted", elapsed)
+	}
+}
+
+// The would-block filter must ride the audit index: on a log with zero
+// audit entries it returns instantly instead of walking the time index.
+func TestWouldBlockUsesAuditIndex(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "wb.db")
+	l, err := Open(Options{RingSize: 10, DBPath: dbPath, RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	rows, err := l.db.Query(`EXPLAIN QUERY PLAN SELECT ts FROM querylog INDEXED BY idx_querylog_audit_ts
+		WHERE ts < ? AND audit_list > '' ORDER BY ts DESC LIMIT 200`, time.Now().UnixMilli())
+	if err != nil {
+		t.Fatalf("would-block shape rejected: %v", err)
+	}
+	defer rows.Close()
+	found := false
+	for rows.Next() {
+		var a, b, c int
+		var detail string
+		if err := rows.Scan(&a, &b, &c, &detail); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(detail, "idx_querylog_audit_ts") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("plan does not use idx_querylog_audit_ts")
+	}
+	// And the real filter still returns correct results (none here).
+	got, err := l.QueryHistory(context.Background(), HistoryFilter{WouldBlock: true}, 10, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Errorf("would-block on empty log = %d rows, want 0", len(got))
 	}
 }

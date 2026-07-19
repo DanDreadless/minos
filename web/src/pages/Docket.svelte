@@ -219,6 +219,9 @@
 
 {#if displayed.length === 0}
   <p class="empty">{historyLoading ? 'Searching…' : copy.docket.empty}</p>
+  {#if !historyLoading && search.trim() !== ''}
+    <p class="empty search-hint">{copy.docket.searchScopeHint}</p>
+  {/if}
 {:else}
   <div class="table-wrap">
     <table>
@@ -369,6 +372,11 @@
   .empty {
     color: var(--text-dim);
     font-style: italic;
+  }
+
+  .search-hint {
+    font-size: 0.8rem;
+    font-style: normal;
   }
 
   /* Fill the height main.fill hands us and scroll the rows internally, so

@@ -8,6 +8,7 @@ package querylog
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -43,7 +44,15 @@ const (
 	flushInterval = 30 * time.Second
 	flushBatch    = 500
 	subBuffer     = 256
+
+	// searchDeadline caps a free-text history search: an unindexable LIKE
+	// scan with no matches would otherwise read the entire table.
+	searchDeadline = 15 * time.Second
 )
+
+// ErrSearchTimeout is returned when a free-text search exceeds its deadline.
+var ErrSearchTimeout = errors.New(
+	"search took too long — try a narrower term, or use the list and device filters, which are indexed")
 
 // Options configures a Log.
 type Options struct {
@@ -215,6 +224,7 @@ func migrateIndexes(db *sql.DB) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	built := false
 	for _, idx := range []struct{ name, ddl string }{
 		{"idx_querylog_client_ts", `CREATE INDEX idx_querylog_client_ts ON querylog(client, ts)`},
 		{"idx_querylog_list_ts", `CREATE INDEX idx_querylog_list_ts ON querylog(list, ts)`},
@@ -229,6 +239,19 @@ func migrateIndexes(db *sql.DB) error {
 			return fmt.Errorf("build query log index %s: %w", idx.name, err)
 		}
 		slog.Info("query log index built", "index", idx.name, "took", time.Since(start).Round(time.Millisecond))
+		built = true
+	}
+	// Fresh indexes get planner statistics once (the query planner falls
+	// back to guesses without sqlite_stat1, which can flip a query onto the
+	// wrong index as the data grows); PRAGMA optimize in the daily prune
+	// keeps them current from then on.
+	if built {
+		slog.Info("analyzing query log (one-time)")
+		start := time.Now()
+		if _, err := db.Exec(`ANALYZE`); err != nil {
+			return fmt.Errorf("analyze query log: %w", err)
+		}
+		slog.Info("query log analyzed", "took", time.Since(start).Round(time.Millisecond))
 	}
 	return nil
 }
@@ -437,6 +460,11 @@ func (l *Log) prune() {
 	if _, err := l.db.Exec(`DELETE FROM querylog WHERE ts < ?`, cutoff); err != nil {
 		slog.Error("query log prune failed", "err", err)
 	}
+	// Refresh planner statistics on the daily cadence (SQLite's targeted,
+	// usually-no-op ANALYZE) so index choices stay right as the log grows.
+	if _, err := l.db.Exec(`PRAGMA optimize`); err != nil {
+		slog.Debug("query log optimize failed", "err", err)
+	}
 }
 
 // HistoryFilter narrows QueryHistory. Empty fields impose no constraint.
@@ -496,15 +524,26 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 		where = append(where, "client IN ("+strings.Join(ph, ",")+")")
 	}
 	if f.WouldBlock {
-		where = append(where, "audit_list != ''")
+		// `audit_list > ''` is identical to `!= ''` on a NOT NULL text column
+		// but is a range the (audit_list, ts) index can serve. Without it,
+		// a would-block filter on a log with few (or zero) audit entries
+		// walks the whole time index backwards looking for them — measured
+		// 3.5 s on a live Pi with none at all. The index scan touches only
+		// the audit-attributed rows; the sort is bounded by their count.
+		where = append(where, "audit_list > ''")
 	}
 	const cols = `ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms, audit_list, audit_rule`
 	var query string
-	if f.List == "" {
+	switch {
+	case f.List == "" && f.WouldBlock:
+		args = append(args, limit)
+		query = `SELECT ` + cols + ` FROM querylog INDEXED BY idx_querylog_audit_ts WHERE ` +
+			strings.Join(where, " AND ") + ` ORDER BY ts DESC LIMIT ?`
+	case f.List == "":
 		args = append(args, limit)
 		query = `SELECT ` + cols + ` FROM querylog WHERE ` + strings.Join(where, " AND ") +
 			` ORDER BY ts DESC LIMIT ?`
-	} else {
+	default:
 		// A naive `(list = ? OR audit_list = ?)` clause can't ride either
 		// composite index, degenerating to a backward time scan — seconds
 		// per page for a rarely matching list on an SD-card-sized log. Two
@@ -521,10 +560,19 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 		half := append(append([]any{}, args...), f.List, limit)
 		args = append(append(append([]any{}, half...), half...), limit)
 	}
+	// A free-text Search is a LIKE substring match no index can serve; with
+	// few or no matches it scans the whole table (many seconds on Pi/SD).
+	// Bound it so the UI gets a prompt, explicit error instead of an
+	// apparently-hung "Searching…" — the caller surfaces the message.
+	if f.Search != "" {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, searchDeadline)
+		defer cancel()
+	}
 
 	rows, err := l.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query history: %w", err)
+		return nil, historyErr(ctx, err)
 	}
 	defer rows.Close()
 	var out []Entry
@@ -539,7 +587,19 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 		e.Time = time.UnixMilli(ts)
 		out = append(out, e)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, historyErr(ctx, err)
+	}
+	return out, nil
+}
+
+// historyErr translates a deadline-driven interrupt into the user-facing
+// search-timeout error; anything else passes through wrapped.
+func historyErr(ctx context.Context, err error) error {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return ErrSearchTimeout
+	}
+	return fmt.Errorf("query history: %w", err)
 }
 
 // escapeLike escapes the SQL LIKE metacharacters so a search for "a_b" or
