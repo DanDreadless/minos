@@ -31,8 +31,12 @@ command -v curl >/dev/null || die "curl is required"
 command -v sha256sum >/dev/null || die "sha256sum is required"
 
 say "finding the latest release..."
+# No -m1 on the grep: an early exit closes the pipe while curl is still
+# writing the (ever-growing) release JSON, and curl then prints a spurious
+# "(23) Failure writing output" even though the tag was captured fine.
+# /releases/latest carries exactly one tag_name, so a full read is identical.
 TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" |
-  grep -m1 '"tag_name"' | cut -d'"' -f4)
+  grep '"tag_name"' | cut -d'"' -f4)
 [ -n "$TAG" ] || die "could not determine the latest release tag"
 VERSION="${TAG#v}"
 NAME="minos_${VERSION}_linux_${ARCH}"
