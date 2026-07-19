@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api, type CheckResult, type CustomService, type LocalRecord, type Service } from '../lib/api';
   import CustomServiceForm from '../lib/components/CustomServiceForm.svelte';
+  import ServiceSet from '../lib/components/ServiceSet.svelte';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
@@ -39,26 +40,40 @@
     }
   }
 
-  async function togglePardonService(name: string): Promise<void> {
-    const next = new Set(allowedServices);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
+  // The composed set: adding pardons a service, removing lifts the pardon —
+  // the view is the policy. Customs carry the pardon flag on the definition.
+  async function addPardonService(
+    e: CustomEvent<{ name: string; custom: boolean }>,
+  ): Promise<void> {
+    const { name, custom } = e.detail;
     try {
-      const view = await api.updateServices({ allowed: [...next] });
-      allowedServices = new Set(view.allowed);
-    } catch (e) {
-      notifyError(e);
+      if (custom) {
+        customs = (await api.updateCustomService(name, { allowed: true })).custom;
+      } else {
+        const view = await api.updateServices({ allowed: [...allowedServices, name] });
+        allowedServices = new Set(view.allowed);
+      }
+    } catch (err) {
+      notifyError(err);
       await load();
     }
   }
 
-  // Customs carry their global pardon flag on the definition itself.
-  async function togglePardonCustom(c: CustomService): Promise<void> {
+  async function removePardonService(
+    e: CustomEvent<{ name: string; custom: boolean }>,
+  ): Promise<void> {
+    const { name, custom } = e.detail;
     try {
-      const view = await api.updateCustomService(c.name, { allowed: !c.allowed });
-      customs = view.custom;
-    } catch (e) {
-      notifyError(e);
+      if (custom) {
+        customs = (await api.updateCustomService(name, { allowed: false })).custom;
+      } else {
+        const view = await api.updateServices({
+          allowed: [...allowedServices].filter((n) => n !== name),
+        });
+        allowedServices = new Set(view.allowed);
+      }
+    } catch (err) {
+      notifyError(err);
       await load();
     }
   }
@@ -241,27 +256,15 @@
 
 <section class="card service-pardons">
   <h2>{copy.domains.servicePardonsTitle} <small>{copy.domains.servicePardonsHint}</small></h2>
-  <div class="service-grid">
-    {#each catalog as svc (svc.name)}
-      <label class="service" title={copy.lists.serviceDomains(svc.domains.length)}>
-        <input
-          type="checkbox"
-          checked={allowedServices.has(svc.name)}
-          on:change={() => togglePardonService(svc.name)}
-        />
-        {svc.label}
-      </label>
-    {/each}
-    {#each customs as c (c.name)}
-      <label class="service" title={copy.lists.serviceDomains(c.domains.length)}>
-        <input type="checkbox" checked={c.allowed} on:change={() => togglePardonCustom(c)} />
-        {c.label || c.name}
-        <span class="custom-badge" title={copy.lists.customBadgeTitle}>
-          {copy.lists.customBadge}
-        </span>
-      </label>
-    {/each}
-  </div>
+  <ServiceSet
+    {catalog}
+    {customs}
+    selectedCatalog={[...allowedServices]}
+    selectedCustom={customs.filter((c) => c.allowed).map((c) => c.name)}
+    emptyText={copy.lists.servicePardonsEmpty}
+    on:add={addPardonService}
+    on:remove={removePardonService}
+  />
   <details class="custom-manage" bind:open={manageOpen}>
     <summary>
       {copy.lists.customManage}
@@ -471,32 +474,6 @@
 
   .service-pardons {
     margin-top: 1.25rem;
-  }
-
-  .service-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-    gap: 0.35rem 1rem;
-  }
-
-  .service {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    font-size: 0.88rem;
-    padding: 0.15rem 0;
-  }
-
-  .custom-badge {
-    font-size: 0.65rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 0 0.4rem;
-    cursor: help;
   }
 
   .custom-manage {

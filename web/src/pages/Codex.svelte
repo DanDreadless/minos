@@ -3,6 +3,7 @@
   import { api, type CustomService, type ListStats, type ListStatus, type Service } from '../lib/api';
   import { blocklistPresets, blocklistTiers, type BlocklistPreset } from '../lib/blocklists';
   import CustomServiceForm from '../lib/components/CustomServiceForm.svelte';
+  import ServiceSet from '../lib/components/ServiceSet.svelte';
   import { copy } from '../lib/copy';
   import { docketHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
@@ -61,14 +62,38 @@
     customs = view.custom;
   }
 
-  async function toggleService(name: string): Promise<void> {
-    const next = new Set(blockedServices);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
+  // The composed set: adding turns a service on, removing turns it off —
+  // the view is the policy, so nothing active is ever hidden.
+  async function addBlockedService(
+    e: CustomEvent<{ name: string; custom: boolean }>,
+  ): Promise<void> {
+    const { name, custom } = e.detail;
     try {
-      applyServicesView(await api.updateServices({ blocked: [...next] }));
-    } catch (e) {
-      notifyError(e);
+      if (custom) {
+        applyServicesView(await api.updateCustomService(name, { blocked: true }));
+      } else {
+        applyServicesView(await api.updateServices({ blocked: [...blockedServices, name] }));
+      }
+    } catch (err) {
+      notifyError(err);
+      await loadServices();
+    }
+  }
+
+  async function removeBlockedService(
+    e: CustomEvent<{ name: string; custom: boolean }>,
+  ): Promise<void> {
+    const { name, custom } = e.detail;
+    try {
+      if (custom) {
+        applyServicesView(await api.updateCustomService(name, { blocked: false }));
+      } else {
+        applyServicesView(
+          await api.updateServices({ blocked: [...blockedServices].filter((n) => n !== name) }),
+        );
+      }
+    } catch (err) {
+      notifyError(err);
       await loadServices();
     }
   }
@@ -80,15 +105,6 @@
   let editingCustom: CustomService | null = null;
   let manageOpen = false;
   let showCustomForm = false;
-
-  async function toggleCustomBlocked(c: CustomService): Promise<void> {
-    try {
-      applyServicesView(await api.updateCustomService(c.name, { blocked: !c.blocked }));
-    } catch (e) {
-      notifyError(e);
-      await loadServices();
-    }
-  }
 
   function startEditCustom(c: CustomService): void {
     editingCustom = c;
@@ -347,27 +363,15 @@
 
 <section class="card services">
   <h2>{copy.lists.servicesTitle} <small>{copy.lists.servicesHint}</small></h2>
-  <div class="service-grid">
-    {#each catalog as svc (svc.name)}
-      <label class="service" title={copy.lists.serviceDomains(svc.domains.length)}>
-        <input
-          type="checkbox"
-          checked={blockedServices.has(svc.name)}
-          on:change={() => toggleService(svc.name)}
-        />
-        {svc.label}
-      </label>
-    {/each}
-    {#each customs as c (c.name)}
-      <label class="service" title={copy.lists.serviceDomains(c.domains.length)}>
-        <input type="checkbox" checked={c.blocked} on:change={() => toggleCustomBlocked(c)} />
-        {c.label || c.name}
-        <span class="custom-badge" title={copy.lists.customBadgeTitle}>
-          {copy.lists.customBadge}
-        </span>
-      </label>
-    {/each}
-  </div>
+  <ServiceSet
+    {catalog}
+    {customs}
+    selectedCatalog={[...blockedServices]}
+    selectedCustom={customs.filter((c) => c.blocked).map((c) => c.name)}
+    emptyText={copy.lists.servicesEmpty}
+    on:add={addBlockedService}
+    on:remove={removeBlockedService}
+  />
   <details class="custom-manage" bind:open={manageOpen}>
     <summary>
       {copy.lists.customManage}
@@ -497,17 +501,6 @@
 
   .err {
     color: var(--blocked);
-  }
-
-  .custom-badge {
-    font-size: 0.65rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 0 0.4rem;
-    cursor: help;
   }
 
   .custom-manage {
@@ -690,21 +683,6 @@
   .preset-added {
     color: var(--allowed);
     font-size: 0.78rem;
-  }
-
-  .service-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-    gap: 0.35rem 1rem;
-  }
-
-  .service {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    font-size: 0.88rem;
-    padding: 0.15rem 0;
   }
 
   .note {
