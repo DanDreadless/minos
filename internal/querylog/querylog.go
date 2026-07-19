@@ -181,6 +181,55 @@ func migrate(db *sql.DB) error {
 			return fmt.Errorf("add query log column %s: %w", col, err)
 		}
 	}
+	return migrateIndexes(db)
+}
+
+// migrateIndexes builds indexes introduced after a database was first
+// created. Unlike ADD COLUMN, building an index on a large existing log is
+// NOT instant — minutes on a Pi reading a 90-day SD-card database — so it
+// happens once, is announced in the log, and every read that needs it is
+// fast forever after. The client/list indexes back the device page and the
+// Docket's list filter, which otherwise walk the whole time index hunting
+// for a sparse client or list (seconds per page on SD).
+//
+// Deliberately NOT partial indexes (with a WHERE excluding the empty
+// string): the reads bind the name as a parameter, and SQLite can only use
+// a partial index when the query's constraints provably imply the index
+// predicate — a bound parameter never does, so a partial index here is
+// silently ignored and the scan comes back. The empty-string entries cost
+// some size; correctness of the plan beats it.
+func migrateIndexes(db *sql.DB) error {
+	have := make(map[string]bool)
+	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'index'`)
+	if err != nil {
+		return fmt.Errorf("inspect query log indexes: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return fmt.Errorf("scan query log indexes: %w", err)
+		}
+		have[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, idx := range []struct{ name, ddl string }{
+		{"idx_querylog_client_ts", `CREATE INDEX idx_querylog_client_ts ON querylog(client, ts)`},
+		{"idx_querylog_list_ts", `CREATE INDEX idx_querylog_list_ts ON querylog(list, ts)`},
+		{"idx_querylog_audit_ts", `CREATE INDEX idx_querylog_audit_ts ON querylog(audit_list, ts)`},
+	} {
+		if have[idx.name] {
+			continue
+		}
+		slog.Info("building query log index (one-time; may take a while on a large log)", "index", idx.name)
+		start := time.Now()
+		if _, err := db.Exec(idx.ddl); err != nil {
+			return fmt.Errorf("build query log index %s: %w", idx.name, err)
+		}
+		slog.Info("query log index built", "index", idx.name, "took", time.Since(start).Round(time.Millisecond))
+	}
 	return nil
 }
 
@@ -449,13 +498,29 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 	if f.WouldBlock {
 		where = append(where, "audit_list != ''")
 	}
-	if f.List != "" {
-		where = append(where, "(list = ? OR audit_list = ?)")
-		args = append(args, f.List, f.List)
+	const cols = `ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms, audit_list, audit_rule`
+	var query string
+	if f.List == "" {
+		args = append(args, limit)
+		query = `SELECT ` + cols + ` FROM querylog WHERE ` + strings.Join(where, " AND ") +
+			` ORDER BY ts DESC LIMIT ?`
+	} else {
+		// A naive `(list = ? OR audit_list = ?)` clause can't ride either
+		// composite index, degenerating to a backward time scan — seconds
+		// per page for a rarely matching list on an SD-card-sized log. Two
+		// UNION ALL halves each walk their own (column, ts) index in order
+		// and stop at the limit; the outer sort merges at most 2×limit rows.
+		// Names never appear in both columns for one row (enforcing and
+		// audit sources share one name namespace), so ALL is safe.
+		base := strings.Join(where, " AND ")
+		sub := func(col string) string {
+			return `SELECT * FROM (SELECT ` + cols + ` FROM querylog WHERE ` + base +
+				` AND ` + col + ` = ? ORDER BY ts DESC LIMIT ?)`
+		}
+		query = sub("list") + ` UNION ALL ` + sub("audit_list") + ` ORDER BY ts DESC LIMIT ?`
+		half := append(append([]any{}, args...), f.List, limit)
+		args = append(append(append([]any{}, half...), half...), limit)
 	}
-	args = append(args, limit)
-	query := `SELECT ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms, audit_list, audit_rule
-		FROM querylog WHERE ` + strings.Join(where, " AND ") + ` ORDER BY ts DESC LIMIT ?`
 
 	rows, err := l.db.QueryContext(ctx, query, args...)
 	if err != nil {

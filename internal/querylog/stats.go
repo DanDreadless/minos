@@ -2,6 +2,8 @@ package querylog
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -204,25 +206,45 @@ func (l *Log) BlocksByList(ctx context.Context, since time.Time) ([]ListStat, er
 func (l *Log) ListNames(ctx context.Context, since time.Time) ([]string, error) {
 	const maxLists = 200
 	if l.db != nil {
-		rows, err := l.db.QueryContext(ctx, `SELECT list FROM querylog
-			WHERE ts >= ? AND list != ''
-			UNION SELECT audit_list FROM querylog
-			WHERE ts >= ? AND audit_list != ''
-			ORDER BY 1 LIMIT ?`,
-			since.UnixMilli(), since.UnixMilli(), maxLists)
-		if err != nil {
-			return nil, fmt.Errorf("list names query: %w", err)
-		}
-		defer rows.Close()
-		var out []string
-		for rows.Next() {
-			var name string
-			if err := rows.Scan(&name); err != nil {
-				return nil, fmt.Errorf("list names scan: %w", err)
+		// The previous shape range-scanned every row in the ts window
+		// (seconds on an SD-card log), and even a plain DISTINCT visits
+		// every index entry. Instead, skip-walk each (column, ts) index
+		// with MIN(col) > last — one index seek per distinct name — then
+		// window per name with one indexed recency probe each. Everything
+		// is O(number of lists), which is dozens, never O(rows).
+		set := make(map[string]bool)
+		for _, col := range []string{"list", "audit_list"} {
+			name := "" // MIN(col) > '' also skips the unattributed rows
+			for range maxLists {
+				var next sql.NullString
+				err := l.db.QueryRowContext(ctx,
+					`SELECT MIN(`+col+`) FROM querylog WHERE `+col+` > ?`, name).Scan(&next)
+				if err != nil {
+					return nil, fmt.Errorf("list names walk: %w", err)
+				}
+				if !next.Valid {
+					break
+				}
+				name = next.String
+				set[name] = true
 			}
-			out = append(out, name)
 		}
-		return out, rows.Err()
+		sinceMs := since.UnixMilli()
+		var out []string
+		for name := range set {
+			seen, err := l.attributedSince(ctx, name, sinceMs)
+			if err != nil {
+				return nil, err
+			}
+			if seen {
+				out = append(out, name)
+			}
+		}
+		sort.Strings(out)
+		if len(out) > maxLists {
+			out = out[:maxLists]
+		}
+		return out, nil
 	}
 	set := make(map[string]bool)
 	l.scanRing(since, func(e Entry) {
@@ -242,6 +264,25 @@ func (l *Log) ListNames(ctx context.Context, since time.Time) ([]string, error) 
 		out = out[:maxLists]
 	}
 	return out, nil
+}
+
+// attributedSince reports whether any entry since the cutoff carries name as
+// its enforcing or audit list — two index seeks, used to window ListNames.
+func (l *Log) attributedSince(ctx context.Context, name string, sinceMs int64) (bool, error) {
+	for _, col := range []string{"list", "audit_list"} {
+		var one int
+		err := l.db.QueryRowContext(ctx,
+			`SELECT 1 FROM querylog WHERE `+col+` = ? AND ts >= ? LIMIT 1`,
+			name, sinceMs).Scan(&one)
+		switch {
+		case err == nil:
+			return true, nil
+		case errors.Is(err, sql.ErrNoRows):
+		default:
+			return false, fmt.Errorf("list recency probe: %w", err)
+		}
+	}
+	return false, nil
 }
 
 // TopClients returns the busiest clients since the given time.
