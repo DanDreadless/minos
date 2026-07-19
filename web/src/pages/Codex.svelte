@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api, type CustomService, type ListStats, type ListStatus, type Service } from '../lib/api';
   import { blocklistPresets, blocklistTiers, type BlocklistPreset } from '../lib/blocklists';
+  import CustomServiceForm from '../lib/components/CustomServiceForm.svelte';
   import { copy } from '../lib/copy';
   import { docketHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
@@ -72,21 +73,13 @@
     }
   }
 
-  // --- custom services ---
+  // --- custom services (defined here in the blocking context; the same
+  // definitions are pardoned on the Pardons & Sentences page) ---
 
   let customs: CustomService[] = [];
   let editingCustom: CustomService | null = null;
-  let customLabel = '';
-  let customName = '';
-  let customDomains = '';
-  let customAllowExtra = '';
-
-  function textToDomains(text: string): string[] {
-    return text
-      .split(/[\s,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
+  let manageOpen = false;
+  let showCustomForm = false;
 
   async function toggleCustomBlocked(c: CustomService): Promise<void> {
     try {
@@ -99,38 +92,39 @@
 
   function startEditCustom(c: CustomService): void {
     editingCustom = c;
-    customLabel = c.label || c.name;
-    customName = c.name;
-    customDomains = c.domains.join('\n');
-    customAllowExtra = (c.allow_extra ?? []).join('\n');
+    showCustomForm = true;
   }
 
-  function resetCustomForm(): void {
+  function closeCustomForm(): void {
     editingCustom = null;
-    customLabel = '';
-    customName = '';
-    customDomains = '';
-    customAllowExtra = '';
+    showCustomForm = false;
   }
 
-  async function submitCustom(): Promise<void> {
-    const body = {
-      label: customLabel.trim(),
-      domains: textToDomains(customDomains),
-      allow_extra: textToDomains(customAllowExtra),
-    };
+  async function saveCustom(
+    e: CustomEvent<{ label: string; name: string; domains: string[] }>,
+  ): Promise<void> {
+    const d = e.detail;
     try {
       if (editingCustom) {
-        applyServicesView(await api.updateCustomService(editingCustom.name, body));
-        notify(`Custom service "${body.label || editingCustom.name}" updated.`);
+        applyServicesView(
+          await api.updateCustomService(editingCustom.name, { label: d.label, domains: d.domains }),
+        );
+        notify(`Custom service "${d.label || editingCustom.name}" updated.`);
       } else {
-        const name = customName.trim();
-        applyServicesView(await api.addCustomService(name ? { ...body, name } : body));
-        notify(`Custom service "${body.label || name}" created.`);
+        // Created from the blocking context → starts blocked.
+        applyServicesView(
+          await api.addCustomService({
+            label: d.label,
+            domains: d.domains,
+            blocked: true,
+            ...(d.name ? { name: d.name } : {}),
+          }),
+        );
+        notify(`Custom service "${d.label || d.name}" created and blocked.`);
       }
-      resetCustomForm();
-    } catch (e) {
-      notifyError(e);
+      closeCustomForm();
+    } catch (err) {
+      notifyError(err);
     }
   }
 
@@ -138,7 +132,7 @@
     if (!window.confirm(copy.lists.customConfirmDelete(c.label || c.name))) return;
     try {
       applyServicesView(await api.deleteCustomService(c.name));
-      if (editingCustom?.name === c.name) resetCustomForm();
+      if (editingCustom?.name === c.name) closeCustomForm();
     } catch (e) {
       notifyError(e);
     }
@@ -374,62 +368,48 @@
       </label>
     {/each}
   </div>
+  <details class="custom-manage" bind:open={manageOpen}>
+    <summary>
+      {copy.lists.customManage}
+      {#if customs.length}
+        <span class="count">({customs.length})</span>
+      {/if}
+      <small>{copy.lists.customManageBlockHint}</small>
+    </summary>
+    {#if customs.length}
+      <ul class="custom-list">
+        {#each customs as c (c.name)}
+          <li>
+            <span class="custom-name">{c.label || c.name}</span>
+            <span class="custom-domains" title={c.domains.join(', ')}>
+              {copy.lists.serviceDomains(c.domains.length)}
+            </span>
+            <button class="row-action" on:click={() => startEditCustom(c)}>
+              {copy.lists.customEdit}
+            </button>
+            <button class="row-action danger" on:click={() => removeCustom(c)}>Remove</button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    {#if showCustomForm}
+      {#if editingCustom}
+        <p class="note editing">
+          {copy.lists.customEditing(editingCustom.label || editingCustom.name)}
+        </p>
+      {/if}
+      <CustomServiceForm editing={editingCustom} on:save={saveCustom} on:cancel={closeCustomForm} />
+    {:else}
+      <button class="row-action add-custom" on:click={() => (showCustomForm = true)}>
+        + {copy.lists.customAdd}
+      </button>
+    {/if}
+    <p class="note">{copy.lists.customSharedNote}</p>
+  </details>
   <p class="note">
     {copy.lists.servicesNote}
     <a href="#/devices">{copy.lists.servicesNoteLink}</a>
   </p>
-</section>
-
-<section class="card custom-services">
-  <h2>{copy.lists.customTitle} <small>{copy.lists.customHint}</small></h2>
-  {#if customs.length === 0}
-    <p class="note">{copy.lists.customEmpty}</p>
-  {:else}
-    <ul class="custom-list">
-      {#each customs as c (c.name)}
-        <li>
-          <span class="custom-name">{c.label || c.name}</span>
-          <span class="custom-domains" title={c.domains.join(', ')}>
-            {copy.lists.serviceDomains(c.domains.length)}
-          </span>
-          <button class="row-action" on:click={() => startEditCustom(c)}>
-            {copy.lists.customEdit}
-          </button>
-          <button class="row-action danger" on:click={() => removeCustom(c)}>Remove</button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
-  <form class="custom-form" on:submit|preventDefault={submitCustom}>
-    {#if editingCustom}
-      <p class="note editing">{copy.lists.customEditing(editingCustom.label || editingCustom.name)}</p>
-    {/if}
-    <div class="custom-row">
-      <input placeholder={copy.lists.customLabelPlaceholder} bind:value={customLabel} required />
-      {#if !editingCustom}
-        <input placeholder={copy.lists.customNamePlaceholder} bind:value={customName} />
-      {/if}
-    </div>
-    <textarea
-      rows="3"
-      placeholder={copy.lists.customDomainsPlaceholder}
-      bind:value={customDomains}
-      required
-    ></textarea>
-    <textarea
-      rows="2"
-      placeholder={copy.lists.customAllowExtraPlaceholder}
-      bind:value={customAllowExtra}
-    ></textarea>
-    <div class="custom-row">
-      <button type="submit" class="primary" disabled={!customLabel.trim() || !customDomains.trim()}>
-        {editingCustom ? copy.lists.customSave : copy.lists.customCreate}
-      </button>
-      {#if editingCustom}
-        <button type="button" on:click={resetCustomForm}>{copy.lists.customCancel}</button>
-      {/if}
-    </div>
-  </form>
 </section>
 
 <section class="card catalog">
@@ -530,13 +510,35 @@
     cursor: help;
   }
 
-  .custom-services .custom-list {
-    list-style: none;
-    margin: 0 0 0.9rem;
-    padding: 0;
+  .custom-manage {
+    margin-top: 1rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.8rem;
   }
 
-  .custom-services .custom-list li {
+  .custom-manage summary {
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 0.82rem;
+  }
+
+  .custom-manage summary .count {
+    color: var(--accent);
+  }
+
+  .custom-manage summary small {
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .custom-list {
+    list-style: none;
+    margin: 0.7rem 0 0;
+    padding: 0;
+    max-width: 34rem;
+  }
+
+  .custom-list li {
     display: flex;
     align-items: center;
     gap: 0.8rem;
@@ -545,7 +547,7 @@
     font-size: 0.85rem;
   }
 
-  .custom-services .custom-list li:last-child {
+  .custom-list li:last-child {
     border-bottom: none;
   }
 
@@ -560,26 +562,12 @@
     cursor: help;
   }
 
-  .custom-form {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-    max-width: 34rem;
+  .add-custom {
+    margin-top: 0.7rem;
   }
 
-  .custom-form .custom-row {
-    display: flex;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-  }
-
-  .custom-form input {
-    flex: 1;
-    min-width: 14rem;
-  }
-
-  .custom-form .editing {
-    margin: 0;
+  .editing {
+    margin: 0.7rem 0 0;
     color: var(--accent);
   }
 
