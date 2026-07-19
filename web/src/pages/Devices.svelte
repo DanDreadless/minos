@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { api, type CustomService, type Device, type Group, type Service } from '../lib/api';
+  import ServiceSet from '../lib/components/ServiceSet.svelte';
   import { copy } from '../lib/copy';
   import { deviceHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
@@ -405,30 +406,22 @@
               </span>
             {/if}
           </summary>
-          <div class="service-grid">
-            {#each catalog as svc (svc.name)}
-              <label class="service">
-                <input
-                  type="checkbox"
-                  checked={(g.services ?? []).includes(svc.name)}
-                  on:change={() => toggleGroupService(g, svc.name)}
-                />
-                {svc.label}
-              </label>
-            {/each}
-            {#each customs as c (c.name)}
-              <label class="service">
-                <input
-                  type="checkbox"
-                  checked={(g.custom_services ?? []).includes(c.name)}
-                  on:change={() => toggleGroupCustomService(g, c.name)}
-                />
-                {c.label || c.name}
-                <span class="custom-badge" title={copy.lists.customBadgeTitle}>
-                  {copy.lists.customBadge}
-                </span>
-              </label>
-            {/each}
+          <div class="group-service-set">
+            <ServiceSet
+              {catalog}
+              {customs}
+              selectedCatalog={g.services ?? []}
+              selectedCustom={g.custom_services ?? []}
+              emptyText={copy.devices.groupServicesEmpty}
+              on:add={(e) =>
+                e.detail.custom
+                  ? toggleGroupCustomService(g, e.detail.name)
+                  : toggleGroupService(g, e.detail.name)}
+              on:remove={(e) =>
+                e.detail.custom
+                  ? toggleGroupCustomService(g, e.detail.name)
+                  : toggleGroupService(g, e.detail.name)}
+            />
           </div>
         </details>
         <details class="group-services">
@@ -440,30 +433,22 @@
               </span>
             {/if}
           </summary>
-          <div class="service-grid">
-            {#each catalog as svc (svc.name)}
-              <label class="service">
-                <input
-                  type="checkbox"
-                  checked={(g.allowed_services ?? []).includes(svc.name)}
-                  on:change={() => toggleGroupAllowedService(g, svc.name)}
-                />
-                {svc.label}
-              </label>
-            {/each}
-            {#each customs as c (c.name)}
-              <label class="service">
-                <input
-                  type="checkbox"
-                  checked={(g.allowed_custom_services ?? []).includes(c.name)}
-                  on:change={() => toggleGroupAllowedCustomService(g, c.name)}
-                />
-                {c.label || c.name}
-                <span class="custom-badge" title={copy.lists.customBadgeTitle}>
-                  {copy.lists.customBadge}
-                </span>
-              </label>
-            {/each}
+          <div class="group-service-set">
+            <ServiceSet
+              {catalog}
+              {customs}
+              selectedCatalog={g.allowed_services ?? []}
+              selectedCustom={g.allowed_custom_services ?? []}
+              emptyText={copy.devices.groupAllowedServicesEmpty}
+              on:add={(e) =>
+                e.detail.custom
+                  ? toggleGroupAllowedCustomService(g, e.detail.name)
+                  : toggleGroupAllowedService(g, e.detail.name)}
+              on:remove={(e) =>
+                e.detail.custom
+                  ? toggleGroupAllowedCustomService(g, e.detail.name)
+                  : toggleGroupAllowedService(g, e.detail.name)}
+            />
           </div>
         </details>
       {/if}
@@ -734,29 +719,7 @@
     margin: 0.6rem 0 0;
   }
 
-  .service-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-    gap: 0.3rem 1rem;
+  .group-service-set {
     margin-top: 0.6rem;
-  }
-
-  .service {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    cursor: pointer;
-    font-size: 0.84rem;
-  }
-
-  .custom-badge {
-    font-size: 0.62rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 0 0.35rem;
-    cursor: help;
   }
 </style>
