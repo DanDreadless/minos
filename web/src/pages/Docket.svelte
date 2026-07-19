@@ -237,7 +237,12 @@
         </tr>
       </thead>
       <tbody>
-        {#each displayed as e (e.time + e.qname + e.client + e.qtype)}
+        <!-- Deliberately unkeyed: entries have no unique id, and a client
+             retrying a blocked query can produce two rows identical in
+             time+qname+client+qtype — a keyed each then throws at runtime
+             and freezes the whole page mid-render (field bug). Rows are
+             stateless text, so positional patching is correct and cheap. -->
+        {#each displayed as e}
           <tr>
             <td>{fmtTime(e.time)}</td>
             <td>{e.client}</td>
