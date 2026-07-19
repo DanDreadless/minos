@@ -59,6 +59,33 @@ func TestEncryptedDNSBundleWellFormed(t *testing.T) {
 	}
 }
 
+// The catalog itself must stay well-formed as it grows: unique lowercase
+// slug names, non-empty labels, and bare lowercase hostnames throughout.
+func TestCatalogWellFormed(t *testing.T) {
+	seen := map[string]bool{}
+	for _, svc := range All() {
+		if svc.Name == "" || svc.Name != strings.ToLower(svc.Name) ||
+			strings.ContainsAny(svc.Name, "/:. ") {
+			t.Errorf("service name %q is not a lowercase slug", svc.Name)
+		}
+		if seen[svc.Name] {
+			t.Errorf("duplicate service name %q", svc.Name)
+		}
+		seen[svc.Name] = true
+		if svc.Label == "" {
+			t.Errorf("%s: empty label", svc.Name)
+		}
+		if len(svc.Domains) == 0 {
+			t.Errorf("%s: no domains", svc.Name)
+		}
+		for _, d := range svc.Domains {
+			if d != strings.ToLower(d) || strings.ContainsAny(d, "/: ") || !strings.Contains(d, ".") {
+				t.Errorf("%s: %q is not a bare lowercase hostname", svc.Name, d)
+			}
+		}
+	}
+}
+
 func TestAllowDomainsUnknownService(t *testing.T) {
 	if got := AllowDomains("no-such-service"); got != nil {
 		t.Errorf("unknown service allow bundle = %v, want nil", got)
