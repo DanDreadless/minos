@@ -20,19 +20,25 @@
   // the Tribunal — whole-address matching, distinct from the substring search.
   let clientFilter: string[] = [];
   let verdictFilter: 'all' | 'blocked' | 'allowed' | 'would_block' = 'all';
+  // listFilter matches the exact list name attributed to an entry —
+  // enforcing (List column) or audit ("would block"). '' = no constraint.
+  let listFilter = '';
+  let listNames: string[] = [];
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let searchDebounce: ReturnType<typeof setTimeout> | null = null;
   let destroyed = false;
   let connected = false;
 
-  $: hasFilter = search.trim() !== '' || verdictFilter !== 'all' || clientFilter.length > 0;
+  $: hasFilter =
+    search.trim() !== '' || verdictFilter !== 'all' || clientFilter.length > 0 || listFilter !== '';
 
   function clientMatch(e: LogEntry): boolean {
     if (verdictFilter === 'would_block') {
       if (!e.audit_list) return false;
     } else if (verdictFilter !== 'all' && e.verdict !== verdictFilter) return false;
     if (clientFilter.length && !clientFilter.includes(e.client)) return false;
+    if (listFilter && e.list !== listFilter && e.audit_list !== listFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       return e.qname.toLowerCase().includes(q) || e.client.toLowerCase().includes(q);
@@ -56,6 +62,7 @@
         client: clientFilter.join(','),
         verdict: verdictFilter === 'would_block' ? 'all' : verdictFilter,
         would_block: verdictFilter === 'would_block',
+        list: listFilter,
         before,
         limit: HISTORY_PAGE,
       });
@@ -139,6 +146,17 @@
     } else if (params.qname) {
       search = params.qname;
     }
+    if (params.list) listFilter = params.list;
+
+    // Dropdown options are cosmetic — degrade silently if they fail to load.
+    void api
+      .querylogLists()
+      .then((names) => {
+        // A deep-linked name outside the window still shows as the active option.
+        if (listFilter && !names.includes(listFilter)) names = [listFilter, ...names];
+        listNames = names;
+      })
+      .catch(() => {});
 
     try {
       live = await api.querylog(MAX_ROWS);
@@ -175,6 +193,16 @@
     <option value="blocked">{copy.docket.filterBlocked}</option>
     <option value="allowed">{copy.docket.filterAllowed}</option>
     <option value="would_block">{copy.docket.filterWouldBlock}</option>
+  </select>
+  <select
+    bind:value={listFilter}
+    on:change={refreshHistory}
+    title={copy.docket.filterListTitle}
+  >
+    <option value="">{copy.docket.filterListAll}</option>
+    {#each listNames as name (name)}
+      <option value={name}>{name}</option>
+    {/each}
   </select>
   {#if clientFilter.length}
     <span class="chip" title={clientFilter.join(', ')}>

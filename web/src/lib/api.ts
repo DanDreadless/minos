@@ -341,6 +341,7 @@ export const api = {
     client?: string; // exact address(es), comma-separated for a multi-IP device
     verdict?: string;
     would_block?: boolean;
+    list?: string; // exact list name (enforcing or audit attribution)
     before?: number;
     limit?: number;
   }) => {
@@ -349,10 +350,13 @@ export const api = {
     if (params.client) sp.set('client', params.client);
     if (params.verdict && params.verdict !== 'all') sp.set('verdict', params.verdict);
     if (params.would_block) sp.set('would_block', 'true');
+    if (params.list) sp.set('list', params.list);
     if (params.before) sp.set('before', String(params.before));
     sp.set('limit', String(params.limit ?? 200));
     return request<LogEntry[]>('GET', `/api/querylog/history?${sp.toString()}`);
   },
+  // Distinct list names attributed in the window, for the Docket's filter.
+  querylogLists: (hours = 168) => request<string[]>('GET', `/api/querylog/lists?hours=${hours}`),
 
   getConfig: () => request<ConfigView>('GET', '/api/config'),
   updateConfig: (upd: SettingsUpdate) => request<ConfigView>('PUT', '/api/config', upd),

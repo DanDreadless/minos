@@ -129,7 +129,7 @@ entry may also carry `audit_list`/`audit_rule`: an audit-mode list would
 have blocked it ("would block" in the UI). Cached answers skip judgment,
 so audit marks are sampled at resolution time, not on every hit.
 
-### `GET /api/querylog/history?q=&client=&verdict=&would_block=&before=&limit=`
+### `GET /api/querylog/history?q=&client=&verdict=&would_block=&list=&before=&limit=`
 
 The persisted log (SQLite), newest first — the full retained history behind
 search and the dashboard drill-downs, not just the in-memory ring. `q`
@@ -137,9 +137,22 @@ matches a client IP or domain substring; `client` is an **exact** address
 filter, comma-separated for a device with several IPs (the Devices
 drill-down), distinct from the `q` substring; `verdict` is
 `blocked`/`allowed`/`all`; `would_block=true` narrows to entries an
-audit-mode list flagged; `before` is a unix-millis cursor for "load older"
+audit-mode list flagged; `list` is an **exact** list-name filter matching
+either the enforcing attribution (`list`) or the audit one (`audit_list`) —
+so it finds what a list condemned, pardoned, or would have blocked;
+`before` is a unix-millis cursor for "load older"
 pagination; `limit` 1–1000. Returns `[]` in ephemeral mode (there the ring
 already backs both the log and the dashboard, so the UI filters it directly).
+
+### `GET /api/querylog/lists?hours=168`
+
+The distinct list names attributed in the window (enforcing and audit),
+sorted — the options behind the Docket's list filter. `hours` 1–2160.
+Ring-backed in ephemeral mode.
+
+```json
+["StevenBlack", "denylist", "service:netflix", "strict-audit"]
+```
 
 ### `GET /api/querylog/stream` (WebSocket)
 

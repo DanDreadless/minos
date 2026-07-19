@@ -249,6 +249,56 @@ func TestQueryHistoryFilters(t *testing.T) {
 	}
 }
 
+func TestQueryHistoryListFilter(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	l, err := Open(Options{RingSize: 50, DBPath: dbPath, RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	l.Record(Entry{Client: "10.0.0.5", QName: "ads.example", Verdict: VerdictBlocked, List: "StevenBlack", Rule: "ads.example", Time: now})
+	l.Record(Entry{Client: "10.0.0.5", QName: "cdn.example", Verdict: VerdictAllowed, List: "service:netflix", Rule: "cdn.example", Time: now})
+	l.Record(Entry{Client: "10.0.0.5", QName: "maybe.example", Verdict: VerdictAllowed, AuditList: "strict-audit", AuditRule: "maybe.example", Time: now})
+	l.Record(Entry{Client: "10.0.0.5", QName: "plain.example", Verdict: VerdictAllowed, Time: now})
+	if err := l.Close(); err != nil { // flush to SQLite
+		t.Fatal(err)
+	}
+	l2, err := Open(Options{RingSize: 50, DBPath: dbPath, RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l2.Close()
+
+	count := func(f HistoryFilter) int {
+		got, err := l2.QueryHistory(context.Background(), f, 100, time.Time{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(got)
+	}
+	// The filter matches the condemning list, a pardoning list on an allowed
+	// entry, and an audit ("would block") attribution alike.
+	if n := count(HistoryFilter{List: "StevenBlack"}); n != 1 {
+		t.Errorf("blocked-list filter: got %d, want 1", n)
+	}
+	if n := count(HistoryFilter{List: "service:netflix"}); n != 1 {
+		t.Errorf("pardon-list filter: got %d, want 1", n)
+	}
+	if n := count(HistoryFilter{List: "strict-audit"}); n != 1 {
+		t.Errorf("audit-list filter: got %d, want 1", n)
+	}
+	if n := count(HistoryFilter{List: "no-such-list"}); n != 0 {
+		t.Errorf("unknown list: got %d, want 0", n)
+	}
+	// Exact match, never substring.
+	if n := count(HistoryFilter{List: "Steven"}); n != 0 {
+		t.Errorf("list filter must not substring-match: got %d, want 0", n)
+	}
+	if n := count(HistoryFilter{List: "StevenBlack", Verdict: VerdictAllowed}); n != 0 {
+		t.Errorf("list+verdict compose: got %d, want 0", n)
+	}
+}
+
 func TestEphemeralWritesNothing(t *testing.T) {
 	l, err := Open(Options{RingSize: 10, Ephemeral: true})
 	if err != nil {
