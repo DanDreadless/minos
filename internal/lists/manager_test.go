@@ -6,6 +6,7 @@ import (
 
 	"minos/internal/config"
 	"minos/internal/filter"
+	"minos/internal/services"
 )
 
 // TestGlobalBlockedServices proves a service picked in config compiles into
@@ -142,5 +143,59 @@ func TestUnknownAllowedServiceRejected(t *testing.T) {
 	cfg.Groups = []config.Group{{Name: "kids", Mode: "filter", AllowedServices: []string{"nope"}}}
 	if err := cfg.Validate(); err == nil {
 		t.Error("Validate() accepted unknown group allowed service name")
+	}
+}
+
+// TestCustomServices proves user-defined bundles compile like catalog
+// services: the def's own Blocked/Allowed flags drive the global matcher,
+// allow wins over block for the same service, and extras are pardoned.
+func TestCustomServices(t *testing.T) {
+	store, err := config.Open(t.TempDir() + "/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Update(func(c *config.Config) error {
+		c.Blocking.Denylist = []string{"login.mygame.example"}
+		c.Blocking.CustomServices = []services.Custom{
+			{Name: "my-game", Domains: []string{"mygame.example"}, Blocked: true},
+			{Name: "my-tv", Domains: []string{"mytv.example"},
+				AllowExtra: []string{"login.mygame.example"}, Blocked: true, Allowed: true},
+		}
+		c.Lists.Sources = nil // no network in tests
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	engine := filter.NewEngine()
+	m := NewManager(engine, store)
+	m.rebuild(context.Background(), false)
+
+	res := engine.Match("play.mygame.example")
+	if !res.Blocked || res.List != "service:my-game" {
+		t.Errorf("play.mygame.example = %+v, want blocked by service:my-game", res)
+	}
+	// Blocked+allowed on the same custom: allow wins, like the catalog.
+	res = engine.Match("mytv.example")
+	if res.Blocked || res.List != "service:my-tv" {
+		t.Errorf("mytv.example = %+v, want passed by service:my-tv", res)
+	}
+	// The allow extras beat an unrelated deny.
+	res = engine.Match("login.mygame.example")
+	if res.Blocked || res.List != "service:my-tv" {
+		t.Errorf("login.mygame.example = %+v, want passed by service:my-tv extras", res)
+	}
+	// A def with neither flag set compiles nothing.
+	if err := store.Update(func(c *config.Config) error {
+		c.Blocking.Denylist = nil
+		c.Blocking.CustomServices = []services.Custom{
+			{Name: "idle", Domains: []string{"idle.example"}},
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	m.rebuild(context.Background(), false)
+	if res := engine.Match("idle.example"); res.Blocked || res.Rule != "" {
+		t.Errorf("idle.example = %+v, want untouched (no flags set)", res)
 	}
 }

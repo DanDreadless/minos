@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -8,6 +9,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
+
+	"minos/internal/services"
 )
 
 func TestOpenCreatesDefault(t *testing.T) {
@@ -355,5 +360,125 @@ func TestSaveBacksUpPriorConfig(t *testing.T) {
 	}
 	if prior.DNS.BlockTTL != 60 {
 		t.Errorf("backup should hold the prior config (BlockTTL 60), got %d", prior.DNS.BlockTTL)
+	}
+}
+
+// Custom services: names are strict slugs kept out of the catalog
+// namespace, domains validated, and group references must resolve.
+func TestValidateCustomServices(t *testing.T) {
+	valid := func() *Config {
+		c := Default()
+		c.Blocking.CustomServices = []services.Custom{{
+			Name: "my-game", Label: "My Game",
+			Domains:    []string{"mygame.example", "cdn.mygame.example"},
+			AllowExtra: []string{"login.mygame.example"},
+			Blocked:    true,
+		}}
+		c.Groups = []Group{{
+			Name: "kids", Mode: "filter",
+			CustomServices:        []string{"my-game"},
+			AllowedCustomServices: []string{"my-game"},
+		}}
+		return c
+	}
+	if err := valid().Validate(); err != nil {
+		t.Fatalf("valid custom service rejected: %v", err)
+	}
+	bad := map[string]func(*Config){
+		"uppercase name":    func(c *Config) { c.Blocking.CustomServices[0].Name = "MyGame" },
+		"empty name":        func(c *Config) { c.Blocking.CustomServices[0].Name = "" },
+		"leading hyphen":    func(c *Config) { c.Blocking.CustomServices[0].Name = "-game" },
+		"dotted name":       func(c *Config) { c.Blocking.CustomServices[0].Name = "my.game" },
+		"41-char name":      func(c *Config) { c.Blocking.CustomServices[0].Name = strings.Repeat("a", 41) },
+		"catalog collision": func(c *Config) { c.Blocking.CustomServices[0].Name = "netflix" },
+		"duplicate": func(c *Config) {
+			c.Blocking.CustomServices = append(c.Blocking.CustomServices, c.Blocking.CustomServices[0])
+		},
+		"no domains":       func(c *Config) { c.Blocking.CustomServices[0].Domains = nil },
+		"bad domain":       func(c *Config) { c.Blocking.CustomServices[0].Domains = []string{"not a domain"} },
+		"bad allow extra":  func(c *Config) { c.Blocking.CustomServices[0].AllowExtra = []string{"héllo.example"} },
+		"long label":       func(c *Config) { c.Blocking.CustomServices[0].Label = strings.Repeat("x", 101) },
+		"dangling block":   func(c *Config) { c.Groups[0].CustomServices = []string{"ghost"} },
+		"dangling pardon":  func(c *Config) { c.Groups[0].AllowedCustomServices = []string{"ghost"} },
+		"too many domains": func(c *Config) { c.Blocking.CustomServices[0].Domains = manyDomains(201) },
+	}
+	for name, mutate := range bad {
+		c := valid()
+		mutate(c)
+		if err := c.Validate(); err == nil {
+			t.Errorf("%s: expected a validation error", name)
+		}
+	}
+}
+
+func manyDomains(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = fmt.Sprintf("host%d.example", i)
+	}
+	return out
+}
+
+func TestCloneDeepCopiesCustomServices(t *testing.T) {
+	c := Default()
+	c.Blocking.CustomServices = []services.Custom{{
+		Name: "my-game", Domains: []string{"mygame.example"}, AllowExtra: []string{"login.mygame.example"},
+	}}
+	c.Groups = []Group{{Name: "kids", Mode: "filter", CustomServices: []string{"my-game"}}}
+	out := c.Clone()
+	out.Blocking.CustomServices[0].Domains[0] = "changed"
+	out.Blocking.CustomServices[0].AllowExtra[0] = "changed"
+	out.Groups[0].CustomServices[0] = "changed"
+	if c.Blocking.CustomServices[0].Domains[0] != "mygame.example" ||
+		c.Blocking.CustomServices[0].AllowExtra[0] != "login.mygame.example" ||
+		c.Groups[0].CustomServices[0] != "my-game" {
+		t.Errorf("Clone shares custom-service slices with the original: %+v", c.Blocking.CustomServices)
+	}
+}
+
+// The downgrade contract: a config carrying custom services round-trips
+// through YAML using only additive keys, so the tolerant loader on an older
+// binary drops them whole instead of failing validation on an unknown name
+// in blocking.services / groups[].services.
+func TestCustomServicesStayOutOfCatalogKeys(t *testing.T) {
+	c := Default()
+	c.Blocking.CustomServices = []services.Custom{{
+		Name: "my-game", Domains: []string{"mygame.example"}, Blocked: true, Allowed: true,
+	}}
+	c.Groups = []Group{{Name: "kids", Mode: "filter",
+		CustomServices: []string{"my-game"}, AllowedCustomServices: []string{"my-game"}}}
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Strict parse (restores) must accept the new keys…
+	if _, err := Parse(data); err != nil {
+		t.Fatalf("strict Parse rejected custom services: %v", err)
+	}
+	// …and the custom name must never leak into the catalog-validated keys.
+	var probe struct {
+		Blocking struct {
+			Services        []string `yaml:"services"`
+			AllowedServices []string `yaml:"allowed_services"`
+		} `yaml:"blocking"`
+		Groups []struct {
+			Services        []string `yaml:"services"`
+			AllowedServices []string `yaml:"allowed_services"`
+		} `yaml:"groups"`
+	}
+	if err := yaml.Unmarshal(data, &probe); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range append(probe.Blocking.Services, probe.Blocking.AllowedServices...) {
+		if s == "my-game" {
+			t.Fatal("custom name leaked into blocking services keys — breaks old-binary boot")
+		}
+	}
+	for _, g := range probe.Groups {
+		for _, s := range append(g.Services, g.AllowedServices...) {
+			if s == "my-game" {
+				t.Fatal("custom name leaked into group services keys — breaks old-binary boot")
+			}
+		}
 	}
 }

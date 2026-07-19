@@ -145,6 +145,23 @@ export const copy = {
       'Blocking a service here applies to everyone. To block one only for certain devices, or only at certain times of day, set the service on a group instead — groups can carry a schedule and are assigned to devices on the',
     servicesNoteLink: 'Devices page.',
     serviceDomains: (n: number) => `${n} domain${n === 1 ? '' : 's'}`,
+    customBadge: 'yours',
+    customBadgeTitle: 'A custom service you defined — edit or remove it below.',
+    customTitle: 'Custom services',
+    customHint: 'define your own bundle of domains, then block or pardon it like any service',
+    customLabelPlaceholder: 'display name (e.g. School portal)',
+    customNamePlaceholder: 'id (optional — derived from the name)',
+    customDomainsPlaceholder: 'domains to block, one per line or comma-separated',
+    customAllowExtraPlaceholder:
+      'extra domains allowed only when pardoned (optional — e.g. sign-in hosts)',
+    customCreate: 'Create service',
+    customSave: 'Save changes',
+    customCancel: 'Cancel',
+    customEdit: 'Edit',
+    customEditing: (label: string) => `Editing "${label}"`,
+    customEmpty: 'No custom services yet. They appear alongside the built-in catalog everywhere.',
+    customConfirmDelete: (label: string) =>
+      `Remove the custom service "${label}"? Any blocks or pardons using it stop applying immediately.`,
   },
 
   domains: {

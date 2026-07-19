@@ -209,6 +209,8 @@ export interface Group {
   denylist: string[] | null;
   services: string[] | null;
   allowed_services: string[] | null;
+  custom_services: string[] | null;
+  allowed_custom_services: string[] | null;
   safe_search: boolean;
   schedule?: Schedule | null;
 }
@@ -219,10 +221,23 @@ export interface Service {
   domains: string[];
 }
 
+// A user-defined service bundle. Unlike catalog services (whose global
+// selection lives in ServicesView.blocked/allowed), a custom's global
+// toggles ride on the definition itself.
+export interface CustomService {
+  name: string;
+  label: string;
+  domains: string[];
+  allow_extra?: string[];
+  blocked: boolean;
+  allowed: boolean;
+}
+
 export interface ServicesView {
   catalog: Service[];
   blocked: string[];
   allowed: string[];
+  custom: CustomService[];
 }
 
 const TOKEN_KEY = 'minos-api-token';
@@ -405,6 +420,8 @@ export const api = {
       denylist?: string[];
       services?: string[];
       allowed_services?: string[];
+      custom_services?: string[];
+      allowed_custom_services?: string[];
       safe_search?: boolean;
       schedule?: Schedule | null;
     },
@@ -414,6 +431,28 @@ export const api = {
   // Partial update: an omitted field leaves that set unchanged.
   updateServices: (upd: { blocked?: string[]; allowed?: string[] }) =>
     request<ServicesView>('PUT', '/api/services', upd),
+  // Custom services: name omitted → the server slugifies the label.
+  addCustomService: (c: {
+    name?: string;
+    label: string;
+    domains: string[];
+    allow_extra?: string[];
+    blocked?: boolean;
+    allowed?: boolean;
+  }) => request<ServicesView>('POST', '/api/services/custom', c),
+  // Partial update; the name is the stable key (no rename).
+  updateCustomService: (
+    name: string,
+    upd: {
+      label?: string;
+      domains?: string[];
+      allow_extra?: string[];
+      blocked?: boolean;
+      allowed?: boolean;
+    },
+  ) => request<ServicesView>('PUT', `/api/services/custom/${encodeURIComponent(name)}`, upd),
+  deleteCustomService: (name: string) =>
+    request<ServicesView>('DELETE', `/api/services/custom/${encodeURIComponent(name)}`),
   deleteGroup: (name: string) =>
     request<Group[]>('DELETE', `/api/groups/${encodeURIComponent(name)}`),
 

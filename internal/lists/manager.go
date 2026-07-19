@@ -214,6 +214,23 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 			b.AddAllow("service:"+name, d)
 		}
 	}
+	// Custom services carry their global block/allow toggles on the
+	// definition (never as names in the catalog-validated keys above — the
+	// downgrade-safety contract). Same pseudo-list namespace: validation
+	// guarantees a custom name can't collide with a catalog service.
+	for i := range cfg.Blocking.CustomServices {
+		cs := &cfg.Blocking.CustomServices[i]
+		if cs.Blocked {
+			for _, d := range cs.Domains {
+				b.AddDeny("service:"+cs.Name, d)
+			}
+		}
+		if cs.Allowed {
+			for _, d := range services.CustomAllowDomains(cs) {
+				b.AddAllow("service:"+cs.Name, d)
+			}
+		}
+	}
 	// iCloud Private Relay (opt-in): Apple documents that denying these
 	// names makes devices fall back to normal DNS — the device shows
 	// "Private Relay is unavailable on this network". A pseudo-list, so the

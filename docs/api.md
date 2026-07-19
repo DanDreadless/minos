@@ -203,6 +203,32 @@ always beats deny.
   set, omitted fields stay untouched: `{"blocked": ["tiktok"]}`,
   `{"allowed": ["netflix"]}`, or both.
 
+### Custom services
+
+User-defined bundles that behave like catalog services everywhere —
+`GET /api/services` returns them as `"custom": [{name, label, domains,
+allow_extra, blocked, allowed}]`. Unlike catalog services, a custom's
+**global** block/pardon toggles live on the definition itself (`blocked`/
+`allowed`), never inside the `blocked`/`allowed` arrays above — those are
+validated against the compiled-in catalog, and keeping custom names out of
+them is what lets an older binary still boot this config (it drops the
+unknown `custom_services` keys whole).
+
+- `POST /api/services/custom` — `{"label", "domains": [...], "name"?,
+  "allow_extra"?, "blocked"?, "allowed"?}`. `name` (a lowercase slug, max
+  40 chars) is derived from the label when omitted; a clash with a
+  catalog service name is rejected. `allow_extra` lists hosts pardoned
+  only when the service is allowed (sign-in/CDN hosts), like the
+  catalog's curated extras.
+- `PUT /api/services/custom/{name}` — partial update of any of `label`,
+  `domains`, `allow_extra`, `blocked`, `allowed`. The name is the stable
+  key; renaming is not supported.
+- `DELETE /api/services/custom/{name}` — removes the definition and
+  clears it from every group's custom selections.
+
+Matches attribute to `service:<name>` in the query log, same as catalog
+services.
+
 ## Devices & groups
 
 - `GET /api/clients` — every device that has queried plus every configured
@@ -232,8 +258,11 @@ always beats deny.
   MAC or IP, as above)
 - `GET /api/groups` / `POST /api/groups` — groups are `{name, mode:
   "filter|bypass|block", allowlist, denylist, services, allowed_services,
-  safe_search, schedule}`; `services` are blocked and `allowed_services`
-  pardoned for members only; `schedule` is `{days: ["mon", ...], start:
+  custom_services, allowed_custom_services, safe_search, schedule}`;
+  `services` are blocked and `allowed_services` pardoned for members only;
+  `custom_services`/`allowed_custom_services` do the same for user-defined
+  custom services (separate fields on purpose — custom names never enter
+  the catalog-validated keys); `schedule` is `{days: ["mon", ...], start:
   "21:00", end: "07:00"}` or `null` to clear
 - `PUT /api/groups/{name}` / `DELETE /api/groups/{name}`
 

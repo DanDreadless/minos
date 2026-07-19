@@ -1,6 +1,13 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { api, type ClientOverview, type Device, type Group, type Service } from '../lib/api';
+  import {
+    api,
+    type ClientOverview,
+    type CustomService,
+    type Device,
+    type Group,
+    type Service,
+  } from '../lib/api';
   import BarList from '../lib/components/BarList.svelte';
   import { copy } from '../lib/copy';
   import { docketHref } from '../lib/router';
@@ -9,6 +16,7 @@
   let devices: Device[] = [];
   let groups: Group[] = [];
   let catalog: Service[] = [];
+  let customs: CustomService[] = [];
   let names: Record<string, string> = {}; // per-row label drafts
   let newGroupName = '';
   let newGroupMode = 'filter';
@@ -158,6 +166,32 @@
     }
   }
 
+  // Custom-service selections ride separate group fields end to end — a
+  // custom name must never enter the catalog-validated services keys.
+  async function toggleGroupCustomService(g: Group, name: string): Promise<void> {
+    const next = new Set(g.custom_services ?? []);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    try {
+      groups = await api.updateGroup(g.name, { custom_services: [...next] });
+    } catch (e) {
+      notifyError(e);
+      await load();
+    }
+  }
+
+  async function toggleGroupAllowedCustomService(g: Group, name: string): Promise<void> {
+    const next = new Set(g.allowed_custom_services ?? []);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    try {
+      groups = await api.updateGroup(g.name, { allowed_custom_services: [...next] });
+    } catch (e) {
+      notifyError(e);
+      await load();
+    }
+  }
+
   async function setGroupMode(g: Group, ev: Event): Promise<void> {
     try {
       groups = await api.updateGroup(g.name, {
@@ -230,7 +264,10 @@
     void load();
     void api
       .services()
-      .then((v) => (catalog = v.catalog))
+      .then((v) => {
+        catalog = v.catalog;
+        customs = v.custom;
+      })
       .catch(notifyError);
     timer = setInterval(load, 15000);
   });
@@ -451,8 +488,10 @@
         <details class="group-services">
           <summary>
             {copy.devices.groupServices}
-            {#if g.services?.length}
-              <span class="count">({g.services.length})</span>
+            {#if (g.services?.length ?? 0) + (g.custom_services?.length ?? 0) > 0}
+              <span class="count">
+                ({(g.services?.length ?? 0) + (g.custom_services?.length ?? 0)})
+              </span>
             {/if}
           </summary>
           <div class="service-grid">
@@ -466,13 +505,28 @@
                 {svc.label}
               </label>
             {/each}
+            {#each customs as c (c.name)}
+              <label class="service">
+                <input
+                  type="checkbox"
+                  checked={(g.custom_services ?? []).includes(c.name)}
+                  on:change={() => toggleGroupCustomService(g, c.name)}
+                />
+                {c.label || c.name}
+                <span class="custom-badge" title={copy.lists.customBadgeTitle}>
+                  {copy.lists.customBadge}
+                </span>
+              </label>
+            {/each}
           </div>
         </details>
         <details class="group-services">
           <summary>
             {copy.devices.groupAllowedServices}
-            {#if g.allowed_services?.length}
-              <span class="count">({g.allowed_services.length})</span>
+            {#if (g.allowed_services?.length ?? 0) + (g.allowed_custom_services?.length ?? 0) > 0}
+              <span class="count">
+                ({(g.allowed_services?.length ?? 0) + (g.allowed_custom_services?.length ?? 0)})
+              </span>
             {/if}
           </summary>
           <div class="service-grid">
@@ -484,6 +538,19 @@
                   on:change={() => toggleGroupAllowedService(g, svc.name)}
                 />
                 {svc.label}
+              </label>
+            {/each}
+            {#each customs as c (c.name)}
+              <label class="service">
+                <input
+                  type="checkbox"
+                  checked={(g.allowed_custom_services ?? []).includes(c.name)}
+                  on:change={() => toggleGroupAllowedCustomService(g, c.name)}
+                />
+                {c.label || c.name}
+                <span class="custom-badge" title={copy.lists.customBadgeTitle}>
+                  {copy.lists.customBadge}
+                </span>
               </label>
             {/each}
           </div>
@@ -819,5 +886,16 @@
     gap: 0.45rem;
     cursor: pointer;
     font-size: 0.84rem;
+  }
+
+  .custom-badge {
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 0.35rem;
+    cursor: help;
   }
 </style>

@@ -397,6 +397,20 @@ This is security software; hold it to that standard.
   `blocking.allowed_services` / `groups[].allowed_services` are new YAML
   keys: tolerant on-disk loading keeps downgrades safe (ignored with a
   warning); only pre-tolerant strict binaries refuse, `.bak` recovers.
+- **Custom-services semantics** (fixed decisions): user-defined service
+  bundles live in `blocking.custom_services` (defs carry their own global
+  `blocked`/`allowed` flags) and groups select them via separate
+  `custom_services`/`allowed_custom_services` keys. A custom name must
+  **never** enter `blocking.services`/`allowed_services` or
+  `groups[].services`/`allowed_services` — old binaries validate those
+  against the compiled-in catalog and would refuse to boot; keeping customs
+  in additive-only keys means a downgrade merely drops them (accepted
+  under-blocking, the mirror image of the allowed_services over-blocking
+  trade-off). Guarded by `TestCustomServicesStayOutOfCatalogKeys`. Names are
+  strict slugs (`validSlug`, max 40) rejected on catalog collision, so the
+  shared `service:<name>` pseudo-list namespace stays unambiguous. Deleting
+  a def scrubs group references in the same store.Update. The
+  encrypted-dns-upstream validation warning deliberately ignores customs.
 - **Subscribed-allowlist semantics** (fixed decisions): allowlists live in
   a **separate config slice** (`lists.allow_sources`), never as an
   action/type field on a source — a downgrade then drops the whole unknown

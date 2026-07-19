@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type ListStats, type ListStatus, type Service } from '../lib/api';
+  import { api, type CustomService, type ListStats, type ListStatus, type Service } from '../lib/api';
   import { blocklistPresets, blocklistTiers, type BlocklistPreset } from '../lib/blocklists';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
@@ -43,12 +43,20 @@
 
   async function loadServices(): Promise<void> {
     try {
-      const view = await api.services();
-      catalog = view.catalog;
-      blockedServices = new Set(view.blocked);
+      applyServicesView(await api.services());
     } catch (e) {
       notifyError(e);
     }
+  }
+
+  function applyServicesView(view: {
+    catalog: Service[];
+    blocked: string[];
+    custom: CustomService[];
+  }): void {
+    catalog = view.catalog;
+    blockedServices = new Set(view.blocked);
+    customs = view.custom;
   }
 
   async function toggleService(name: string): Promise<void> {
@@ -56,11 +64,82 @@
     if (next.has(name)) next.delete(name);
     else next.add(name);
     try {
-      const view = await api.updateServices({ blocked: [...next] });
-      blockedServices = new Set(view.blocked);
+      applyServicesView(await api.updateServices({ blocked: [...next] }));
     } catch (e) {
       notifyError(e);
       await loadServices();
+    }
+  }
+
+  // --- custom services ---
+
+  let customs: CustomService[] = [];
+  let editingCustom: CustomService | null = null;
+  let customLabel = '';
+  let customName = '';
+  let customDomains = '';
+  let customAllowExtra = '';
+
+  function textToDomains(text: string): string[] {
+    return text
+      .split(/[\s,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  async function toggleCustomBlocked(c: CustomService): Promise<void> {
+    try {
+      applyServicesView(await api.updateCustomService(c.name, { blocked: !c.blocked }));
+    } catch (e) {
+      notifyError(e);
+      await loadServices();
+    }
+  }
+
+  function startEditCustom(c: CustomService): void {
+    editingCustom = c;
+    customLabel = c.label || c.name;
+    customName = c.name;
+    customDomains = c.domains.join('\n');
+    customAllowExtra = (c.allow_extra ?? []).join('\n');
+  }
+
+  function resetCustomForm(): void {
+    editingCustom = null;
+    customLabel = '';
+    customName = '';
+    customDomains = '';
+    customAllowExtra = '';
+  }
+
+  async function submitCustom(): Promise<void> {
+    const body = {
+      label: customLabel.trim(),
+      domains: textToDomains(customDomains),
+      allow_extra: textToDomains(customAllowExtra),
+    };
+    try {
+      if (editingCustom) {
+        applyServicesView(await api.updateCustomService(editingCustom.name, body));
+        notify(`Custom service "${body.label || editingCustom.name}" updated.`);
+      } else {
+        const name = customName.trim();
+        applyServicesView(await api.addCustomService(name ? { ...body, name } : body));
+        notify(`Custom service "${body.label || name}" created.`);
+      }
+      resetCustomForm();
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function removeCustom(c: CustomService): Promise<void> {
+    if (!window.confirm(copy.lists.customConfirmDelete(c.label || c.name))) return;
+    try {
+      applyServicesView(await api.deleteCustomService(c.name));
+      if (editingCustom?.name === c.name) resetCustomForm();
+    } catch (e) {
+      notifyError(e);
     }
   }
 
@@ -276,11 +355,72 @@
         {svc.label}
       </label>
     {/each}
+    {#each customs as c (c.name)}
+      <label class="service" title={copy.lists.serviceDomains(c.domains.length)}>
+        <input type="checkbox" checked={c.blocked} on:change={() => toggleCustomBlocked(c)} />
+        {c.label || c.name}
+        <span class="custom-badge" title={copy.lists.customBadgeTitle}>
+          {copy.lists.customBadge}
+        </span>
+      </label>
+    {/each}
   </div>
   <p class="note">
     {copy.lists.servicesNote}
     <a href="#/devices">{copy.lists.servicesNoteLink}</a>
   </p>
+</section>
+
+<section class="card custom-services">
+  <h2>{copy.lists.customTitle} <small>{copy.lists.customHint}</small></h2>
+  {#if customs.length === 0}
+    <p class="note">{copy.lists.customEmpty}</p>
+  {:else}
+    <ul class="custom-list">
+      {#each customs as c (c.name)}
+        <li>
+          <span class="custom-name">{c.label || c.name}</span>
+          <span class="custom-domains" title={c.domains.join(', ')}>
+            {copy.lists.serviceDomains(c.domains.length)}
+          </span>
+          <button class="row-action" on:click={() => startEditCustom(c)}>
+            {copy.lists.customEdit}
+          </button>
+          <button class="row-action danger" on:click={() => removeCustom(c)}>Remove</button>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+  <form class="custom-form" on:submit|preventDefault={submitCustom}>
+    {#if editingCustom}
+      <p class="note editing">{copy.lists.customEditing(editingCustom.label || editingCustom.name)}</p>
+    {/if}
+    <div class="custom-row">
+      <input placeholder={copy.lists.customLabelPlaceholder} bind:value={customLabel} required />
+      {#if !editingCustom}
+        <input placeholder={copy.lists.customNamePlaceholder} bind:value={customName} />
+      {/if}
+    </div>
+    <textarea
+      rows="3"
+      placeholder={copy.lists.customDomainsPlaceholder}
+      bind:value={customDomains}
+      required
+    ></textarea>
+    <textarea
+      rows="2"
+      placeholder={copy.lists.customAllowExtraPlaceholder}
+      bind:value={customAllowExtra}
+    ></textarea>
+    <div class="custom-row">
+      <button type="submit" class="primary" disabled={!customLabel.trim() || !customDomains.trim()}>
+        {editingCustom ? copy.lists.customSave : copy.lists.customCreate}
+      </button>
+      {#if editingCustom}
+        <button type="button" on:click={resetCustomForm}>{copy.lists.customCancel}</button>
+      {/if}
+    </div>
+  </form>
 </section>
 
 <section class="card catalog">
@@ -368,6 +508,70 @@
 
   .err {
     color: var(--blocked);
+  }
+
+  .custom-badge {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 0.4rem;
+    cursor: help;
+  }
+
+  .custom-services .custom-list {
+    list-style: none;
+    margin: 0 0 0.9rem;
+    padding: 0;
+  }
+
+  .custom-services .custom-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+
+  .custom-services .custom-list li:last-child {
+    border-bottom: none;
+  }
+
+  .custom-name {
+    font-weight: 600;
+  }
+
+  .custom-domains {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    flex: 1;
+    cursor: help;
+  }
+
+  .custom-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    max-width: 34rem;
+  }
+
+  .custom-form .custom-row {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  .custom-form input {
+    flex: 1;
+    min-width: 14rem;
+  }
+
+  .custom-form .editing {
+    margin: 0;
+    color: var(--accent);
   }
 
   .quiet {
