@@ -3,6 +3,7 @@
   import { api, type ClientOverview, type Device, type Group, type LogEntry } from '../lib/api';
   import BarList from '../lib/components/BarList.svelte';
   import { copy } from '../lib/copy';
+  import { fmtLogTime, fmtLogTimeFull } from '../lib/format';
   import { currentDeviceKey, docketHref, hrefFor } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
@@ -152,9 +153,6 @@
     void fetchHistory(true);
   }
 
-  function fmtTime(iso: string): string {
-    return new Date(iso).toLocaleString();
-  }
 
   async function pardon(domain: string): Promise<void> {
     try {
@@ -374,7 +372,7 @@
                  fields non-unique, and duplicate keys crash the page. -->
             {#each history as e}
               <tr>
-                <td>{fmtTime(e.time)}</td>
+                <td class="when" title={fmtLogTimeFull(e.time)}>{fmtLogTime(e.time)}</td>
                 <td>{e.client}</td>
                 <td title={e.qname}>{e.qname}</td>
                 <td>{e.qtype}</td>
@@ -615,5 +613,10 @@
 
   .load-older button {
     font-size: 0.8rem;
+  }
+
+  td.when {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
 </style>

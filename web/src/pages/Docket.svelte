@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { api, openStream, type LogEntry } from '../lib/api';
   import { copy } from '../lib/copy';
+  import { fmtLogTime, fmtLogTimeFull } from '../lib/format';
   import { currentParams } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
@@ -91,9 +92,6 @@
     searchDebounce = setTimeout(refreshHistory, 250);
   }
 
-  function fmtTime(iso: string): string {
-    return new Date(iso).toLocaleTimeString();
-  }
 
   function connect(): void {
     if (destroyed) return;
@@ -244,7 +242,7 @@
              stateless text, so positional patching is correct and cheap. -->
         {#each displayed as e}
           <tr>
-            <td>{fmtTime(e.time)}</td>
+            <td class="when" title={fmtLogTimeFull(e.time)}>{fmtLogTime(e.time)}</td>
             <td>{e.client}</td>
             <td title={e.qname}>{e.qname}</td>
             <td>{e.qtype}</td>
@@ -382,6 +380,11 @@
   .search-hint {
     font-size: 0.8rem;
     font-style: normal;
+  }
+
+  td.when {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
 
   /* Fill the height main.fill hands us and scroll the rows internally, so
