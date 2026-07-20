@@ -127,6 +127,19 @@ complete 2026-07-12:
 - **Install-method build stamp** — release/Docker builds stamp upgrade
   guidance
 
+## Recent polish — shipped (v0.18.1, July 2026)
+
+Small UX corrections from real-world use, refining the shipped feature set
+above rather than adding capability:
+
+- **Two-state upstream health lights** — the Ferrymen breaker indicator now
+  reads green (healthy, including an idle backup) or red (failover tripped),
+  retiring the confusing grey "standby" state; the active-vs-standby detail
+  moved to the hover tooltip.
+- **Themed scrollbars** — track sinks into the page background and the thumb
+  is a muted laurel gold that brightens on hover, matching the app's accent
+  instead of the browser-default grey.
+
 ## Next round — naming the unnamed (device identity)
 
 Too many Devices rows still show no hostname or vendor. The
