@@ -15,6 +15,8 @@ export const copy = {
   },
 
   nav: {
+    openMenu: 'Open menu',
+    closeMenu: 'Close menu',
     dashboard: { label: 'The Tribunal', hint: 'dashboard' },
     querylog: { label: 'The Docket', hint: 'query log' },
     devices: { label: 'Devices', hint: 'clients & groups' },
