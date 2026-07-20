@@ -311,6 +311,12 @@ export const copy = {
     upstreamsHint: 'upstream resolvers, tried in order — the first is primary',
     upstreamPreset: 'Known resolver…',
     upstreamCustom: 'Custom',
+    upstreamHealthy: (requests: number, failures: number, avgMs: number) =>
+      `Healthy — ${requests.toLocaleString()} queries, ${failures.toLocaleString()} failed, ~${Math.round(avgMs)} ms average.`,
+    upstreamSick:
+      'Unreachable — the failover breaker is sidestepping this resolver and retrying it every 30 seconds. Other upstreams are answering.',
+    upstreamStandby:
+      'Standby — not queried since the last restart. Normal for a backup: healthy resolvers ahead of it take all the traffic.',
     blockingTitle: 'Blocking',
     blockingModeZeroIp: 'Answer with 0.0.0.0 (recommended: fails fast, quiet)',
     blockingModeNxdomain: 'Answer NXDOMAIN (domain does not exist)',

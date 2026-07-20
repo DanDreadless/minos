@@ -81,6 +81,17 @@ export interface Upstream {
   protocol: 'udp' | 'tcp' | 'dot' | 'doh';
 }
 
+// Live breaker state per upstream (keyed by the configured address).
+// sick = the failover breaker is currently sidestepping it; requests 0 =
+// never needed since start (healthy primaries starve the backups).
+export interface UpstreamHealth {
+  address: string;
+  requests: number;
+  failures: number;
+  avg_ms: number;
+  sick: boolean;
+}
+
 export interface CacheSettings {
   enabled: boolean;
   max_entries: number;
@@ -326,6 +337,7 @@ async function uploadRaw<T>(path: string, body: Blob): Promise<T> {
 
 export const api = {
   status: () => request<Status>('GET', '/api/status'),
+  upstreams: () => request<UpstreamHealth[]>('GET', '/api/upstreams'),
   update: () => request<UpdateInfo>('GET', '/api/update'),
   stats: (hours = 24) => request<Stats>('GET', `/api/stats?hours=${hours}`),
   clientStats: (clients: string[], hours = 24) =>

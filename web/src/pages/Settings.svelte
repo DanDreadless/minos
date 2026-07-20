@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import {
     api,
     exportConfig,
@@ -7,6 +7,7 @@
     type ConfigView,
     type ImportReport,
     type Upstream,
+    type UpstreamHealth,
   } from '../lib/api';
   import { copy } from '../lib/copy';
   import { resolverPresets, matchPreset } from '../lib/resolvers';
@@ -272,7 +273,43 @@
     }
   }
 
-  onMount(() => void load());
+  // --- upstream health lights ---
+  // Live breaker state, polled while the page is open. Keyed by address —
+  // the backend's counters use the configured address as their name.
+  let upstreamHealth: Record<string, UpstreamHealth> = {};
+  let healthTimer: ReturnType<typeof setInterval> | null = null;
+
+  async function loadUpstreamHealth(): Promise<void> {
+    try {
+      const list = await api.upstreams();
+      upstreamHealth = Object.fromEntries(list.map((h) => [h.address, h]));
+    } catch {
+      // Decorative: the settings form works without the lights.
+    }
+  }
+
+  function healthState(u: Upstream): 'ok' | 'sick' | 'standby' {
+    const h = upstreamHealth[u.address];
+    if (!h || h.requests === 0) return 'standby';
+    return h.sick ? 'sick' : 'ok';
+  }
+
+  function healthTitle(u: Upstream): string {
+    const h = upstreamHealth[u.address];
+    if (!h || h.requests === 0) return copy.settings.upstreamStandby;
+    if (h.sick) return copy.settings.upstreamSick;
+    return copy.settings.upstreamHealthy(h.requests, h.failures, h.avg_ms);
+  }
+
+  onMount(() => {
+    void load();
+    void loadUpstreamHealth();
+    healthTimer = setInterval(loadUpstreamHealth, 10000);
+  });
+
+  onDestroy(() => {
+    if (healthTimer) clearInterval(healthTimer);
+  });
 </script>
 
 <h1>{copy.settings.title}</h1>
@@ -282,6 +319,8 @@
     <h2>{copy.settings.upstreamsTitle} <small>{copy.settings.upstreamsHint}</small></h2>
     {#each upstreams as u, i (i)}
       <div class="upstream-row">
+        <span class="health-dot {healthState(u)}" title={healthTitle(u)} role="img" aria-label={healthTitle(u)}
+        ></span>
         <span class="order">{orderLabel(i)}</span>
         <select
           class="preset"
@@ -712,6 +751,29 @@
     align-items: center;
     flex-wrap: wrap;
     margin-bottom: 0.5rem;
+  }
+
+  .health-dot {
+    width: 0.62rem;
+    height: 0.62rem;
+    border-radius: 50%;
+    flex: none;
+    cursor: help;
+  }
+
+  .health-dot.ok {
+    background: var(--allowed);
+    box-shadow: 0 0 4px var(--allowed);
+  }
+
+  .health-dot.sick {
+    background: var(--blocked);
+    box-shadow: 0 0 4px var(--blocked);
+  }
+
+  .health-dot.standby {
+    background: transparent;
+    border: 1px solid var(--text-dim);
   }
 
   .upstream-row .preset {

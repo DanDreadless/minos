@@ -112,6 +112,21 @@ Judge a name without querying it:
 `verdict` is `blocked` or `allowed`; `list`/`rule` say which rule decided
 (empty when no rule matched). The check ignores an active pause on purpose.
 
+### `GET /api/upstreams`
+
+Live failover-breaker state per upstream, keyed by the configured address —
+the data behind the health lights next to each resolver in Settings:
+
+```json
+[{"address": "https://1.1.1.1/dns-query", "requests": 5120, "failures": 2,
+  "avg_ms": 18.4, "sick": false}]
+```
+
+`sick` means the breaker is currently sidestepping the upstream (it is
+retried every 30 s). `requests: 0` means the upstream has not been needed
+since the last restart — normal for a backup behind healthy primaries, not
+an outage.
+
 ## Query log
 
 ### `GET /api/querylog?limit=100`
