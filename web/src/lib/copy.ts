@@ -315,11 +315,11 @@ export const copy = {
     upstreamPreset: 'Known resolver…',
     upstreamCustom: 'Custom',
     upstreamHealthy: (requests: number, failures: number, avgMs: number) =>
-      `Healthy — ${requests.toLocaleString()} queries, ${failures.toLocaleString()} failed, ~${Math.round(avgMs)} ms average.`,
+      `Active — ${requests.toLocaleString()} queries, ${failures.toLocaleString()} failed, ~${Math.round(avgMs)} ms average since the last restart.`,
     upstreamSick:
-      'Unreachable — the failover breaker is sidestepping this resolver and retrying it every 30 seconds. Other upstreams are answering.',
-    upstreamStandby:
-      'Standby — not queried since the last restart. Normal for a backup: healthy resolvers ahead of it take all the traffic.',
+      'Failing — the failover breaker is sidestepping this resolver and retrying it every 30 seconds. Other upstreams are answering.',
+    upstreamReady:
+      'Ready — healthy and standing by. Nothing has needed it yet: the resolvers ahead of it are handling all the traffic.',
     blockingTitle: 'Blocking',
     blockingModeZeroIp: 'Answer with 0.0.0.0 (recommended: fails fast, quiet)',
     blockingModeNxdomain: 'Answer NXDOMAIN (domain does not exist)',

@@ -125,7 +125,9 @@ the data behind the health lights next to each resolver in Settings:
 `sick` means the breaker is currently sidestepping the upstream (it is
 retried every 30 s). `requests: 0` means the upstream has not been needed
 since the last restart — normal for a backup behind healthy primaries, not
-an outage.
+an outage. The Settings health light is two-state: red when `sick`, green
+otherwise (a `requests: 0` backup is a healthy green, standing by); the
+tooltip carries the active-vs-standby detail.
 
 ## Query log
 
