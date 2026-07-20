@@ -33,6 +33,31 @@ body {
   line-height: 1.5;
 }
 
+/* Scrollbars, themed. Track sinks into the page background; the thumb picks
+   up the laurel-gold accent used for highlights elsewhere. Firefox reads
+   scrollbar-color; Chromium/Edge/Safari read the ::-webkit- rules. */
+* {
+  scrollbar-color: var(--accent) var(--bg);
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 6px;
+  /* A background-coloured border insets the thumb so it reads as a rounded
+     gold pill floating on the track, not a bar filling it edge to edge. */
+  border: 3px solid var(--bg);
+}
+
 h1,
 h2 {
   font-family: var(--font-display);

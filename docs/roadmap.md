@@ -40,7 +40,9 @@ At or beyond parity with the field:
   and a checksum-verifying install script *(shipped)*
 - **Upstream failover health** — per-upstream circuit breaker: 3 transport
   failures sidestep it, half-open probe every 30 s, always tried as last
-  resort *(shipped)*
+  resort; surfaced in Settings as a two-state health light per Ferryman
+  (green healthy, red failing), with per-upstream counts on hover
+  *(shipped)*
 - **Private reverse zones answered locally** — RFC 6303 + CGNAT: private
   PTR lookups never leak upstream; local records and routes take
   precedence *(shipped)*
