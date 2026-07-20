@@ -33,11 +33,17 @@ body {
   line-height: 1.5;
 }
 
-/* Scrollbars, themed. Track sinks into the page background; the thumb picks
-   up the laurel-gold accent used for highlights elsewhere. Firefox reads
-   scrollbar-color; Chromium/Edge/Safari read the ::-webkit- rules. */
+/* Scrollbars, themed. Track sinks into the page background; the thumb is a
+   muted laurel gold — the accent blended toward the background so it reads
+   as a dim gold pill, not a bright bar — brightening to the full accent on
+   hover. Firefox reads scrollbar-color; Chromium/Edge/Safari the ::-webkit-
+   rules. --scrollbar-thumb keeps the two engines in sync from one value. */
+:root {
+  --scrollbar-thumb: color-mix(in srgb, var(--accent) 45%, var(--bg));
+}
+
 * {
-  scrollbar-color: var(--accent) var(--bg);
+  scrollbar-color: var(--scrollbar-thumb) var(--bg);
 }
 
 ::-webkit-scrollbar {
@@ -51,11 +57,15 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--accent);
+  background: var(--scrollbar-thumb);
   border-radius: 6px;
   /* A background-coloured border insets the thumb so it reads as a rounded
-     gold pill floating on the track, not a bar filling it edge to edge. */
+     pill floating on the track, not a bar filling it edge to edge. */
   border: 3px solid var(--bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
 }
 
 h1,
