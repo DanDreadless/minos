@@ -87,6 +87,7 @@ func (s *Server) Router() http.Handler {
 	r.Route("/api", func(r chi.Router) {
 		r.Use(s.auth)
 		r.Get("/status", s.handleStatus)
+		r.Get("/upstreams", s.handleUpstreams)
 		r.Get("/update", s.handleUpdate)
 		r.Get("/querylog", s.handleQueryLog)
 		r.Get("/querylog/history", s.handleQueryLogHistory)
@@ -209,6 +210,38 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		resp.PausedUntil = &until
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// upstreamHealth is one upstream's live health for the UI. Address matches
+// the configured upstream address (the breaker's counters are keyed on it).
+// Sick means the failover breaker is currently sidestepping the upstream;
+// zero Requests means it simply hasn't been needed since start — healthy
+// primaries starve the backups, which is normal, not an outage.
+type upstreamHealth struct {
+	Address  string  `json:"address"`
+	Requests uint64  `json:"requests"`
+	Failures uint64  `json:"failures"`
+	AvgMs    float64 `json:"avg_ms"`
+	Sick     bool    `json:"sick"`
+}
+
+func (s *Server) handleUpstreams(w http.ResponseWriter, r *http.Request) {
+	out := []upstreamHealth{}
+	if s.cache != nil {
+		for _, st := range s.cache.UpstreamStats() {
+			h := upstreamHealth{
+				Address:  st.Name,
+				Requests: st.Requests,
+				Failures: st.Failures,
+				Sick:     st.Sick,
+			}
+			if st.Requests > 0 {
+				h.AvgMs = st.DurationSeconds / float64(st.Requests) * 1000
+			}
+			out = append(out, h)
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleQueryLog(w http.ResponseWriter, r *http.Request) {

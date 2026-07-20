@@ -77,3 +77,24 @@ func TestMetricsWithoutProxySource(t *testing.T) {
 		t.Error("cache series present despite nil proxy source")
 	}
 }
+
+// /api/upstreams surfaces the breaker state per upstream for the UI's
+// health lights; a nil proxy source (tests, unusual wiring) yields [].
+func TestUpstreamsEndpoint(t *testing.T) {
+	s, _ := newTestServer(t, "")
+	rec := doJSON(t, s.Router(), http.MethodGet, "/api/upstreams", "", nil)
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Fatalf("nil source: status=%d body=%q, want 200 []", rec.Code, rec.Body.String())
+	}
+	s.cache = fakeProxyStats{}
+	rec = doJSON(t, s.Router(), http.MethodGet, "/api/upstreams", "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{`"address":"dns.example\"quote"`, `"requests":10`, `"failures":2`, `"avg_ms":150`, `"sick":false`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body %q missing %q", body, want)
+		}
+	}
+}
