@@ -1,15 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { api, type CustomService, type Device, type Group, type Service } from '../lib/api';
-  import ServiceSet from '../lib/components/ServiceSet.svelte';
+  import { api, type Device, type Group } from '../lib/api';
   import { copy } from '../lib/copy';
   import { deviceHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
   let devices: Device[] = [];
   let groups: Group[] = [];
-  let catalog: Service[] = [];
-  let customs: CustomService[] = [];
   let names: Record<string, string> = {}; // per-row label drafts
   let newGroupName = '';
   let newGroupMode = 'filter';
@@ -135,54 +132,15 @@
     }
   }
 
-  async function toggleGroupService(g: Group, name: string): Promise<void> {
-    const next = new Set(g.services ?? []);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
-    try {
-      groups = await api.updateGroup(g.name, { services: [...next] });
-    } catch (e) {
-      notifyError(e);
-      await load();
-    }
+  // Per-group service policy is edited on the Pardons & Sentences page (scoped
+  // shuttles); here we only surface the counts. These two helpers total the
+  // catalog + custom selections on each side.
+  function groupBlockedCount(g: Group): number {
+    return (g.services?.length ?? 0) + (g.custom_services?.length ?? 0);
   }
 
-  async function toggleGroupAllowedService(g: Group, name: string): Promise<void> {
-    const next = new Set(g.allowed_services ?? []);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
-    try {
-      groups = await api.updateGroup(g.name, { allowed_services: [...next] });
-    } catch (e) {
-      notifyError(e);
-      await load();
-    }
-  }
-
-  // Custom-service selections ride separate group fields end to end — a
-  // custom name must never enter the catalog-validated services keys.
-  async function toggleGroupCustomService(g: Group, name: string): Promise<void> {
-    const next = new Set(g.custom_services ?? []);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
-    try {
-      groups = await api.updateGroup(g.name, { custom_services: [...next] });
-    } catch (e) {
-      notifyError(e);
-      await load();
-    }
-  }
-
-  async function toggleGroupAllowedCustomService(g: Group, name: string): Promise<void> {
-    const next = new Set(g.allowed_custom_services ?? []);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
-    try {
-      groups = await api.updateGroup(g.name, { allowed_custom_services: [...next] });
-    } catch (e) {
-      notifyError(e);
-      await load();
-    }
+  function groupAllowedCount(g: Group): number {
+    return (g.allowed_services?.length ?? 0) + (g.allowed_custom_services?.length ?? 0);
   }
 
   async function setGroupMode(g: Group, ev: Event): Promise<void> {
@@ -233,13 +191,6 @@
 
   onMount(() => {
     void load();
-    void api
-      .services()
-      .then((v) => {
-        catalog = v.catalog;
-        customs = v.custom;
-      })
-      .catch(notifyError);
     timer = setInterval(load, 15000);
   });
 
@@ -397,60 +348,10 @@
           />
           {copy.devices.groupSafeSearch}
         </label>
-        <details class="group-services">
-          <summary>
-            {copy.devices.groupServices}
-            {#if (g.services?.length ?? 0) + (g.custom_services?.length ?? 0) > 0}
-              <span class="count">
-                ({(g.services?.length ?? 0) + (g.custom_services?.length ?? 0)})
-              </span>
-            {/if}
-          </summary>
-          <div class="group-service-set">
-            <ServiceSet
-              {catalog}
-              {customs}
-              selectedCatalog={g.services ?? []}
-              selectedCustom={g.custom_services ?? []}
-              emptyText={copy.devices.groupServicesEmpty}
-              on:add={(e) =>
-                e.detail.custom
-                  ? toggleGroupCustomService(g, e.detail.name)
-                  : toggleGroupService(g, e.detail.name)}
-              on:remove={(e) =>
-                e.detail.custom
-                  ? toggleGroupCustomService(g, e.detail.name)
-                  : toggleGroupService(g, e.detail.name)}
-            />
-          </div>
-        </details>
-        <details class="group-services">
-          <summary>
-            {copy.devices.groupAllowedServices}
-            {#if (g.allowed_services?.length ?? 0) + (g.allowed_custom_services?.length ?? 0) > 0}
-              <span class="count">
-                ({(g.allowed_services?.length ?? 0) + (g.allowed_custom_services?.length ?? 0)})
-              </span>
-            {/if}
-          </summary>
-          <div class="group-service-set">
-            <ServiceSet
-              {catalog}
-              {customs}
-              selectedCatalog={g.allowed_services ?? []}
-              selectedCustom={g.allowed_custom_services ?? []}
-              emptyText={copy.devices.groupAllowedServicesEmpty}
-              on:add={(e) =>
-                e.detail.custom
-                  ? toggleGroupAllowedCustomService(g, e.detail.name)
-                  : toggleGroupAllowedService(g, e.detail.name)}
-              on:remove={(e) =>
-                e.detail.custom
-                  ? toggleGroupAllowedCustomService(g, e.detail.name)
-                  : toggleGroupAllowedService(g, e.detail.name)}
-            />
-          </div>
-        </details>
+        <p class="group-service-summary">
+          {copy.devices.groupServicesSummary(groupBlockedCount(g), groupAllowedCount(g))}
+          <a href="#/domains">{copy.devices.groupServicesManage}</a>
+        </p>
       {/if}
       <details class="group-schedule">
         <summary>
@@ -655,7 +556,6 @@
     align-items: center;
   }
 
-  .group-services,
   .group-schedule {
     margin-top: 0.8rem;
   }
@@ -670,14 +570,12 @@
     color: var(--text-dim);
   }
 
-  .group-services summary,
   .group-schedule summary {
     cursor: pointer;
     color: var(--text-dim);
     font-size: 0.82rem;
   }
 
-  .group-services .count,
   .group-schedule .count {
     color: var(--accent);
   }
@@ -719,7 +617,18 @@
     margin: 0.6rem 0 0;
   }
 
-  .group-service-set {
-    margin-top: 0.6rem;
+  .group-service-summary {
+    margin: 0.8rem 0 0;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+
+  .group-service-summary a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .group-service-summary a:hover {
+    text-decoration: underline;
   }
 </style>

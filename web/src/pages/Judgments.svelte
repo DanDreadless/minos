@@ -1,8 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type CheckResult, type CustomService, type LocalRecord, type Service } from '../lib/api';
+  import {
+    api,
+    type CheckResult,
+    type CustomService,
+    type Group,
+    type LocalRecord,
+    type Service,
+  } from '../lib/api';
   import CustomServiceForm from '../lib/components/CustomServiceForm.svelte';
-  import ServiceSet from '../lib/components/ServiceSet.svelte';
+  import ServiceShuttle from '../lib/components/ServiceShuttle.svelte';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
@@ -11,6 +18,10 @@
   let catalog: Service[] = [];
   let customs: CustomService[] = [];
   let allowedServices = new Set<string>();
+  let blockedServices = new Set<string>();
+  let groups: Group[] = [];
+  // '' = global policy; otherwise the name of the group being edited.
+  let scope = '';
   let newPardon = '';
   let newSentence = '';
   let checkDomain = '';
@@ -23,35 +34,74 @@
 
   async function load(): Promise<void> {
     try {
-      const [al, dl, cfg, svcs] = await Promise.all([
+      const [al, dl, cfg, svcs, grps] = await Promise.all([
         api.allowlist(),
         api.denylist(),
         api.getConfig(),
         api.services(),
+        api.groups(),
       ]);
       allowlist = al;
       denylist = dl;
       localRecords = cfg.dns.local_records;
-      catalog = svcs.catalog;
-      customs = svcs.custom;
-      allowedServices = new Set(svcs.allowed);
+      applyServicesView(svcs);
+      groups = grps;
     } catch (e) {
       notifyError(e);
     }
   }
 
-  // The composed set: adding pardons a service, removing lifts the pardon —
-  // the view is the policy. Customs carry the pardon flag on the definition.
-  async function addPardonService(
+  function applyServicesView(view: {
+    catalog: Service[];
+    blocked: string[];
+    allowed: string[];
+    custom: CustomService[];
+  }): void {
+    catalog = view.catalog;
+    customs = view.custom;
+    blockedServices = new Set(view.blocked);
+    allowedServices = new Set(view.allowed);
+  }
+
+  // The group currently in scope, or null for global. The four selected-name
+  // arrays feed the two shuttles; the view IS the policy at the chosen scope.
+  $: activeGroup = scope ? (groups.find((g) => g.name === scope) ?? null) : null;
+  $: blockCatalog = scope ? (activeGroup?.services ?? []) : [...blockedServices];
+  $: blockCustom = scope
+    ? (activeGroup?.custom_services ?? [])
+    : customs.filter((c) => c.blocked).map((c) => c.name);
+  $: allowCatalog = scope ? (activeGroup?.allowed_services ?? []) : [...allowedServices];
+  $: allowCustom = scope
+    ? (activeGroup?.allowed_custom_services ?? [])
+    : customs.filter((c) => c.allowed).map((c) => c.name);
+
+  type Side = 'block' | 'allow';
+
+  // A shuttle move: route to the global services API (catalog names) or a
+  // custom's own flag, or — when a group is in scope — that group's fields.
+  async function changeService(
+    side: Side,
+    on: boolean,
     e: CustomEvent<{ name: string; custom: boolean }>,
   ): Promise<void> {
     const { name, custom } = e.detail;
     try {
-      if (custom) {
-        customs = (await api.updateCustomService(name, { allowed: true })).custom;
+      if (scope) {
+        await changeGroupService(scope, side, custom, on, name);
+      } else if (custom) {
+        applyServicesView(
+          await api.updateCustomService(name, side === 'block' ? { blocked: on } : { allowed: on }),
+        );
+      } else if (side === 'block') {
+        const next = on
+          ? [...blockedServices, name]
+          : [...blockedServices].filter((n) => n !== name);
+        applyServicesView(await api.updateServices({ blocked: next }));
       } else {
-        const view = await api.updateServices({ allowed: [...allowedServices, name] });
-        allowedServices = new Set(view.allowed);
+        const next = on
+          ? [...allowedServices, name]
+          : [...allowedServices].filter((n) => n !== name);
+        applyServicesView(await api.updateServices({ allowed: next }));
       }
     } catch (err) {
       notifyError(err);
@@ -59,23 +109,32 @@
     }
   }
 
-  async function removePardonService(
-    e: CustomEvent<{ name: string; custom: boolean }>,
+  // Custom names ride separate group fields end to end — a custom must never
+  // enter the catalog-validated services keys.
+  async function changeGroupService(
+    groupName: string,
+    side: Side,
+    custom: boolean,
+    on: boolean,
+    name: string,
   ): Promise<void> {
-    const { name, custom } = e.detail;
-    try {
-      if (custom) {
-        customs = (await api.updateCustomService(name, { allowed: false })).custom;
-      } else {
-        const view = await api.updateServices({
-          allowed: [...allowedServices].filter((n) => n !== name),
-        });
-        allowedServices = new Set(view.allowed);
-      }
-    } catch (err) {
-      notifyError(err);
-      await load();
-    }
+    const g = groups.find((x) => x.name === groupName);
+    if (!g) return;
+    const pick = (arr: string[] | null): string[] => {
+      const cur = new Set(arr ?? []);
+      if (on) cur.add(name);
+      else cur.delete(name);
+      return [...cur];
+    };
+    const upd: Parameters<typeof api.updateGroup>[1] =
+      side === 'block'
+        ? custom
+          ? { custom_services: pick(g.custom_services) }
+          : { services: pick(g.services) }
+        : custom
+          ? { allowed_custom_services: pick(g.allowed_custom_services) }
+          : { allowed_services: pick(g.allowed_services) };
+    groups = await api.updateGroup(groupName, upd);
   }
 
   // --- custom-service management (pardon context: creations start allowed,
@@ -101,24 +160,25 @@
     const d = e.detail;
     try {
       if (editingCustom) {
-        const view = await api.updateCustomService(editingCustom.name, {
-          label: d.label,
-          domains: d.domains,
-          allow_extra: d.allow_extra ?? [],
-        });
-        customs = view.custom;
+        applyServicesView(
+          await api.updateCustomService(editingCustom.name, {
+            label: d.label,
+            domains: d.domains,
+            allow_extra: d.allow_extra ?? [],
+          }),
+        );
         notify(`Custom service "${d.label || editingCustom.name}" updated.`);
       } else {
-        // Created from the pardon context → starts allowed.
-        const view = await api.addCustomService({
-          label: d.label,
-          domains: d.domains,
-          allow_extra: d.allow_extra ?? [],
-          allowed: true,
-          ...(d.name ? { name: d.name } : {}),
-        });
-        customs = view.custom;
-        notify(`Custom service "${d.label || d.name}" created and pardoned.`);
+        // Defined but inactive — add it to a shuttle to sentence or pardon it.
+        applyServicesView(
+          await api.addCustomService({
+            label: d.label,
+            domains: d.domains,
+            allow_extra: d.allow_extra ?? [],
+            ...(d.name ? { name: d.name } : {}),
+          }),
+        );
+        notify(`Custom service "${d.label || d.name}" created — add it above to activate.`);
       }
       closeCustomForm();
     } catch (err) {
@@ -129,8 +189,7 @@
   async function removeCustom(c: CustomService): Promise<void> {
     if (!window.confirm(copy.lists.customConfirmDelete(c.label || c.name))) return;
     try {
-      const view = await api.deleteCustomService(c.name);
-      customs = view.custom;
+      applyServicesView(await api.deleteCustomService(c.name));
       if (editingCustom?.name === c.name) closeCustomForm();
     } catch (e) {
       notifyError(e);
@@ -254,24 +313,65 @@
   {/if}
 </section>
 
-<section class="card service-pardons">
-  <h2>{copy.domains.servicePardonsTitle} <small>{copy.domains.servicePardonsHint}</small></h2>
-  <ServiceSet
-    {catalog}
-    {customs}
-    selectedCatalog={[...allowedServices]}
-    selectedCustom={customs.filter((c) => c.allowed).map((c) => c.name)}
-    emptyText={copy.lists.servicePardonsEmpty}
-    on:add={addPardonService}
-    on:remove={removePardonService}
-  />
+<section class="card services">
+  <h2>{copy.domains.servicesTitle} <small>{copy.domains.servicesHint}</small></h2>
+
+  <div class="scope-row">
+    <label>
+      {copy.domains.servicesScopeLabel}
+      <select bind:value={scope}>
+        <option value="">{copy.domains.servicesScopeGlobal}</option>
+        {#each groups as g (g.name)}
+          <option value={g.name}>{g.name} ({g.mode})</option>
+        {/each}
+      </select>
+    </label>
+  </div>
+
+  <div class="service-grid">
+    <div class="service-col">
+      <h3>
+        {copy.domains.sentencedServicesTitle}
+        <small>{copy.domains.sentencedServicesHint}</small>
+      </h3>
+      <ServiceShuttle
+        {catalog}
+        {customs}
+        selectedCatalog={blockCatalog}
+        selectedCustom={blockCustom}
+        availableLabel={copy.lists.serviceShuttleAvailable}
+        activeLabel={copy.domains.sentencedServicesActive}
+        emptyText={copy.domains.sentencedServicesEmpty}
+        on:add={(e) => changeService('block', true, e)}
+        on:remove={(e) => changeService('block', false, e)}
+      />
+    </div>
+    <div class="service-col">
+      <h3>
+        {copy.domains.pardonedServicesTitle}
+        <small>{copy.domains.pardonedServicesHint}</small>
+      </h3>
+      <ServiceShuttle
+        {catalog}
+        {customs}
+        selectedCatalog={allowCatalog}
+        selectedCustom={allowCustom}
+        availableLabel={copy.lists.serviceShuttleAvailable}
+        activeLabel={copy.domains.pardonedServicesActive}
+        emptyText={copy.domains.pardonedServicesEmpty}
+        on:add={(e) => changeService('allow', true, e)}
+        on:remove={(e) => changeService('allow', false, e)}
+      />
+    </div>
+  </div>
+
   <details class="custom-manage" bind:open={manageOpen}>
     <summary>
       {copy.lists.customManage}
       {#if customs.length}
         <span class="count">({customs.length})</span>
       {/if}
-      <small>{copy.lists.customManagePardonHint}</small>
+      <small>{copy.lists.customManageHint}</small>
     </summary>
     {#if customs.length}
       <ul class="custom-list">
@@ -309,8 +409,8 @@
     <p class="note">{copy.lists.customSharedNote}</p>
   </details>
   <p class="note">
-    {copy.domains.servicePardonsNote}
-    <a href="#/devices">{copy.domains.servicePardonsNoteLink}</a>
+    {copy.domains.servicesScopeNote}
+    <a href="#/devices">{copy.domains.servicesScopeNoteLink}</a>
   </p>
 </section>
 
@@ -472,8 +572,41 @@
     margin-top: 1.25rem;
   }
 
-  .service-pardons {
+  .services {
     margin-top: 1.25rem;
+  }
+
+  .scope-row {
+    margin-bottom: 1.1rem;
+  }
+
+  .scope-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+
+  .service-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+    gap: 1.25rem;
+  }
+
+  .service-col h3 {
+    margin: 0 0 0.6rem;
+    font-family: var(--font-display);
+    font-weight: normal;
+    font-size: 0.98rem;
+    letter-spacing: 0.02em;
+  }
+
+  .service-col h3 small {
+    margin-left: 0.4rem;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    letter-spacing: 0;
   }
 
   .custom-manage {
