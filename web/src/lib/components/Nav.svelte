@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import type { Status } from '../api';
   import { copy } from '../copy';
   import { hrefFor, route, type Route } from '../router';
@@ -13,9 +14,44 @@
     { key: 'domains', ...copy.nav.domains },
     { key: 'settings', ...copy.nav.settings },
   ];
+
+  // The drawer is a mobile-only concern: on desktop the CSS keeps <nav>
+  // static and hides the burger/backdrop, so `open` is inert there.
+  let open = false;
+  const closeDrawer = () => (open = false);
+  const toggleDrawer = () => (open = !open);
+
+  // Lock the background from scrolling while the drawer is over it.
+  function setBodyLock(locked: boolean): void {
+    if (typeof document !== 'undefined') {
+      document.body.style.overflow = locked ? 'hidden' : '';
+    }
+  }
+  $: setBodyLock(open);
+  onDestroy(() => setBodyLock(false));
 </script>
 
-<nav>
+<svelte:window on:keydown={(e) => e.key === 'Escape' && closeDrawer()} />
+
+<div class="topbar">
+  <button
+    class="burger"
+    aria-label={open ? copy.nav.closeMenu : copy.nav.openMenu}
+    aria-expanded={open}
+    aria-controls="primary-nav"
+    on:click={toggleDrawer}
+  >
+    <span class="bars" aria-hidden="true"><span></span><span></span><span></span></span>
+  </button>
+  <img class="topbar-wordmark" src="/banner.png" alt={copy.appName} />
+</div>
+
+{#if open}
+  <button class="backdrop" aria-label={copy.nav.closeMenu} on:click={closeDrawer}></button>
+{/if}
+
+<nav id="primary-nav" class:open>
+  <button class="close" aria-label={copy.nav.closeMenu} on:click={closeDrawer}>&times;</button>
   <div class="meander" aria-hidden="true"></div>
   <a class="brand" href="#/">
     <img class="wordmark" src="/banner.png" alt={copy.appName} />
@@ -28,6 +64,7 @@
           href={hrefFor[item.key]}
           class:active={$route === item.key || ($route === 'device' && item.key === 'devices')}
           title={item.hint}
+          on:click={closeDrawer}
         >
           <span class="label">{item.label}</span>
           <span class="hint">{item.hint}</span>
@@ -182,43 +219,114 @@
     text-decoration: underline;
   }
 
+  /* The mobile top bar, the burger, the drawer close button and the
+     backdrop are all hidden on desktop, where <nav> is the static
+     sidebar. The @media block below switches them on and turns <nav>
+     into an off-canvas drawer. */
+  .topbar,
+  .close,
+  .backdrop {
+    display: none;
+  }
+
+  .topbar {
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0.75rem;
+    background: var(--bg-sunken);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .burger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    padding: 0;
+    border-color: transparent;
+  }
+
+  .burger .bars {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 20px;
+    height: 15px;
+  }
+
+  .burger .bars span {
+    display: block;
+    height: 2px;
+    background: currentColor;
+    border-radius: 1px;
+  }
+
+  .topbar-wordmark {
+    height: 26px;
+    width: auto;
+  }
+
+  .close {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.6rem;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    line-height: 1;
+    font-size: 1.4rem;
+    border-color: transparent;
+    color: var(--text-dim);
+  }
+
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.55);
+  }
+
   @media (max-width: 800px) {
-    nav {
-      border-right: none;
-      border-bottom: 1px solid var(--border);
-    }
-
-    ul {
+    .topbar {
       display: flex;
-      flex-wrap: wrap;
-      margin: 0;
     }
 
-    li a {
-      border-left: none;
-      border-bottom: 3px solid transparent;
-      padding: 0.5rem 0.8rem;
+    .close {
+      display: block;
     }
 
-    li a.active {
-      border-bottom-color: var(--accent);
+    .backdrop {
+      display: block;
     }
 
-    li a .hint {
-      display: none;
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 50;
+      width: min(82vw, 300px);
+      height: auto;
+      overflow-y: auto;
+      box-shadow: 2px 0 18px rgba(0, 0, 0, 0.45);
+      transform: translateX(-100%);
+      transition: transform 0.22s ease;
     }
 
-    .brand {
-      border-bottom: none;
-      padding-bottom: 0.3rem;
+    nav.open {
+      transform: translateX(0);
     }
+  }
 
-    .brand .tagline {
-      display: none;
-    }
-
-    .foot {
-      display: none;
+  @media (prefers-reduced-motion: reduce) {
+    nav {
+      transition: none;
     }
   }
 </style>
