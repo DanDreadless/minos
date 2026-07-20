@@ -288,16 +288,18 @@
     }
   }
 
-  function healthState(u: Upstream): 'ok' | 'sick' | 'standby' {
-    const h = upstreamHealth[u.address];
-    if (!h || h.requests === 0) return 'standby';
-    return h.sick ? 'sick' : 'ok';
+  // Two states only: green = active/healthy (the default for any configured
+  // upstream with no breaker fault, including an idle backup), red = the
+  // failover breaker is currently sidestepping it. The tooltip carries the
+  // nuance (serving vs. standing by) so the dot stays a plain green/red.
+  function healthState(u: Upstream): 'ok' | 'sick' {
+    return upstreamHealth[u.address]?.sick ? 'sick' : 'ok';
   }
 
   function healthTitle(u: Upstream): string {
     const h = upstreamHealth[u.address];
-    if (!h || h.requests === 0) return copy.settings.upstreamStandby;
-    if (h.sick) return copy.settings.upstreamSick;
+    if (h?.sick) return copy.settings.upstreamSick;
+    if (!h || h.requests === 0) return copy.settings.upstreamReady;
     return copy.settings.upstreamHealthy(h.requests, h.failures, h.avg_ms);
   }
 
@@ -769,11 +771,6 @@
   .health-dot.sick {
     background: var(--blocked);
     box-shadow: 0 0 4px var(--blocked);
-  }
-
-  .health-dot.standby {
-    background: transparent;
-    border: 1px solid var(--text-dim);
   }
 
   .upstream-row .preset {
