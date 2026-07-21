@@ -18,6 +18,10 @@
   --font-body:
     system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace;
+  /* Browser-drawn widgets (select popups, date pickers, autofill, spinners)
+     ignore page colours and default to the light theme — a white dropdown
+     with a blue selection bar. This tells them the page is dark. */
+  color-scheme: dark;
 }
 
 * {
@@ -145,6 +149,77 @@ input:focus,
 select:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* Dropdown rows match the app's grey hover (--bg-hover, same as the nav and
+   table rows) instead of the OS highlight. Two passes, because a dropdown is
+   normally a browser-drawn widget the page can't reach:
+
+   1. Fallback for engines still painting the popup natively — Firefox reads
+      these; Chromium honours the row background but keeps its own highlight
+      on the hovered/selected row, hence the inset shadow, which is the one
+      property that gets through.
+   2. `appearance: base-select` (Chromium 135+) replaces that widget with real
+      DOM, so ::picker(select) and the options are ours outright — the only
+      way to be sure the highlight is grey rather than the system accent. */
+option {
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+option:checked,
+option:hover {
+  background: var(--bg-hover);
+  box-shadow: 0 0 0 100vh var(--bg-hover) inset;
+  color: var(--text);
+}
+
+@supports (appearance: base-select) {
+  select,
+  ::picker(select) {
+    appearance: base-select;
+  }
+
+  /* The base control is a flex button; the padding/border/background above
+     still apply, so only the arrow and its spacing need saying. */
+  select {
+    gap: 0.5rem;
+  }
+
+  select::picker-icon {
+    color: var(--text-dim);
+    transition: transform 0.15s;
+  }
+
+  select:open::picker-icon {
+    transform: rotate(180deg);
+  }
+
+  ::picker(select) {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.25rem;
+  }
+
+  option {
+    background: transparent;
+    box-shadow: none;
+    border-radius: 3px;
+    padding: 0.3rem 0.5rem;
+  }
+
+  option:hover,
+  option:focus,
+  option:checked {
+    background: var(--bg-hover);
+    box-shadow: none;
+    color: var(--text);
+  }
+
+  option::checkmark {
+    color: var(--accent);
+  }
 }
 
 input[type='checkbox'],
