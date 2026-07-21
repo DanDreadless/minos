@@ -506,6 +506,14 @@ This is security software; hold it to that standard.
   (field bug, v0.16.5). The Docket and device-page tables are deliberately
   unkeyed; keep any future entry list that way (or add a synthetic
   client-side counter id).
+- **Themed dropdowns need `appearance: base-select`**: a native `<select>`
+  popup is an OS-drawn widget, and Chromium ignores author styles on its
+  highlighted row — themed `option` rules alone leave the system blue. app.css
+  opts Chromium 135+ into `base-select`, which makes the picker real DOM
+  (`::picker(select)`, `::picker-icon`, `option::checkmark`), and keeps the
+  plain `option` rules as the Firefox/Safari fallback. `color-scheme: dark`
+  on `:root` is the other half: without it every browser-drawn widget (popup,
+  date picker, autofill, spinners) renders light regardless.
 - **Query-log read indexes** (fixed decisions): the log carries
   `(client, ts)`, `(list, ts)`, and `(audit_list, ts)` composite indexes —
   without them the device page and Docket list filter walk the whole time
