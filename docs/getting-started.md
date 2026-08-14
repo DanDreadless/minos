@@ -419,11 +419,39 @@ None of this stops a determined adult with a VPN. It stops the defaults:
 browsers deciding for themselves, Apple relaying around you, and apps
 with a resolver in their pocket.
 
+## DNSSEC validation
+
+By default Minos delegates DNSSEC to the upstream resolvers (Cloudflare
+and Quad9 validate, and DoH/DoT protects the path to them). Turn on
+`dns.dnssec` and Minos checks signed answers against the DNS root of
+trust itself — so even the upstream resolver cannot forge an answer for
+a signed domain:
+
+- **permissive** — validate every forwarded answer, count the outcomes,
+  never block. The right first step: run it for a while and watch
+  `minos_dnssec_results_total` in `/metrics`.
+- **enforce** — additionally refuse answers that *fail* validation
+  (bogus: a forged record, a stripped signature, a broken chain) with
+  SERVFAIL. The refusal shows in the query log attributed to `dnssec`,
+  with the reason, like any other judgment.
+
+Two deliberate safety properties: answers that cannot be judged either
+way — an upstream that returns no DNSSEC records, a transient chain
+fetch failure — always pass, in both modes, so a misconfigured upstream
+degrades visibility rather than resolution; and unsigned zones (most of
+the internet) are unaffected. Validation costs one signature check per
+cache-missed answer (~50 µs on amd64, well under a millisecond on a
+Pi); cache hits and blocked queries cost nothing extra. Clients that set
+the DO bit get the full DNSSEC records and a trustworthy AD bit;
+everyone else gets clean, stripped answers.
+
 ## Monitoring with Prometheus / Grafana
 
 `GET /metrics` on the API port serves Prometheus exposition format:
 query/block counters, cache hit rate, per-upstream request counts,
-failures, and cumulative latency, per-list rule counts, and pause state.
+failures, and cumulative latency, per-list rule counts, pause state, and
+(when `dns.dnssec` is on) validation outcomes as
+`minos_dnssec_results_total{status="secure|insecure|bogus|indeterminate"}`.
 It is scrape-only — Minos never pushes data anywhere, so the no-telemetry
 promise holds; these are your own numbers on your own network.
 
@@ -504,6 +532,13 @@ dns:
     max_ttl: 3600           # never serve a cached answer longer than this
     serve_stale: true       # RFC 8767: answer from an expired entry (up to
                             # 6h old) and refresh in the background
+  dnssec: off               # validate forwarded answers against the DNSSEC
+                            # chain of trust: off | permissive | enforce.
+                            # permissive validates and counts, never blocks;
+                            # enforce refuses forged (bogus) answers with
+                            # SERVFAIL. Answers that cannot be judged either
+                            # way always pass, so an upstream without DNSSEC
+                            # support degrades visibility, never resolution.
   local_ttl: 300            # TTL on locally answered records
   local_records:            # names answered here, never sent upstream
     - name: nas.home.lab

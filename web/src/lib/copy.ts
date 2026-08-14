@@ -320,6 +320,12 @@ export const copy = {
       'Failing — the failover breaker is sidestepping this resolver and retrying it every 30 seconds. Other upstreams are answering.',
     upstreamReady:
       'Ready — healthy and standing by. Nothing has needed it yet: the resolvers ahead of it are handling all the traffic.',
+    dnssecLabel: 'DNSSEC validation',
+    dnssecOff: 'Off — trust the upstream resolvers (default)',
+    dnssecPermissive: 'Permissive — validate and count, never block',
+    dnssecEnforce: 'Enforce — refuse answers that fail validation',
+    dnssecNote:
+      'Minos checks signed answers against the DNS root of trust itself, instead of taking the upstream’s word for it. Start with permissive and watch the counters; enforce answers "server failure" for forged responses. Answers that cannot be judged either way still pass, so a resolver without DNSSEC support degrades visibility, never resolution.',
     blockingTitle: 'Blocking',
     blockingModeZeroIp: 'Answer with 0.0.0.0 (recommended: fails fast, quiet)',
     blockingModeNxdomain: 'Answer NXDOMAIN (domain does not exist)',

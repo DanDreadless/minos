@@ -26,6 +26,7 @@ type configView struct {
 		LocalTTL        uint32               `json:"local_ttl"`
 		Routes          []config.Route       `json:"routes"`
 		AllowFirefoxDoH bool                 `json:"allow_firefox_doh"`
+		DNSSEC          string               `json:"dnssec"`
 	} `json:"dns"`
 	Blocking struct {
 		Mode                    string `json:"mode"`
@@ -73,6 +74,10 @@ func viewOf(c *config.Config) configView {
 		v.DNS.Routes = []config.Route{}
 	}
 	v.DNS.AllowFirefoxDoH = c.DNS.AllowFirefoxDoH
+	v.DNS.DNSSEC = c.DNS.DNSSEC
+	if v.DNS.DNSSEC == "" {
+		v.DNS.DNSSEC = "off"
+	}
 	v.Blocking.Mode = c.Blocking.Mode
 	v.Blocking.SafeSearch = c.Blocking.SafeSearch
 	v.Blocking.BlockICloudPrivateRelay = c.Blocking.BlockICloudPrivateRelay
@@ -126,6 +131,7 @@ type settingsUpdate struct {
 		LocalTTL        *uint32               `json:"local_ttl"`
 		Routes          *[]config.Route       `json:"routes"`
 		AllowFirefoxDoH *bool                 `json:"allow_firefox_doh"`
+		DNSSEC          *string               `json:"dnssec"`
 	} `json:"dns"`
 	Blocking *struct {
 		Mode                    *string `json:"mode"`
@@ -211,6 +217,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			if upd.DNS.AllowFirefoxDoH != nil {
 				c.DNS.AllowFirefoxDoH = *upd.DNS.AllowFirefoxDoH
+			}
+			if upd.DNS.DNSSEC != nil {
+				c.DNS.DNSSEC = *upd.DNS.DNSSEC
 			}
 		}
 		if upd.Blocking != nil {

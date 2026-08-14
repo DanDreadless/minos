@@ -49,6 +49,13 @@ At or beyond parity with the field:
 - **Query dedup + serve-stale** — concurrent identical queries collapse to
   one exchange; expired answers serve instantly (RFC 8767) with a deduped
   background refresh *(shipped)*
+- **DNSSEC validation** — in-process chain-of-trust validation
+  (RRSIG/DNSKEY/DS to the root anchors, NSEC/NSEC3 denial proofs,
+  KeyTrap-bounded), `dns.dnssec: off | permissive | enforce`: permissive
+  counts without blocking, enforce SERVFAILs forged answers with docket
+  attribution, and unjudgeable answers always pass so a non-DNSSEC
+  upstream can never break resolution. Neither Pi-hole nor AdGuard Home
+  validates in-process — this is a differentiator *(shipped, August 2026)*
 - **2M-domain memory budget verified** — the matcher was compacted from
   maps (~82 B/entry, 164 MB) to a sorted slab (~31 B/entry): 2M blocked
   domains now hold at 83 MB RSS against the 150 MB budget, with lookups
@@ -165,7 +172,6 @@ gateway — scope decision needed).
 
 ## Under consideration
 
-- DNSSEC validation (today: delegate to validating DoH/DoT upstreams)
 - DNS-over-QUIC / DoH3, client-facing and upstream (parked: needs quic-go,
   a heavy dependency against the blessed-set rule)
 

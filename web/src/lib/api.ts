@@ -1,4 +1,4 @@
-// Thin typed client for the documented REST/WS API. The UI must go through
+﻿// Thin typed client for the documented REST/WS API. The UI must go through
 // this module only — no reaching into backend internals.
 
 export interface Status {
@@ -122,6 +122,7 @@ export interface ConfigView {
     local_ttl: number;
     routes: Route[];
     allow_firefox_doh: boolean;
+    dnssec: 'off' | 'permissive' | 'enforce';
   };
   blocking: {
     mode: 'zero_ip' | 'nxdomain';
@@ -153,6 +154,7 @@ export interface SettingsUpdate {
     local_ttl?: number;
     routes?: Route[];
     allow_firefox_doh?: boolean;
+    dnssec?: string;
   };
   blocking?: {
     mode?: string;
