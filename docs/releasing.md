@@ -1,69 +1,60 @@
 # Releasing Minos
 
-Since the August 2026 migration, the **local Gitea instance is the source
-of truth** and GitHub is a public mirror that builds the artifacts.
-Releases still land on GitHub — binaries, checksums, and GHCR container
-images — because the mirrored tag triggers the release workflow there.
+**Gitea (`vault-tec.local`) is the source of truth. GitHub is a public
+mirror. Every release is published on both**, carrying identical
+binaries and checksums.
 
-**No CI runs on Gitea.** It lives in a NAS container that shouldn't be
-loaded with build jobs, so repository Actions are off and every workflow
-job is additionally gated to `github.server_url`. Verification happens on
-a workstation before tagging, and on GitHub's runners after.
+Gitea runs in a NAS container, so it never does build work: repository
+Actions are disabled there and every workflow job is gated to
+`github.server_url`. The mirror's runners build the artifacts; a
+workstation drives the release and copies the results back to Gitea.
 
-## One-time setup: the push mirror
+## Day-to-day
 
-On Gitea: **Settings → Repository → Mirror Settings → Add push mirror**
-
-- Git remote URL: `https://github.com/DanDreadless/minos.git`
-- Authorization: a GitHub personal access token with `repo` **and**
-  `workflow` scope (fine-grained: Contents + Workflows read/write on the
-  mirror repo). The `workflow` permission is required because pushes
-  that touch `.github/workflows/` are otherwise rejected.
-- Enable **Sync when commits are pushed**
-
-Mirroring is a push of refs, so it carries branches and tags but not
-release entries — hence the manual step below.
-
-Without the mirror configured, push to GitHub by hand:
-
-```
-git push https://x-access-token:<PAT>@github.com/DanDreadless/minos.git main v0.19.0
-```
+Push all work to Gitea — branches included, not just `main`. The
+configured **push mirror** replicates every ref to GitHub automatically
+(sync-on-commit), so nothing needs pushing to GitHub by hand.
 
 ## Cutting a release
 
-1. **Verify locally** (this is the gate Gitea no longer provides):
+```
+cp .env.example .env    # first time only; .env is git-ignored
+scripts/release.sh v0.19.1
+```
 
-   ```
-   go test ./...            # -race needs cgo; the Linux CI run covers it
-   golangci-lint run
-   cd web && npx svelte-check && npm run build   # commit web/dist if changed
-   ```
+The script sources `.env` for `GITEA_TOKEN` and `GITHUB_TOKEN`
+(environment variables you export take precedence).
 
-2. **Tag and push to Gitea:**
+That does the whole flow:
 
-   ```
-   git tag -a v0.19.0 -m "Minos v0.19.0: <headline>"
-   git push origin v0.19.0
-   ```
+1. **Preflight** — on `main`, clean tree, in sync with `origin`, tag not
+   already used.
+2. **Verify** — `gofmt` against the *committed blobs* (a CRLF checkout
+   makes the working-tree check useless, and golangci-lint has missed a
+   real problem here), `go test ./...`, golangci-lint, `svelte-check`,
+   and a frontend build that must leave `web/dist` unchanged.
+   `-race` needs cgo, so the GitHub run remains the authoritative race
+   check — and it blocks the release there.
+3. **Tag and push to Gitea**, then mirror to GitHub (the push mirror
+   handles this; `GITHUB_TOKEN` is only needed if the mirror is off).
+4. **Wait for the GitHub build** — binaries for seven targets, the
+   GitHub Release, and multi-arch images on GHCR.
+5. **Verify checksums** of every downloaded asset before publishing.
+6. **Publish the Gitea release** with generated notes and the same
+   assets attached.
 
-3. **Mirror to GitHub** (automatic with the push mirror; otherwise the
-   manual push above). The mirrored tag starts the release workflow:
-   race-detector tests, seven binary targets, the GitHub Release with
-   checksums, and multi-arch images to GHCR.
+Useful flags: `--assets-only <tag>` re-syncs assets onto an existing
+release (also the recovery path if a run dies partway), `--skip-verify`
+when the checks just ran, `--notes-file <path>` for hand-written notes.
 
-4. **Record the release on Gitea.** Either "New release" from the tag in
-   the web UI, or the API:
+## Tokens
 
-   ```
-   curl -X POST -H "Authorization: token <GITEA_TOKEN>" \
-     -H "Content-Type: application/json" \
-     -d '{"tag_name":"v0.19.0","name":"Minos v0.19.0",
-          "body":"Notes here. Binaries and images: https://github.com/DanDreadless/minos/releases/tag/v0.19.0"}' \
-     http://vault-tec.local:3000/api/v1/repos/dreadless/minos/releases
-   ```
-
-   Point the notes at the GitHub assets; Gitea holds no binaries.
+- **Gitea token** — user → Settings → Applications → Generate token,
+  `repository` write scope.
+- **GitHub PAT** — needs `repo` **and** `workflow` scope; pushes that
+  touch `.github/workflows/` are rejected otherwise. The push mirror
+  stores one (Settings → Repository → Mirror Settings); rotating it
+  means updating it there too.
 
 The in-app update checker (`internal/updates`) reads GitHub releases and
 needs no change.
@@ -72,5 +63,5 @@ needs no change.
 
 Register an act_runner **on a workstation, not the NAS**, re-enable
 Actions for the repo, and drop the `github.server_url` gates from the
-jobs you want to run there. The release workflow's `gh`/GHCR steps are
-GitHub-specific and should stay gated regardless.
+jobs you want to run there. The `gh`/GHCR steps are GitHub-specific and
+should stay gated regardless.

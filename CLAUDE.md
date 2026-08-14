@@ -93,6 +93,7 @@ internal/config/       config load/validate/persist (YAML)
 web/                   frontend source (Svelte + Vite)
 web/dist/              built assets, embedded via go:embed (never edit by hand)
 deploy/                Dockerfile, compose example, systemd unit
+scripts/               maintainer tooling (release.sh — see docs/releasing.md)
 docs/                  user-facing docs
 ```
 
@@ -188,7 +189,15 @@ not the lore terms.
   is gated to `github.server_url`. Verify locally before tagging; the
   mirror's runners do the release build. Anything runner-shaped run ad hoc
   belongs on this laptop (local Docker), never the NAS — and clean up its
-  containers afterwards. Release flow: `docs/releasing.md`.
+  containers afterwards.
+- **All work is pushed to Gitea** — every branch, not just `main`. A
+  push mirror replicates refs to GitHub automatically (sync-on-commit),
+  so never push to GitHub by hand.
+- **Releases are published on both platforms** with identical assets:
+  `scripts/release.sh vX.Y.Z` verifies, tags, pushes, waits for the
+  GitHub build, checksums the artifacts, and attaches them to a Gitea
+  release too. Never hand-roll the steps; `--assets-only` is the
+  recovery path. Full flow: `docs/releasing.md`.
 - Conventional commits: `feat:`, `fix:`, `perf:`, `docs:`, `chore:`.
 - Branches: `feat/<slug>`, `fix/<slug>`.
 - Keep PRs reviewable: one concern per PR, under ~500 lines diff where
