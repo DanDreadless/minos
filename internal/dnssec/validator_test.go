@@ -1,4 +1,4 @@
-﻿package dnssec
+package dnssec
 
 import (
 	"context"

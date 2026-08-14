@@ -461,10 +461,15 @@ This is security software; hold it to that standard.
   Pi-hole), and routed answers skip the response cache (DHCP-lease churn).
 - **This Windows dev box has no `make`**: run the underlying commands
   directly (`go test ./...`, `go vet`, `npm run build`,
-  `npx svelte-check`). Don't trust `gofmt -l` here: core.autocrlf checks
-  files out with CRLF endings, so it flags nearly every file with a
-  whole-file line-ending diff. golangci-lint (which runs gofumpt) is the
-  formatting authority on this box. golangci-lint v2 is at `~/go/bin/golangci-lint`
+  `npx svelte-check`). `gofmt -l` on the working tree is useless here —
+  core.autocrlf checks files out with CRLF, so it flags nearly every
+  file. Check the **committed blobs** instead (the only thing CI sees):
+  `git show HEAD:path.go > tmp.go && gofmt -l tmp.go`, or the whole tree
+  via a `git ls-files`/`git show` loop. golangci-lint is NOT a substitute:
+  it passed on a file carrying a UTF-8 **BOM** that gofmt rejected, and
+  CI caught it. That BOM came from PowerShell 5.1's
+  `Set-Content -Encoding utf8`, which always writes one — never rewrite a
+  Go file that way; use the Edit tool or a bash heredoc. golangci-lint v2 is at `~/go/bin/golangci-lint`
   (go install, so it always matches the local toolchain); CI runs it
   blocking, installed the same way for the same reason — prebuilt lint
   binaries can lag go.mod's Go version and refuse to run.
