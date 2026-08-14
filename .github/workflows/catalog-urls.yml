@@ -1,0 +1,25 @@
+name: Catalog URLs
+
+# The curated blocklist catalog points at third-party URLs that move
+# without warning. Probing them weekly turns "a user reports a broken
+# one-click subscribe" into "CI tells us first". Runs on the GitHub
+# mirror only — Gitea is a NAS container and never runs CI.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays, 06:17 UTC
+  workflow_dispatch:
+  push:
+    paths:
+      - "web/src/lib/blocklists.ts"
+      - "scripts/check-catalog-urls.sh"
+      - ".github/workflows/catalog-urls.yml"
+
+jobs:
+  probe:
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: probe catalog URLs
+        run: scripts/check-catalog-urls.sh --verbose
