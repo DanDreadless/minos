@@ -9,7 +9,7 @@ tag triggers the same release workflow there.
 
 On Gitea: **Settings → Repository → Mirror Settings → Add push mirror**
 
-- Git remote URL: `https://github.com/DanDreadless/Minos.git`
+- Git remote URL: `https://github.com/DanDreadless/minos.git`
 - Authorization: a GitHub personal access token with the `repo` scope
   (fine-grained: Contents read/write on the mirror repo)
 - Enable **Sync when commits are pushed**
