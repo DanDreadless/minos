@@ -116,6 +116,16 @@ func (s *Server) judgeDNSSEC(ctx context.Context, resp *dns.Msg) error {
 	if v == nil {
 		return nil
 	}
+	// Chain-record queries are the validator's own food: judging a
+	// client's DNSKEY/DS answer would fetch that very record through the
+	// same dedup key and wait on itself. Validating clients asking for
+	// these types are running their own validation anyway.
+	if len(resp.Question) == 1 {
+		switch resp.Question[0].Qtype {
+		case dns.TypeDNSKEY, dns.TypeDS, dns.TypeRRSIG:
+			return nil
+		}
+	}
 	res := v.Validate(ctx, resp)
 	resp.AuthenticatedData = res.Status == dnssec.Secure
 	switch res.Status {

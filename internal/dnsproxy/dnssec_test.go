@@ -291,6 +291,30 @@ func TestDNSSECEnforceIndeterminatePasses(t *testing.T) {
 	}
 }
 
+func TestDNSSECChainTypeQueriesDoNotSelfDeadlock(t *testing.T) {
+	// A validated client query for DNSKEY/DS is the validator's own
+	// chain food: judging it would fetch the same dedup key and wait on
+	// itself until the context expired. These types skip judgment.
+	srv, _, _ := dnssecProxy(t, "enforce", true, false)
+	addr := srv.UDPAddr().String()
+	// (The root itself can't be asked through handle() — NormalizeDomain
+	// refuses the empty name — so zone-cut queries are the live cases.)
+	for _, q := range []struct {
+		name  string
+		qtype uint16
+	}{{"com.", dns.TypeDNSKEY}, {"com.", dns.TypeDS}} {
+		began := time.Now()
+		resp := queryDO(t, addr, q.name, q.qtype)
+		if took := time.Since(began); took > 2*time.Second {
+			t.Fatalf("%s/%s took %v — self-deadlocked", q.name, dns.TypeToString[q.qtype], took)
+		}
+		if resp.Rcode != dns.RcodeSuccess || len(resp.Answer) == 0 {
+			t.Fatalf("%s/%s: rcode=%s answers=%d, want the chain record",
+				q.name, dns.TypeToString[q.qtype], dns.RcodeToString[resp.Rcode], len(resp.Answer))
+		}
+	}
+}
+
 func TestDNSSECModeSwitchesLive(t *testing.T) {
 	srv, _, sawDO := dnssecProxy(t, "", true, false)
 	addr := srv.UDPAddr().String()
