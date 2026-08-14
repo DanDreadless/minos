@@ -11,6 +11,12 @@ minos.db-shm
 web/node_modules/
 # web/dist IS committed: the Go binary embeds it via go:embed.
 
+# Local maintainer secrets (release tokens) — never commit.
+# scripts/release.sh reads these from the environment; see .env.example.
+.env
+.env.*
+!.env.example
+
 # Editor/OS noise
 .DS_Store
 Thumbs.db
