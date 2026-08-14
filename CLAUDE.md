@@ -182,11 +182,13 @@ not the lore terms.
 ## Git & PR conventions
 
 - Hosting: a locally-hosted **Gitea** at `vault-tec.local` (migrated from
-  GitHub, August 2026). The `gh` CLI does not apply — use the Gitea web UI
-  or API for PRs/issues. CI is Gitea Actions (Actions-compatible workflows
-  in `.github/workflows/`) on a local Docker `act_runner`; anything
-  runner-shaped run ad hoc should use local Docker and clean up its
-  containers afterwards.
+  GitHub, August 2026), mirrored to GitHub. Use the Gitea web UI or API
+  for PRs/issues; `gh` targets the mirror only. **No CI runs on Gitea** —
+  it is a NAS container, so Actions are off there and every workflow job
+  is gated to `github.server_url`. Verify locally before tagging; the
+  mirror's runners do the release build. Anything runner-shaped run ad hoc
+  belongs on this laptop (local Docker), never the NAS — and clean up its
+  containers afterwards. Release flow: `docs/releasing.md`.
 - Conventional commits: `feat:`, `fix:`, `perf:`, `docs:`, `chore:`.
 - Branches: `feat/<slug>`, `fix/<slug>`.
 - Keep PRs reviewable: one concern per PR, under ~500 lines diff where
