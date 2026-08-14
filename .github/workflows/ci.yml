@@ -1,5 +1,11 @@
 name: CI
 
+# Runs on the GitHub mirror only. Gitea holds the canonical repo but
+# runs in a NAS container with no runner (Actions disabled) — the gates
+# below make sure that stays true even if one is registered later.
+# Before tagging, run the same checks on a workstation: go test ./...,
+# golangci-lint run, and npx svelte-check in web/.
+
 on:
   push:
     branches: [main]
@@ -7,6 +13,7 @@ on:
 
 jobs:
   backend:
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -29,6 +36,7 @@ jobs:
         run: go test ./internal/filter -bench . -benchmem -benchtime=1x -run '^$'
 
   frontend:
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -49,6 +57,7 @@ jobs:
   # Full ACME issuance against Pebble (Let's Encrypt's test CA), with
   # pebble-challtestsrv as the mock DNS provider.
   acme-e2e:
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -81,6 +90,7 @@ jobs:
         run: docker logs pebble; docker logs challtestsrv
 
   lint:
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
