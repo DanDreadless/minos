@@ -44,7 +44,7 @@ jobs:
               "$API/repos/$REPO/releases/tags/$TAG" >/dev/null; then
             echo "release for $TAG already exists" && exit 0
           fi
-          body="Binaries, checksums, and container images are published on the GitHub mirror: https://github.com/DanDreadless/Minos/releases/tag/$TAG"
+          body="Binaries, checksums, and container images are published on the GitHub mirror: https://github.com/DanDreadless/minos/releases/tag/$TAG"
           curl -sf -X POST \
             -H "Authorization: token $TOKEN" \
             -H "Content-Type: application/json" \
