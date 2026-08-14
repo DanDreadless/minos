@@ -80,6 +80,13 @@ type DNSConfig struct {
 	// Mozilla's documented signal that this network filters DNS — so Firefox
 	// keeps using the system resolver instead of its built-in DoH.
 	AllowFirefoxDoH bool `yaml:"allow_firefox_doh,omitempty"`
+	// DNSSEC controls local validation of forwarded answers against the
+	// DNSSEC chain of trust: "" or "off" (default), "permissive"
+	// (validate, count, and log — never blocks), or "enforce" (bogus
+	// answers are refused with SERVFAIL; answers that cannot be judged
+	// still pass, so a non-DNSSEC upstream degrades visibility, never
+	// resolution). Applies live.
+	DNSSEC string `yaml:"dnssec,omitempty"`
 }
 
 // TLSListeners configures client-facing encrypted DNS. Both listeners are
@@ -601,6 +608,11 @@ func (c *Config) Validate() error {
 				}
 			}
 		}
+	}
+	switch c.DNS.DNSSEC {
+	case "", "off", "permissive", "enforce":
+	default:
+		return fmt.Errorf("dns.dnssec: must be off, permissive, or enforce, got %q", c.DNS.DNSSEC)
 	}
 	if c.DNS.Cache.Enabled {
 		if c.DNS.Cache.MaxEntries <= 0 {
