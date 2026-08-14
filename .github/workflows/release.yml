@@ -1,5 +1,12 @@
 name: Release
 
+# Runs in two places since the Gitea migration:
+#  - on the local Gitea (source of truth): tests + a stub Gitea release
+#    pointing at the GitHub assets.
+#  - on GitHub (push mirror): the mirrored tag triggers the full build —
+#    binaries, GitHub Release, GHCR images — exactly as before the move.
+# The server_url gates keep each side to its own jobs.
+
 on:
   push:
     tags: ["v*"]
@@ -19,8 +26,35 @@ jobs:
       - name: tests (race detector — release blocker)
         run: go test -race ./...
 
+  # Gitea only: record the release locally; assets live on the mirror.
+  gitea-release:
+    needs: test
+    if: github.server_url != 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - name: create Gitea release
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API: ${{ github.api_url }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          if curl -sf -H "Authorization: token $TOKEN" \
+              "$API/repos/$REPO/releases/tags/$TAG" >/dev/null; then
+            echo "release for $TAG already exists" && exit 0
+          fi
+          body="Binaries, checksums, and container images are published on the GitHub mirror: https://github.com/DanDreadless/Minos/releases/tag/$TAG"
+          curl -sf -X POST \
+            -H "Authorization: token $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"$TAG\",\"name\":\"Minos $TAG\",\"body\":\"$body\"}" \
+            "$API/repos/$REPO/releases" >/dev/null
+          echo "created Gitea release for $TAG"
+
   binaries:
     needs: test
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -89,6 +123,7 @@ jobs:
 
   docker:
     needs: test
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
