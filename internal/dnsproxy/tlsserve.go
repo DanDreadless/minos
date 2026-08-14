@@ -212,9 +212,7 @@ func (s *Server) DoHAddr() net.Addr { return s.dohAddr }
 func (s *Server) shutdownEncrypted(ctx context.Context) error {
 	var firstErr error
 	if s.dot != nil {
-		if err := s.dot.ShutdownContext(ctx); err != nil && firstErr == nil {
-			firstErr = err
-		}
+		firstErr = s.dot.ShutdownContext(ctx)
 	}
 	if s.doh != nil {
 		if err := s.doh.Shutdown(ctx); err != nil && firstErr == nil {
