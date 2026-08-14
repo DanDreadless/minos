@@ -341,6 +341,24 @@ func TestForeignSignerIsIgnored(t *testing.T) {
 	}
 }
 
+func TestDecoySignerCannotDowngrade(t *testing.T) {
+	// A hostile message prepends a signature naming a different plausible
+	// signer (com. can contain www.example.com.); the real signature must
+	// still win. RFC 4035 §5.3.3: any one verifying signature suffices.
+	f, zones, anchors := hierarchy(t)
+	msg := signedAnswer(t, zones["example.com."], "www.example.com.")
+	real := msg.Answer[1].(*dns.RRSIG)
+	decoy := *real
+	decoy.SignerName = "com."
+	decoy.KeyTag = zones["com."].zsk.KeyTag()
+	msg.Answer = []dns.RR{msg.Answer[0], &decoy, real}
+
+	res := New(f.resolve, anchors).Validate(context.Background(), msg)
+	if res.Status != Secure {
+		t.Fatalf("want Secure despite decoy, got %v (%s)", res.Status, res.Reason)
+	}
+}
+
 func TestChainFetchErrorIsIndeterminate(t *testing.T) {
 	f, zones, anchors := hierarchy(t)
 	f.errs["example.com.|DS"] = errors.New("upstream timeout")

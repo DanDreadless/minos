@@ -183,23 +183,68 @@ func (v *Validator) validateRRset(ctx context.Context, rrset, section []dns.RR, 
 		// that hole needs the DS-walk proof of unsignedness (next stage).
 		return Result{Insecure, "no covering signature for " + owner}
 	}
-	// All signatures over one RRset come from the zone containing it, so a
-	// single chain walk serves every candidate signature.
-	signer := dns.CanonicalName(sigs[0].SignerName)
+	// Signatures over one RRset normally share a signer (the zone holding
+	// the RRset), but nothing stops a hostile message from prepending a
+	// decoy with a different plausible signer to drag a valid answer to
+	// Bogus. Per RFC 4035 §5.3.3, try each signer's chain independently:
+	// any one verifying signature makes the RRset secure. The failure
+	// reported is the worst across signers, keeping fail-closed semantics.
+	var worst Result
+	tried := false
+	for i, sig := range sigs {
+		signer := dns.CanonicalName(sig.SignerName)
+		if seenSigner(sigs[:i], signer) {
+			continue
+		}
+		group := signerSigs(sigs, signer)
+		res, terminal := v.validateWithSigner(ctx, owner, signer, group, rrset, b)
+		if terminal {
+			return res
+		}
+		if !tried || res.Status > worst.Status {
+			worst, tried = res, true
+		}
+	}
+	return worst
+}
+
+// validateWithSigner walks one signer's chain and tries its signatures.
+// terminal reports a verified signature — its Result stands regardless of
+// other signers (Secure, or Indeterminate for a verified wildcard).
+func (v *Validator) validateWithSigner(ctx context.Context, owner, signer string, sigs []*dns.RRSIG, rrset []dns.RR, b *budget) (res Result, terminal bool) {
 	keys, chain := v.trustedKeys(ctx, signer, b)
 	if chain.Status != Secure {
-		return chain
+		return chain, false
 	}
-	verified, res := v.verifyWithKeys(sigs, rrset, keys, b)
-	if res.Status != Secure {
-		return res
+	verified, vres := v.verifyWithKeys(sigs, rrset, keys, b)
+	if vres.Status != Secure {
+		return vres, false
 	}
 	if int(verified.Labels) < dns.CountLabel(owner) {
 		// Wildcard expansion verifies, but soundness needs the NSEC proof
 		// that no closer name exists — not implemented yet.
-		return Result{Indeterminate, "wildcard-expanded answer (proof not implemented)"}
+		return Result{Indeterminate, "wildcard-expanded answer (proof not implemented)"}, true
 	}
-	return Result{Status: Secure}
+	return Result{Status: Secure}, true
+}
+
+func seenSigner(prior []*dns.RRSIG, signer string) bool {
+	for _, s := range prior {
+		if dns.CanonicalName(s.SignerName) == signer {
+			return true
+		}
+	}
+	return false
+}
+
+func signerSigs(sigs []*dns.RRSIG, signer string) []*dns.RRSIG {
+	var out []*dns.RRSIG
+	for _, s := range sigs {
+		if dns.CanonicalName(s.SignerName) == signer {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // trustedKeys returns the validated DNSKEY set for zone, walking DS/DNSKEY
