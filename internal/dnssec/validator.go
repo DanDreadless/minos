@@ -4,12 +4,13 @@
 // in production they ride the forwarder's dedup table and response cache.
 // The Resolver must return DNSSEC records (query upstream with DO=1).
 //
-// Scope (first cut): positive answers only. Denial-of-existence
-// (NSEC/NSEC3) and wildcard proofs are not implemented yet — negative and
-// wildcard-expanded answers return Indeterminate, and an unsigned answer
-// is taken at face value as Insecure rather than proven. NOTHING may wire
-// this package into the query path until those proofs land: an enforcing
-// validator without them is unsound.
+// Positive answers validate through RRSIG/DNSKEY/DS chains; negative
+// answers, wildcard expansions, and unsigned delegations demand the
+// denial-of-existence proofs in denial.go (NSEC, NSEC3 with opt-out and
+// the RFC 9276 iteration cap, and the delegation walk that tells an
+// honestly-unsigned zone from a signature-stripping attack). The package
+// is not yet wired into the query path — that lands with the server
+// integration stage and its off/permissive/enforce policy.
 package dnssec
 
 import (
@@ -31,10 +32,11 @@ const (
 	Secure Status = iota
 	// Insecure: no chain of trust covers the answer (unsigned zone).
 	Insecure
-	// Indeterminate: validation could not complete — chain fetch failed,
-	// budget exhausted, or the needed proof type is not implemented yet.
-	// Kept distinct from Bogus so enforcement policy can treat
-	// infrastructure trouble differently from a failed proof.
+	// Indeterminate: validation could not complete — a chain fetch
+	// failed, a budget ran out, or the upstream supplied no proof
+	// material either way. Kept distinct from Bogus so enforcement
+	// policy can treat infrastructure trouble differently from a
+	// failed proof.
 	Indeterminate
 	// Bogus: a chain of trust exists but verification failed. The answer
 	// must not be trusted.
@@ -72,6 +74,7 @@ type Resolver func(ctx context.Context, qname string, qtype uint16) (*dns.Msg, e
 const (
 	defaultFetchBudget  = 24 // chain fetches per Validate call
 	defaultVerifyBudget = 32 // signature verifications per Validate call
+	defaultHashBudget   = 64 // NSEC3 hash computations per Validate call
 	maxSigsPerRRset     = 8
 	maxKeysPerZone      = 32
 	keyCacheMax         = 2048
@@ -142,6 +145,7 @@ func New(resolve Resolver, opts ...Option) *Validator {
 type budget struct {
 	fetches  int
 	verifies int
+	hashes   int
 }
 
 // Validate judges one upstream response. It never mutates resp.
@@ -149,21 +153,21 @@ func (v *Validator) Validate(ctx context.Context, resp *dns.Msg) Result {
 	if resp == nil || len(resp.Question) == 0 {
 		return Result{Indeterminate, "malformed response"}
 	}
+	b := &budget{fetches: v.fetchBudget, verifies: v.verifyBudget, hashes: defaultHashBudget}
 	switch resp.Rcode {
 	case dns.RcodeSuccess:
 	case dns.RcodeNameError:
-		return Result{Indeterminate, "negative answer (denial-of-existence proofs not implemented)"}
+		return v.validateNegative(ctx, resp, b)
 	default:
 		return Result{Indeterminate, fmt.Sprintf("rcode %s is not validatable", dns.RcodeToString[resp.Rcode])}
 	}
 	sets := groupRRsets(resp.Answer)
 	if len(sets) == 0 {
-		return Result{Indeterminate, "empty answer (denial-of-existence proofs not implemented)"}
+		return v.validateNegative(ctx, resp, b)
 	}
-	b := &budget{fetches: v.fetchBudget, verifies: v.verifyBudget}
 	worst := Result{Status: Secure}
 	for _, set := range sets {
-		res := v.validateRRset(ctx, set, resp.Answer, b)
+		res := v.validateRRset(ctx, set, resp.Answer, resp, false, b)
 		if res.Status > worst.Status {
 			worst = res
 		}
@@ -174,14 +178,23 @@ func (v *Validator) Validate(ctx context.Context, resp *dns.Msg) Result {
 	return worst
 }
 
-// validateRRset verifies one answer RRset against the chain of trust.
-func (v *Validator) validateRRset(ctx context.Context, rrset, section []dns.RR, b *budget) Result {
+// validateRRset verifies one RRset against the chain of trust. section is
+// where its RRSIGs live (Answer or Ns); proofMode marks NSEC/NSEC3 proof
+// records, whose failure modes must not recurse into further proofs.
+func (v *Validator) validateRRset(ctx context.Context, rrset, section []dns.RR, resp *dns.Msg, proofMode bool, b *budget) Result {
 	owner := dns.CanonicalName(rrset[0].Header().Name)
 	sigs := coveringSigs(section, owner, rrset[0].Header().Rrtype)
 	if len(sigs) == 0 {
-		// Face value: a stripped-signature attack lands here too. Closing
-		// that hole needs the DS-walk proof of unsignedness (next stage).
-		return Result{Insecure, "no covering signature for " + owner}
+		if proofMode {
+			return Result{Insecure, "unsigned proof record"}
+		}
+		// Signature stripping and honestly-unsigned zones look identical
+		// here; the delegation walk tells them apart.
+		res := v.proveUnsigned(ctx, owner, b)
+		if res.Reason == "" {
+			res.Reason = "no covering signature for " + owner
+		}
+		return res
 	}
 	// Signatures over one RRset normally share a signer (the zone holding
 	// the RRset), but nothing stops a hostile message from prepending a
@@ -197,7 +210,7 @@ func (v *Validator) validateRRset(ctx context.Context, rrset, section []dns.RR, 
 			continue
 		}
 		group := signerSigs(sigs, signer)
-		res, terminal := v.validateWithSigner(ctx, owner, signer, group, rrset, b)
+		res, terminal := v.validateWithSigner(ctx, owner, signer, group, rrset, resp, proofMode, b)
 		if terminal {
 			return res
 		}
@@ -210,8 +223,8 @@ func (v *Validator) validateRRset(ctx context.Context, rrset, section []dns.RR, 
 
 // validateWithSigner walks one signer's chain and tries its signatures.
 // terminal reports a verified signature — its Result stands regardless of
-// other signers (Secure, or Indeterminate for a verified wildcard).
-func (v *Validator) validateWithSigner(ctx context.Context, owner, signer string, sigs []*dns.RRSIG, rrset []dns.RR, b *budget) (res Result, terminal bool) {
+// other signers.
+func (v *Validator) validateWithSigner(ctx context.Context, owner, signer string, sigs []*dns.RRSIG, rrset []dns.RR, resp *dns.Msg, proofMode bool, b *budget) (res Result, terminal bool) {
 	keys, chain := v.trustedKeys(ctx, signer, b)
 	if chain.Status != Secure {
 		return chain, false
@@ -220,12 +233,40 @@ func (v *Validator) validateWithSigner(ctx context.Context, owner, signer string
 	if vres.Status != Secure {
 		return vres, false
 	}
-	if int(verified.Labels) < dns.CountLabel(owner) {
-		// Wildcard expansion verifies, but soundness needs the NSEC proof
-		// that no closer name exists — not implemented yet.
-		return Result{Indeterminate, "wildcard-expanded answer (proof not implemented)"}, true
+	// Wildcard expansion: the signature covers fewer labels than the owner
+	// carries. An RRset owned by a literal wildcard is NOT an expansion —
+	// its one-short label count is the wildcard itself (RFC 4035 §5.3.4).
+	ownerLabels := dns.CountLabel(owner)
+	if strings.HasPrefix(owner, "*.") {
+		ownerLabels--
+	}
+	if int(verified.Labels) < ownerLabels {
+		if proofMode {
+			// A proof record must never itself be synthesized; refusing
+			// here also breaks proof-of-proof recursion.
+			return Result{Bogus, "wildcard-expanded proof record"}, true
+		}
+		return v.proveWildcard(ctx, owner, int(verified.Labels), resp, b), true
 	}
 	return Result{Status: Secure}, true
+}
+
+// proveWildcard demands the RFC 4035 §5.3.4 proof that a wildcard
+// expansion was legitimate: the next-closer name (one label below the
+// closest encloser the signature vouches for) must be proven absent.
+func (v *Validator) proveWildcard(ctx context.Context, owner string, ceLabels int, resp *dns.Msg, b *budget) Result {
+	nc := lastNLabels(owner, ceLabels+1)
+	p := v.collectProofs(ctx, resp, b)
+	if p.nsecCovering(nc) != nil {
+		return Result{Status: Secure}
+	}
+	if cov := p.nsec3Covering(nc, b); cov != nil {
+		if optOut(cov) {
+			return Result{Insecure, "wildcard expansion inside an NSEC3 opt-out span"}
+		}
+		return Result{Status: Secure}
+	}
+	return p.fail("wildcard-expanded answer lacks a next-closer proof for " + nc)
 }
 
 func seenSigner(prior []*dns.RRSIG, signer string) bool {
@@ -257,14 +298,26 @@ func (v *Validator) trustedKeys(ctx context.Context, zone string, b *budget) ([]
 	}
 	ds := v.anchors
 	if zone != "." {
-		set, res := v.fetchDS(ctx, zone, b)
+		set, absence, res := v.fetchDS(ctx, zone, b)
 		if res.Status != Secure {
 			return nil, res
+		}
+		if len(set) == 0 {
+			switch absence {
+			case dsInsecureDelegation:
+				return nil, Result{Insecure, "no DS record for " + zone + " (provably insecure delegation)"}
+			case dsNotDelegation:
+				// A signer must be a zone apex; the parent proving there
+				// is no such delegation condemns whatever cited it.
+				return nil, Result{Bogus, "signer " + zone + " is provably not a delegated zone"}
+			default:
+				return nil, Result{Indeterminate, "cannot prove whether " + zone + " is signed"}
+			}
 		}
 		ds = set
 	}
 	if len(ds) == 0 {
-		return nil, Result{Insecure, "no DS record for " + zone + " (unsigned delegation, unproven)"}
+		return nil, Result{Insecure, "no DS record for " + zone}
 	}
 	usable := false
 	for _, d := range ds {
@@ -285,12 +338,13 @@ func (v *Validator) trustedKeys(ctx context.Context, zone string, b *budget) ([]
 }
 
 // fetchDS retrieves and validates the DS RRset delegating zone, recursing
-// into the parent for its keys. An empty (Secure, nil) return means the
-// parent answered NOERROR with no DS records.
-func (v *Validator) fetchDS(ctx context.Context, zone string, b *budget) ([]*dns.DS, Result) {
+// into the parent for its keys. When the parent has no DS, the authority
+// section's proofs classify the absence (absence is meaningful only for
+// an empty set with a Secure Result).
+func (v *Validator) fetchDS(ctx context.Context, zone string, b *budget) ([]*dns.DS, dsAbsence, Result) {
 	resp, res := v.query(ctx, zone, dns.TypeDS, b)
 	if res.Status != Secure {
-		return nil, res
+		return nil, dsUnproven, res
 	}
 	var ds []*dns.DS
 	var asRRs []dns.RR
@@ -301,27 +355,28 @@ func (v *Validator) fetchDS(ctx context.Context, zone string, b *budget) ([]*dns
 		}
 	}
 	if len(ds) == 0 {
-		return nil, Result{Status: Secure}
+		p := v.collectProofs(ctx, resp, b)
+		return nil, p.proveDSStatus(zone, b), Result{Status: Secure}
 	}
 	sigs := coveringSigs(resp.Answer, zone, dns.TypeDS)
 	if len(sigs) == 0 {
-		return nil, Result{Bogus, "DS rrset for " + zone + " is unsigned"}
+		return nil, dsUnproven, Result{Bogus, "DS rrset for " + zone + " is unsigned"}
 	}
 	parent := dns.CanonicalName(sigs[0].SignerName)
 	// The signer must be a proper ancestor: strictly fewer labels
 	// guarantees the recursion terminates at the root.
 	if parent == zone || !dns.IsSubDomain(parent, zone) {
-		return nil, Result{Bogus, "DS rrset for " + zone + " signed by non-parent " + parent}
+		return nil, dsUnproven, Result{Bogus, "DS rrset for " + zone + " signed by non-parent " + parent}
 	}
 	parentKeys, chain := v.trustedKeys(ctx, parent, b)
 	if chain.Status != Secure {
-		return nil, chain
+		return nil, dsUnproven, chain
 	}
 	if _, res := v.verifyWithKeys(sigs, asRRs, parentKeys, b); res.Status != Secure {
 		res.Reason = "DS rrset for " + zone + ": " + res.Reason
-		return nil, res
+		return nil, dsUnproven, res
 	}
-	return ds, Result{Status: Secure}
+	return ds, dsPresent, Result{Status: Secure}
 }
 
 // fetchDNSKEY retrieves zone's DNSKEY RRset and verifies it is self-signed
