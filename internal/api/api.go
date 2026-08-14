@@ -28,11 +28,13 @@ import (
 	"minos/internal/querylog"
 )
 
-// ProxyStatsSource reports DNS-proxy counters (response cache, upstreams);
-// the dnsproxy server implements it. A nil source reports nothing.
+// ProxyStatsSource reports DNS-proxy counters (response cache, upstreams,
+// DNSSEC validation); the dnsproxy server implements it. A nil source
+// reports nothing.
 type ProxyStatsSource interface {
 	CacheStats() (hits, misses uint64, entries int64, enabled bool)
 	UpstreamStats() []dnsproxy.UpstreamStat
+	DNSSECStats() dnsproxy.DNSSECStat
 }
 
 // UpdateSource reports the newest known release; the updates.Checker

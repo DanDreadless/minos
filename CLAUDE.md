@@ -553,6 +553,27 @@ This is security software; hold it to that standard.
   columns via an idempotent `PRAGMA table_info` + `ALTER TABLE ADD COLUMN`
   migration on open (instant in SQLite, SD-safe) — copy that migration shape
   for any future column.
+- **DNSSEC semantics** (fixed decisions): `dns.dnssec` is off | permissive
+  | enforce (default off; permissive is the recommended first step).
+  Validation runs on the **forwardDedup leader path only** — after the
+  upstream answer, before `cache.put` — so followers and cache hits
+  inherit the verdict (cache hits never revalidate; the stored AD bit IS
+  the verdict) and blocked queries never pay. Chain fetches (DNSKEY/DS)
+  ride forwardDedup with `validate=false`: the validator verifies them
+  cryptographically itself, and re-validating would recurse. **Enforce
+  SERVFAILs Bogus only** — Indeterminate (upstream without DNSSEC
+  records, transient fetch failure) deliberately passes, so a bad
+  upstream degrades visibility, never resolution; the
+  `minos_dnssec_results_total{status="indeterminate"}` counter is the
+  signal. A refused bogus answer is docketed as blocked with
+  `list: "dnssec"` and the plain failure reason as the rule. Routed
+  answers are never validated and get AD cleared when validation is on.
+  Bogus is an answer, never a breaker trip. The validator (and its
+  validated-key cache) is built once and survives config swaps;
+  `SetTrustAnchors` (pre-Start) is the test/lab override. Non-DO clients
+  get RRSIG/NSEC/NSEC3 stripped from served answers (we added DO
+  upstream ourselves) unless they asked for that very type; AD reaches
+  only clients that set DO or AD (RFC 6840 §5.7).
 - **Upstream breaker semantics** (fixed decisions): only transport errors
   count (SERVFAIL is an answer); 3 consecutive failures sidestep an
   upstream for 30 s; a lapsed cooldown admits exactly one CAS-elected

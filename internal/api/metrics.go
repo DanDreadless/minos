@@ -79,6 +79,18 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if s.cache != nil {
+		if d := s.cache.DNSSECStats(); d.Mode != "off" {
+			gauge("minos_dnssec_mode", "Active dns.dnssec mode; the value is always 1.",
+				1, "mode", d.Mode)
+			counterHead("minos_dnssec_results_total", "Forwarded answers by DNSSEC validation outcome.")
+			sample("minos_dnssec_results_total", d.Secure, "status", "secure")
+			sample("minos_dnssec_results_total", d.Insecure, "status", "insecure")
+			sample("minos_dnssec_results_total", d.Bogus, "status", "bogus")
+			sample("minos_dnssec_results_total", d.Indeterminate, "status", "indeterminate")
+		}
+	}
+
 	lists := s.lists.Status()
 	if len(lists) > 0 {
 		fmt.Fprintf(&b, "# HELP minos_list_rules Compiled rules contributed per blocklist.\n# TYPE minos_list_rules gauge\n")

@@ -22,6 +22,10 @@ func (fakeProxyStats) UpstreamStats() []dnsproxy.UpstreamStat {
 	}
 }
 
+func (fakeProxyStats) DNSSECStats() dnsproxy.DNSSECStat {
+	return dnsproxy.DNSSECStat{Mode: "permissive", Secure: 4, Insecure: 2, Bogus: 1, Indeterminate: 3}
+}
+
 func TestMetricsEndpoint(t *testing.T) {
 	s, _ := newTestServer(t, "")
 	s.cache = fakeProxyStats{}
@@ -42,6 +46,9 @@ func TestMetricsEndpoint(t *testing.T) {
 		`minos_rules{type="deny"} 0`,
 		"minos_cache_hits_total 7",
 		"minos_cache_entries 5",
+		`minos_dnssec_mode{mode="permissive"} 1`,
+		`minos_dnssec_results_total{status="secure"} 4`,
+		`minos_dnssec_results_total{status="bogus"} 1`,
 		`minos_upstream_requests_total{upstream="dns.example\"quote"} 10`,
 		`minos_upstream_failures_total{upstream="dns.example\"quote"} 2`,
 		`minos_upstream_duration_seconds_total{upstream="dns.example\"quote"} 1.500000`,

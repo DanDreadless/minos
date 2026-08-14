@@ -7,6 +7,7 @@ package dnsproxy
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -21,6 +22,7 @@ import (
 
 	"minos/internal/clients"
 	"minos/internal/config"
+	"minos/internal/dnssec"
 	"minos/internal/filter"
 	"minos/internal/querylog"
 )
@@ -68,6 +70,17 @@ type Server struct {
 	// (SetAuditEngine); nil when no manager provides one (tests).
 	auditEngine atomic.Pointer[filter.Engine]
 
+	// DNSSEC validation (dns.dnssec). The mode swaps live with config;
+	// the validator (and its validated-key cache) is built once and
+	// survives swaps. dnssecAnchors is a pre-Start test/lab override.
+	dnssecMode          atomic.Int32
+	validator           atomic.Pointer[dnssec.Validator]
+	dnssecAnchors       []*dns.DS
+	dnssecSecure        atomic.Uint64
+	dnssecInsecure      atomic.Uint64
+	dnssecBogus         atomic.Uint64
+	dnssecIndeterminate atomic.Uint64
+
 	// safeSearch is the global blocking.safe_search flag; per-group
 	// enforcement rides the client policy.
 	safeSearch atomic.Bool
@@ -106,7 +119,10 @@ type inflightCall struct {
 // forwardDedup forwards req, collapsing concurrent identical queries: the
 // first caller (leader) exchanges upstream and caches the answer; everyone
 // else waits and receives a copy. shared reports a follower result.
-func (s *Server) forwardDedup(ctx context.Context, req *dns.Msg, qname, key string, cache *dnsCache) (resp *dns.Msg, upstream string, shared bool, err error) {
+// validate runs DNSSEC judgment on the leader's answer (client-facing
+// queries); the validator's own chain fetches pass false — they are
+// verified cryptographically by the validator itself.
+func (s *Server) forwardDedup(ctx context.Context, req *dns.Msg, qname, key string, cache *dnsCache, validate bool) (resp *dns.Msg, upstream string, shared bool, err error) {
 	call := &inflightCall{done: make(chan struct{})}
 	if v, loaded := s.inflight.LoadOrStore(key, call); loaded {
 		prior := v.(*inflightCall)
@@ -125,7 +141,24 @@ func (s *Server) forwardDedup(ctx context.Context, req *dns.Msg, qname, key stri
 		}
 	}
 	defer s.inflight.Delete(key)
-	r, name, routed, err := s.forward(ctx, req, qname)
+	fwdReq := req
+	if validate && s.dnssecMode.Load() != dnssecOff {
+		fwdReq = ensureDO(req)
+	}
+	r, name, routed, err := s.forward(ctx, fwdReq, qname)
+	if err == nil && validate {
+		if routed {
+			// Routed answers are never validated (LAN-authoritative);
+			// with validation on, an unvalidated AD claim must not
+			// survive to clients that would trust ours.
+			if s.dnssecMode.Load() != dnssecOff {
+				r.AuthenticatedData = false
+			}
+		} else if verr := s.judgeDNSSEC(ctx, r); verr != nil {
+			// Enforce-mode bogus: SERVFAIL, and never cache it.
+			r, err = nil, verr
+		}
+	}
 	if err == nil {
 		if cache != nil && !routed {
 			cache.put(key, r)
@@ -154,7 +187,7 @@ func (s *Server) refreshStale(key, qname string, qtype uint16) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*upstreamTimeout)
 		defer cancel()
-		_, _, _, _ = s.forwardDedup(ctx, req, qname, key, s.cache.Load())
+		_, _, _, _ = s.forwardDedup(ctx, req, qname, key, s.cache.Load(), true)
 	}()
 }
 
@@ -305,6 +338,7 @@ func (s *Server) ApplyConfig(cfg *config.Config) error {
 	s.safeSearch.Store(cfg.Blocking.SafeSearch)
 	s.allowFirefoxDoH.Store(cfg.DNS.AllowFirefoxDoH)
 	s.forwardPrivateArpa.Store(cfg.DNS.ForwardPrivateReverse)
+	s.applyDNSSEC(cfg.DNS.DNSSEC)
 	// A fresh cache on every config change doubles as the flush that keeps
 	// cached answers consistent with new upstreams or blocking settings.
 	if cfg.DNS.Cache.Enabled {
@@ -566,6 +600,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 				entry.Upstream = "cache"
 			}
 			s.cacheHits.Add(1)
+			s.finishDNSSEC(req, resp, q.Qtype)
 			_ = w.WriteMsg(resp)
 			entry.Verdict = querylog.VerdictAllowed
 			s.record(entry, start)
@@ -576,20 +611,29 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*upstreamTimeout)
 	defer cancel()
-	resp, upstreamName, _, err := s.forwardDedup(ctx, req, qname, key, cache)
+	resp, upstreamName, _, err := s.forwardDedup(ctx, req, qname, key, cache, true)
 	if err != nil {
-		if slog.Default().Enabled(ctx, slog.LevelDebug) {
-			slog.Debug("forward failed", "qname", qname, "err", err)
-		}
 		reply := new(dns.Msg)
 		reply.SetRcode(req, dns.RcodeServerFailure)
 		_ = w.WriteMsg(reply)
-		entry.Verdict = querylog.VerdictAllowed
+		if bogus, ok := errors.AsType[*bogusAnswerError](err); ok {
+			// A refused bogus answer is a judgment, not an upstream
+			// failure: condemned in the docket with its reason.
+			entry.Verdict = querylog.VerdictBlocked
+			entry.List = "dnssec"
+			entry.Rule = bogus.reason
+		} else {
+			if slog.Default().Enabled(ctx, slog.LevelDebug) {
+				slog.Debug("forward failed", "qname", qname, "err", err)
+			}
+			entry.Verdict = querylog.VerdictAllowed
+		}
 		entry.Upstream = upstreamName
 		s.record(entry, start)
 		return
 	}
 	resp.Id = req.Id
+	s.finishDNSSEC(req, resp, q.Qtype)
 	_ = w.WriteMsg(resp)
 	entry.Verdict = querylog.VerdictAllowed
 	entry.Upstream = upstreamName
