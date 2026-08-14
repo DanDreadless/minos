@@ -104,11 +104,18 @@ func (f *fakeResolver) resolve(_ context.Context, qname string, qtype uint16) (*
 }
 
 func (f *fakeResolver) stage(qname string, qtype uint16, answer ...dns.RR) {
+	f.stageFull(qname, qtype, answer, nil)
+}
+
+// stageFull stages a response with both sections (empty answers with
+// authority proofs model real DS/negative responses).
+func (f *fakeResolver) stageFull(qname string, qtype uint16, answer, ns []dns.RR) {
 	key := dns.CanonicalName(qname) + "|" + dns.TypeToString[qtype]
 	m := new(dns.Msg)
 	m.SetQuestion(dns.Fqdn(qname), qtype)
 	m.Response = true
 	m.Answer = answer
+	m.Ns = ns
 	f.answers[key] = m
 }
 
@@ -236,7 +243,13 @@ func TestUnknownKeyTagIsBogus(t *testing.T) {
 }
 
 func TestUnsignedAnswerIsInsecure(t *testing.T) {
-	f, _, anchors := hierarchy(t)
+	// The delegation walk finds org. provably unsigned (an NS-without-DS
+	// NSEC signed by the root), legitimizing the unsigned answer.
+	f, zones, anchors := hierarchy(t)
+	root := zones["."]
+	proof := nsecRR("org.", "org0.", dns.TypeNS)
+	f.stageFull("org.", dns.TypeDS, nil,
+		[]dns.RR{proof, sign(t, root.zsk, root.zskPriv, []dns.RR{proof}, time.Time{})})
 	a := aRecord("www.plain.org.", net.IPv4(203, 0, 113, 9))
 	m := new(dns.Msg)
 	m.SetQuestion("www.plain.org.", dns.TypeA)
@@ -249,14 +262,33 @@ func TestUnsignedAnswerIsInsecure(t *testing.T) {
 	}
 }
 
-func TestMissingDSIsInsecure(t *testing.T) {
-	// A signed answer whose zone has no DS at the parent: the chain walk
-	// finds the delegation unsigned (face value until denial proofs land).
+func TestUnsignedAnswerUnprovableIsIndeterminate(t *testing.T) {
+	// Same unsigned answer, but the resolver offers no proof about org.
+	// either way: the walk must stay honest, never guess.
 	f, _, anchors := hierarchy(t)
+	a := aRecord("www.plain.org.", net.IPv4(203, 0, 113, 9))
+	m := new(dns.Msg)
+	m.SetQuestion("www.plain.org.", dns.TypeA)
+	m.Response = true
+	m.Answer = []dns.RR{a}
+
+	res := New(f.resolve, anchors).Validate(context.Background(), m)
+	if res.Status != Indeterminate {
+		t.Fatalf("want Indeterminate, got %v (%s)", res.Status, res.Reason)
+	}
+}
+
+func TestMissingDSIsInsecure(t *testing.T) {
+	// A signed answer whose zone is a proven insecure delegation: the DS
+	// response carries com.'s NSEC proving NS-without-DS.
+	f, zones, anchors := hierarchy(t)
+	com := zones["com."]
 	orphan := newTestZone(t, "orphan.com.")
 	keyset := []dns.RR{orphan.ksk, orphan.zsk}
 	f.stage(orphan.name, dns.TypeDNSKEY, append(keyset, sign(t, orphan.ksk, orphan.kskPriv, keyset, time.Time{}))...)
-	// No DS staged for orphan.com: the fake parent answers NOERROR/empty.
+	proof := nsecRR("orphan.com.", "orphan0.com.", dns.TypeNS)
+	f.stageFull(orphan.name, dns.TypeDS, nil,
+		[]dns.RR{proof, sign(t, com.zsk, com.zskPriv, []dns.RR{proof}, time.Time{})})
 
 	res := New(f.resolve, anchors).Validate(context.Background(), signedAnswer(t, orphan, "www.orphan.com."))
 	if res.Status != Insecure {
@@ -264,6 +296,20 @@ func TestMissingDSIsInsecure(t *testing.T) {
 	}
 	if !strings.Contains(res.Reason, "no DS record") {
 		t.Fatalf("reason should name the missing DS, got %q", res.Reason)
+	}
+}
+
+func TestUnprovenDSIsIndeterminate(t *testing.T) {
+	// The same shape without any proof in the DS response: the chain
+	// cannot tell an unsigned delegation from a stripped one.
+	f, _, anchors := hierarchy(t)
+	orphan := newTestZone(t, "unproven.com.")
+	keyset := []dns.RR{orphan.ksk, orphan.zsk}
+	f.stage(orphan.name, dns.TypeDNSKEY, append(keyset, sign(t, orphan.ksk, orphan.kskPriv, keyset, time.Time{}))...)
+
+	res := New(f.resolve, anchors).Validate(context.Background(), signedAnswer(t, orphan, "www.unproven.com."))
+	if res.Status != Indeterminate {
+		t.Fatalf("want Indeterminate, got %v (%s)", res.Status, res.Reason)
 	}
 }
 
@@ -323,21 +369,29 @@ func TestUnsupportedDSAlgorithmIsInsecure(t *testing.T) {
 	}
 }
 
-func TestForeignSignerIsIgnored(t *testing.T) {
-	// A signature from a zone that cannot contain the owner never chains;
-	// with no usable signature left the answer is unsigned-at-face-value.
+func TestForeignSignerIsStrippingAttack(t *testing.T) {
+	// A signature from a zone that cannot contain the owner is ignored,
+	// leaving an unsigned answer — and the delegation walk proves
+	// example.com. is signed all the way down, so this is condemned as
+	// signature stripping, not passed as insecure.
 	f, zones, anchors := hierarchy(t)
+	example := zones["example.com."]
 	evil := newTestZone(t, "evil.org.")
+	notCut := nsecRR("www.example.com.", "zzz.example.com.", dns.TypeA, dns.TypeRRSIG, dns.TypeNSEC)
+	f.stageFull("www.example.com.", dns.TypeDS, nil,
+		[]dns.RR{notCut, sign(t, example.zsk, example.zskPriv, []dns.RR{notCut}, time.Time{})})
 	a := aRecord("www.example.com.", net.IPv4(198, 51, 100, 66))
 	m := new(dns.Msg)
 	m.SetQuestion("www.example.com.", dns.TypeA)
 	m.Response = true
 	m.Answer = []dns.RR{a, sign(t, evil.zsk, evil.zskPriv, []dns.RR{a}, time.Time{})}
-	_ = zones
 
 	res := New(f.resolve, anchors).Validate(context.Background(), m)
-	if res.Status != Insecure {
-		t.Fatalf("want Insecure (foreign sig ignored), got %v (%s)", res.Status, res.Reason)
+	if res.Status != Bogus {
+		t.Fatalf("want Bogus (stripping under signed chain), got %v (%s)", res.Status, res.Reason)
+	}
+	if !strings.Contains(res.Reason, "signed zone") {
+		t.Fatalf("reason should name the signed zone, got %q", res.Reason)
 	}
 }
 
@@ -409,11 +463,11 @@ func TestVerifyBudgetBoundsKeyTrap(t *testing.T) {
 	}
 }
 
-func TestWildcardAnswerIsIndeterminate(t *testing.T) {
-	f, zones, anchors := hierarchy(t)
-	z := zones["example.com."]
-	// A real wildcard expansion: the zone signs *.wild.example.com. and the
-	// server serves it under the queried name with the wildcard signature.
+// wildcardAnswer builds a real wildcard expansion: the zone signs
+// *.wild.example.com. and the server serves it under the queried name
+// with the wildcard signature.
+func wildcardAnswer(t testing.TB, z *testZone) *dns.Msg {
+	t.Helper()
 	a := aRecord("*.wild.example.com.", net.IPv4(203, 0, 113, 7))
 	sig := sign(t, z.zsk, z.zskPriv, []dns.RR{a}, time.Time{})
 	a.Hdr.Name = "host.wild.example.com."
@@ -422,13 +476,52 @@ func TestWildcardAnswerIsIndeterminate(t *testing.T) {
 	m.SetQuestion("host.wild.example.com.", dns.TypeA)
 	m.Response = true
 	m.Answer = []dns.RR{a, sig}
+	return m
+}
+
+func TestWildcardWithoutProofIsBogus(t *testing.T) {
+	// RFC 4035 §5.3.4: a wildcard expansion must prove the queried name
+	// itself does not exist; absent that proof it could be masking a real
+	// record.
+	f, zones, anchors := hierarchy(t)
+	m := wildcardAnswer(t, zones["example.com."])
 
 	res := New(f.resolve, anchors).Validate(context.Background(), m)
-	if res.Status != Indeterminate {
-		t.Fatalf("want Indeterminate, got %v (%s)", res.Status, res.Reason)
+	if res.Status != Bogus {
+		t.Fatalf("want Bogus, got %v (%s)", res.Status, res.Reason)
 	}
-	if !strings.Contains(res.Reason, "wildcard") {
-		t.Fatalf("reason should name the wildcard, got %q", res.Reason)
+	if !strings.Contains(res.Reason, "next-closer") {
+		t.Fatalf("reason should name the next-closer proof, got %q", res.Reason)
+	}
+}
+
+func TestWildcardWithProofIsSecure(t *testing.T) {
+	f, zones, anchors := hierarchy(t)
+	z := zones["example.com."]
+	m := wildcardAnswer(t, z)
+	proof := nsecRR("wild.example.com.", "zz.wild.example.com.", dns.TypeA)
+	m.Ns = []dns.RR{proof, sign(t, z.zsk, z.zskPriv, []dns.RR{proof}, time.Time{})}
+
+	res := New(f.resolve, anchors).Validate(context.Background(), m)
+	if res.Status != Secure {
+		t.Fatalf("want Secure, got %v (%s)", res.Status, res.Reason)
+	}
+}
+
+func TestLiteralWildcardOwnerIsSecure(t *testing.T) {
+	// An RRset owned by the wildcard name itself (a direct query for
+	// *.wild.example.com.) is not an expansion and needs no proof.
+	f, zones, anchors := hierarchy(t)
+	z := zones["example.com."]
+	a := aRecord("*.wild.example.com.", net.IPv4(203, 0, 113, 7))
+	m := new(dns.Msg)
+	m.SetQuestion("*.wild.example.com.", dns.TypeA)
+	m.Response = true
+	m.Answer = []dns.RR{a, sign(t, z.zsk, z.zskPriv, []dns.RR{a}, time.Time{})}
+
+	res := New(f.resolve, anchors).Validate(context.Background(), m)
+	if res.Status != Secure {
+		t.Fatalf("want Secure, got %v (%s)", res.Status, res.Reason)
 	}
 }
 
