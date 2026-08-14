@@ -181,6 +181,12 @@ not the lore terms.
 
 ## Git & PR conventions
 
+- Hosting: a locally-hosted **Gitea** at `vault-tec.local` (migrated from
+  GitHub, August 2026). The `gh` CLI does not apply — use the Gitea web UI
+  or API for PRs/issues. CI is Gitea Actions (Actions-compatible workflows
+  in `.github/workflows/`) on a local Docker `act_runner`; anything
+  runner-shaped run ad hoc should use local Docker and clean up its
+  containers afterwards.
 - Conventional commits: `feat:`, `fix:`, `perf:`, `docs:`, `chore:`.
 - Branches: `feat/<slug>`, `fix/<slug>`.
 - Keep PRs reviewable: one concern per PR, under ~500 lines diff where
@@ -452,8 +458,11 @@ This is security software; hold it to that standard.
   have no fallback to default upstreams (a dead router = SERVFAIL, like
   Pi-hole), and routed answers skip the response cache (DHCP-lease churn).
 - **This Windows dev box has no `make`**: run the underlying commands
-  directly (`go test ./...`, `gofmt -l`, `go vet`, `npm run build`,
-  `npx svelte-check`). golangci-lint v2 is at `~/go/bin/golangci-lint`
+  directly (`go test ./...`, `go vet`, `npm run build`,
+  `npx svelte-check`). Don't trust `gofmt -l` here: core.autocrlf checks
+  files out with CRLF endings, so it flags nearly every file with a
+  whole-file line-ending diff. golangci-lint (which runs gofumpt) is the
+  formatting authority on this box. golangci-lint v2 is at `~/go/bin/golangci-lint`
   (go install, so it always matches the local toolchain); CI runs it
   blocking, installed the same way for the same reason — prebuilt lint
   binaries can lag go.mod's Go version and refuse to run.
