@@ -30,6 +30,10 @@ no appeals (well, except pardons).
   served instantly while a fresh one is fetched behind them (RFC 8767)
 - A failing upstream is sidestepped automatically and re-probed until it
   recovers — one dead resolver never slows the whole network
+- Optional in-process DNSSEC validation against the root of trust —
+  permissive (validate and count) or enforce (refuse forged answers,
+  attributed in the query log); answers that can't be judged always pass,
+  so it can never break resolution
 
 **For the household**
 
@@ -152,9 +156,10 @@ from real-world use have shipped since: a bootstrap-free default upstream
 and curated resolver picker, clickable dashboard drill-downs and a
 full-width UI, rollback-safe config loading, device **vendor** labels and
 **mDNS** hostname resolution, a full-history Docket, and in-app upgrade
-guidance. Still planned: further device-identity layers (DHCP-lease
-ingestion, NetBIOS) and, under consideration, DNSSEC validation — details
-in [docs/roadmap.md](docs/roadmap.md).
+guidance. In-process **DNSSEC validation** shipped in August 2026 —
+something neither Pi-hole nor AdGuard Home does. Still planned: further
+device-identity layers (DHCP-lease ingestion) — details in
+[docs/roadmap.md](docs/roadmap.md).
 
 ## Developing
 

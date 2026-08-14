@@ -17,6 +17,7 @@
 
   // Editable working copies, initialised from the loaded config.
   let upstreams: Upstream[] = [];
+  let dnssec: 'off' | 'permissive' | 'enforce' = 'off';
   let mode: string = 'zero_ip';
   let blockTTL = 60;
   let safeSearch = false;
@@ -52,6 +53,7 @@
   function initFrom(c: ConfigView): void {
     cfg = c;
     upstreams = c.dns.upstreams.map((u) => ({ ...u }));
+    dnssec = c.dns.dnssec;
     mode = c.blocking.mode;
     safeSearch = c.blocking.safe_search;
     firefoxCanary = !c.dns.allow_firefox_doh;
@@ -99,7 +101,7 @@
     }
   }
 
-  const saveUpstreams = () => save({ dns: { upstreams } });
+  const saveUpstreams = () => save({ dns: { upstreams, dnssec } });
   const saveBlocking = () =>
     save({
       blocking: {
@@ -355,6 +357,15 @@
         </button>
       </div>
     {/each}
+    <label class="field">
+      <span>{copy.settings.dnssecLabel}</span>
+      <select bind:value={dnssec}>
+        <option value="off">{copy.settings.dnssecOff}</option>
+        <option value="permissive">{copy.settings.dnssecPermissive}</option>
+        <option value="enforce">{copy.settings.dnssecEnforce}</option>
+      </select>
+    </label>
+    <p class="note">{copy.settings.dnssecNote}</p>
     <div class="section-actions">
       <button on:click={addUpstream}>Add upstream</button>
       <button class="primary" on:click={saveUpstreams}>{copy.settings.save}</button>
