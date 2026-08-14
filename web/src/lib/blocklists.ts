@@ -1,15 +1,19 @@
 // Curated catalog of known-good blocklists for the Codex page — the
 // resolver-picker pattern applied to the harder decision.
 //
-// Every URL below was verified on 2026-07-11 by subscribing it in a dev
-// instance: fetched, parsed, and compiled through the real list pipeline
-// with zero skipped rules (except StevenBlack's long-known 7). The size
-// hints are that run's rule counts, rounded. Each URL pins the exact raw
-// variant the project publishes; prefer a project's plain-domains variant —
-// it downloads and compiles smallest.
+// Every URL below is verified by fetching it and compiling it through the
+// real list pipeline; the size hints are those runs' rule counts, rounded.
+// Each URL pins the exact raw variant the project publishes. Prefer a
+// project's plain-domains variant where one exists — it downloads and
+// compiles smallest — but follow the publisher: Hagezi deleted its
+// `domains/` tree in August 2026, so those entries now use the AdBlock
+// variants (verified 2026-08-14, zero skipped rules).
 //
-// To add an entry: subscribe the exact URL in a dev instance, confirm it
-// parses with nothing skipped, and record the rounded rule count here.
+// A dead URL here is a broken one-click subscribe for every user, so
+// scripts/check-catalog-urls.sh probes all of them weekly in CI.
+//
+// To add or change an entry: fetch the exact URL, confirm it parses with
+// nothing skipped, and record the rounded rule count here.
 
 export type BlocklistTier = 'balanced' | 'strict' | 'security';
 
@@ -29,12 +33,12 @@ export const blocklistPresets: BlocklistPreset[] = [
     id: 'hagezi-multi',
     label: 'Hagezi Multi Normal',
     note: 'ads, tracking & telemetry — the sweet spot, very low breakage',
-    size: '≈390k domains',
+    size: '≈181k domains',
     tier: 'balanced',
     list: {
       name: 'Hagezi Multi',
-      url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/multi.txt',
-      format: 'plain',
+      url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/multi.txt',
+      format: 'adblock',
     },
   },
   {
@@ -53,12 +57,12 @@ export const blocklistPresets: BlocklistPreset[] = [
     id: 'hagezi-pro',
     label: 'Hagezi Multi Pro',
     note: 'broader coverage than Normal; expect the occasional pardon',
-    size: '≈540k domains',
+    size: '≈214k domains',
     tier: 'strict',
     list: {
       name: 'Hagezi Pro',
-      url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/pro.txt',
-      format: 'plain',
+      url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt',
+      format: 'adblock',
     },
   },
   {
@@ -88,13 +92,13 @@ export const blocklistPresets: BlocklistPreset[] = [
   {
     id: 'hagezi-tif',
     label: 'Hagezi Threat Intelligence',
-    note: 'malware, phishing & scam domains — big, but aimed at threats, not ads',
-    size: '≈2M domains',
+    note: 'malware, phishing & scam domains — the medium cut; the full feed is ~2M domains and would fill a Pi\'s memory budget on its own',
+    size: '≈390k domains',
     tier: 'security',
     list: {
       name: 'Hagezi TIF',
-      url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/tif.txt',
-      format: 'plain',
+      url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.medium.txt',
+      format: 'adblock',
     },
   },
   {
