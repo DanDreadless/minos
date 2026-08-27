@@ -113,6 +113,16 @@ func parseHostsLine(list, line string, allow bool, b *filter.Builder, stats *Sta
 	switch fields[0] {
 	case "0.0.0.0", "127.0.0.1", "::", "::1", "0:0:0:0:0:0:0:0", "0:0:0:0:0:0:0:1":
 	default:
+		// The preamble every hosts file opens with maps its boilerplate
+		// names to addresses that are not sinkhole targets —
+		// "255.255.255.255 broadcasthost", "ff02::1 ip6-allnodes". Those
+		// names are already ignorable; only the address check reached them
+		// first, so each one counted as a skipped rule. That put seven
+		// permanent phantom skips on every hosts list in the catalog and
+		// made the "parses with nothing skipped" standard unmeetable.
+		if allLocalNames(fields[1:]) {
+			return
+		}
 		// A real hosts mapping (e.g. "192.168.1.5 nas.lan"), not a block entry.
 		stats.Skipped++
 		return
@@ -128,6 +138,18 @@ func parseHostsLine(list, line string, allow bool, b *filter.Builder, stats *Sta
 		addEntry(list, host, allow, b)
 		stats.Rules++
 	}
+}
+
+// allLocalNames reports whether every hostname on the line is hosts-file
+// boilerplate. Used to tell the standard preamble apart from a genuine
+// local mapping the user did not mean to hand us.
+func allLocalNames(hosts []string) bool {
+	for _, h := range hosts {
+		if _, ok := hostsLocalNames[strings.ToLower(h)]; !ok {
+			return false
+		}
+	}
+	return len(hosts) > 0
 }
 
 func parsePlainLine(list, line string, allow bool, b *filter.Builder, stats *Stats) {

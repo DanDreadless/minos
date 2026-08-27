@@ -61,6 +61,34 @@ func TestParseHosts(t *testing.T) {
 		skipped int
 	}{
 		{
+			// The preamble every hosts file opens with. These names are
+			// boilerplate, but their targets (255.255.255.255, ff02::1)
+			// are not sinkhole addresses, so each one used to count as a
+			// skipped rule — seven permanent phantom skips on every hosts
+			// list in the catalog.
+			name: "boilerplate preamble is ignored, not skipped",
+			input: "127.0.0.1 localhost\n" +
+				"255.255.255.255 broadcasthost\n" +
+				"fe80::1%lo0 localhost\n" +
+				"ff00::0 ip6-localnet\n" +
+				"ff02::1 ip6-allnodes\n" +
+				"ff02::3 ip6-allhosts\n" +
+				"0.0.0.0 ads.example.com\n",
+			blocked: []string{"ads.example.com"},
+			rules:   1,
+			skipped: 0,
+		},
+		{
+			// …but a genuine local mapping is still not a block entry, and
+			// must keep being reported rather than silently swallowed.
+			name: "real host mapping still counts as skipped",
+			input: "192.168.1.5 nas.lan\n" +
+				"0.0.0.0 ads.example.com\n",
+			blocked: []string{"ads.example.com"},
+			rules:   1,
+			skipped: 1,
+		},
+		{
 			name: "standard entries",
 			input: "# StevenBlack style header\n" +
 				"127.0.0.1 localhost\n" +
