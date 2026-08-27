@@ -9,11 +9,19 @@
 // `domains/` tree in August 2026, so those entries now use the AdBlock
 // variants (verified 2026-08-14, zero skipped rules).
 //
-// A dead URL here is a broken one-click subscribe for every user, so
-// scripts/check-catalog-urls.sh probes all of them weekly in CI.
+// A dead URL here is a broken one-click subscribe for every user, and a
+// list that still answers 200 while its content or format changed is
+// worse — the subscription looks healthy and protects nothing. So
+// internal/lists/catalog_test.go (build tag `catalog`) compiles every
+// entry below through the real parser weekly in CI, asserting it parses,
+// skips nothing, and lands near the recorded size.
 //
-// To add or change an entry: fetch the exact URL, confirm it parses with
-// nothing skipped, and record the rounded rule count here.
+// Sizes are compiled rule counts, not the publisher's marketing figure,
+// and were re-measured 2026-08-27.
+//
+// To add or change an entry: add it here, then run
+//   go test -tags catalog -timeout 20m -v ./internal/lists
+// and record the rule count it reports.
 
 export type BlocklistTier = 'balanced' | 'strict' | 'security';
 
@@ -33,7 +41,7 @@ export const blocklistPresets: BlocklistPreset[] = [
     id: 'hagezi-multi',
     label: 'Hagezi Multi Normal',
     note: 'ads, tracking & telemetry — the sweet spot, very low breakage',
-    size: '≈181k domains',
+    size: '≈190k domains',
     tier: 'balanced',
     list: {
       name: 'Hagezi Multi',
@@ -45,7 +53,7 @@ export const blocklistPresets: BlocklistPreset[] = [
     id: 'oisd-small',
     label: 'OISD Small',
     note: 'the essentials, built to never break anything',
-    size: '≈56k domains',
+    size: '≈59k domains',
     tier: 'balanced',
     list: {
       name: 'OISD Small',
@@ -57,7 +65,7 @@ export const blocklistPresets: BlocklistPreset[] = [
     id: 'hagezi-pro',
     label: 'Hagezi Multi Pro',
     note: 'broader coverage than Normal; expect the occasional pardon',
-    size: '≈214k domains',
+    size: '≈226k domains',
     tier: 'strict',
     list: {
       name: 'Hagezi Pro',
@@ -69,7 +77,7 @@ export const blocklistPresets: BlocklistPreset[] = [
     id: 'oisd-big',
     label: 'OISD Big',
     note: 'the full OISD net — wide, still breakage-shy',
-    size: '≈500k domains',
+    size: '≈267k domains',
     tier: 'strict',
     list: {
       name: 'OISD Big',
@@ -81,7 +89,7 @@ export const blocklistPresets: BlocklistPreset[] = [
     id: 'stevenblack',
     label: 'StevenBlack',
     note: 'the classic unified hosts file — the default on a fresh install',
-    size: '≈78k domains',
+    size: '≈81k domains',
     tier: 'strict',
     list: {
       name: 'StevenBlack',
@@ -93,7 +101,7 @@ export const blocklistPresets: BlocklistPreset[] = [
     id: 'hagezi-tif',
     label: 'Hagezi Threat Intelligence',
     note: 'malware, phishing & scam domains — the medium cut; the full feed is ~2M domains and would fill a Pi\'s memory budget on its own',
-    size: '≈390k domains',
+    size: '≈328k domains',
     tier: 'security',
     list: {
       name: 'Hagezi TIF',

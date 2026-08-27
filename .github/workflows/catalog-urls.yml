@@ -1,9 +1,14 @@
-name: Catalog URLs
+name: Catalog lists
 
 # The curated blocklist catalog points at third-party URLs that move
-# without warning. Probing them weekly turns "a user reports a broken
+# without warning. Verifying them weekly turns "a user reports a broken
 # one-click subscribe" into "CI tells us first". Runs on the GitHub
 # mirror only — Gitea is a NAS container and never runs CI.
+#
+# This compiles every catalog list through the real parser rather than
+# probing with HEAD. A 200 response proves nothing: a repurposed or
+# emptied list, a format change, or a stale size hint all answer 200
+# while the subscription silently protects nothing.
 
 on:
   schedule:
@@ -12,14 +17,19 @@ on:
   push:
     paths:
       - "web/src/lib/blocklists.ts"
-      - "scripts/check-catalog-urls.sh"
+      - "internal/lists/catalog_test.go"
       - ".github/workflows/catalog-urls.yml"
 
 jobs:
-  probe:
+  verify:
     if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: probe catalog URLs
-        run: scripts/check-catalog-urls.sh --verbose
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # Downloads roughly 25 MB across the catalog, so the default 10m
+      # go-test timeout is raised rather than left to bite on a slow day.
+      - name: verify catalog lists compile
+        run: go test -tags catalog -timeout 20m -v ./internal/lists -run TestCatalogListsCompile
