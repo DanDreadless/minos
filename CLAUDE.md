@@ -624,6 +624,35 @@ This is security software; hold it to that standard.
   *indeterminate*. Testing the bogus path needs the signed+tampered stub
   in `dnssec_test.go` (`dnssecProxy(t, mode, true, true)`) — don't expect
   to verify it against the real internet.
+- **Catalog semantics** (fixed decisions, August 2026): the curated
+  catalog in `web/src/lib/blocklists.ts` is verified by **compiling every
+  entry through the real parser**, not by probing it —
+  `internal/lists/catalog_test.go` under the `catalog` build tag, so
+  `go test ./...` never touches the network. A HEAD probe (what it
+  replaced) proves only that something answers 200, and misses the three
+  failures that matter: content repurposed or emptied, format changed
+  (every line silently skipped instead of failing), and size-hint rot.
+  The standard is the one the catalog header sets — parses, **zero
+  skipped**, rule count within 25% of the hint. Sizes recorded there are
+  **compiled rule counts**, never the publisher's marketing figure; OISD
+  ships a wildcard-collapsed variant, so the two were never the same
+  number and the old "≈500k" for OISD Big was 47% out. Run it after any
+  catalog edit: `go test -tags catalog -timeout 20m -v ./internal/lists`
+  (the 20m matters — ~25 MB of downloads outruns the default 10m).
+  Tiers: balanced → strict → security is a **breakage ladder**; `family`
+  is a separate axis (chosen content, not threats) and must not be folded
+  into it. Deliberately not carried: annoyances, per-vendor telemetry,
+  gambling — a long catalog is harder to choose from than a short one,
+  and overlapping lists cost full memory for marginal extra blocking.
+- **Hosts preamble is not a skipped rule**: every hosts file opens with
+  boilerplate mapping ignorable names to non-sinkhole addresses
+  (`255.255.255.255 broadcasthost`, `ff02::1 ip6-allnodes`). The target
+  check used to return before `hostsLocalNames` was consulted, so seven
+  lines counted as skipped on **every** hosts list — StevenBlack included,
+  the fresh-install default. `allLocalNames` now recognises the preamble
+  by name whatever it points at, while a genuine mapping
+  (`192.168.1.5 nas.lan`) still counts as skipped, because that really is
+  a line we were handed and did not use.
 - **Upstream breaker semantics** (fixed decisions): only transport errors
   count (SERVFAIL is an answer); 3 consecutive failures sidestep an
   upstream for 30 s; a lapsed cooldown admits exactly one CAS-elected

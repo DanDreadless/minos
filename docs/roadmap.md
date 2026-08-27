@@ -142,6 +142,19 @@ complete 2026-07-12:
 - **Install-method build stamp** — release/Docker builds stamp upgrade
   guidance
 
+## Catalog — shipped (August 2026)
+
+- **The catalog is verified by compiling it** — every curated list is
+  fetched and run through the real parser weekly in CI, asserting it
+  parses, skips nothing, and matches its advertised size. The previous
+  HEAD probe caught only deletions; this catches a list that was
+  repurposed, emptied, reformatted, or has drifted. Its first run found a
+  parser bug and a 47% size-hint error.
+- **Bypass and Family categories** — a DNS Bypass Blocker (public DoH,
+  VPN and proxy endpoints — a device using them leaves Minos entirely and
+  ignores every other list) and an adult-content list under a new Family
+  tier, the parental-filtering gap every comparable resolver fills.
+
 ## Recent polish — shipped (v0.18.1–v0.18.2, July 2026)
 
 Small UX corrections from real-world use, refining the shipped feature set
