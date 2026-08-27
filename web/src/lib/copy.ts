@@ -47,6 +47,37 @@ export const copy = {
     noData: 'No query data yet.',
   },
 
+  // DNSSEC proves an answer really came from the domain it claims. The
+  // states are RFC jargon, so every label here is the plain meaning and
+  // the hint carries the nuance — a user must never have to know what
+  // "indeterminate" means to read this card.
+  dnssec: {
+    title: 'DNSSEC',
+    titleHint: 'answer authenticity',
+    modePermissive: 'permissive',
+    modePermissiveHint: 'checking and recording, never refusing — a dry run for enforce',
+    modeEnforce: 'enforce',
+    modeEnforceHint: 'answers that fail the check are refused',
+    wouldBlock: (n: number) =>
+      `${n.toLocaleString()} ${n === 1 ? 'answer' : 'answers'} would have been refused in enforce mode`,
+    wouldBlockHint: 'last 24 hours — each of these would become a failed lookup if you switch',
+    wouldBlockNone: 'Nothing failed the check in the last 24 hours.',
+    wouldBlockNoneHint: 'Permissive mode is watching. Give it time before deciding on enforce.',
+    seeDocket: 'Review them in the Docket',
+    enforceNote: 'Refused answers are condemned in the Docket under the dnssec list.',
+    countersTitle: 'Since restart',
+    secure: 'Verified',
+    secureHint: 'signed, and the signature checked out',
+    insecure: 'Unsigned',
+    insecureHint: 'provably not signed — normal for most of the internet',
+    bogus: 'Failed',
+    bogusHint: 'signed, but the signature did not verify',
+    indeterminate: 'Not checkable',
+    indeterminateHint: 'no DNSSEC records came back; these always pass, in either mode',
+    upstreamWarning:
+      'Most answers could not be checked at all — your upstream resolver is probably not returning DNSSEC records, so validation is doing very little here.',
+  },
+
   docket: {
     title: 'The Docket',
     subtitle: 'live query log',
@@ -64,7 +95,9 @@ export const copy = {
     filterListTitle: 'show only queries this list matched',
     wouldBlockBadge: 'would block',
     wouldBlockTitle: (list: string, rule: string) =>
-      `An audit-mode list would have condemned this: "${rule}" in ${list}. Not enforced.`,
+      list === 'dnssec'
+        ? `This answer failed its DNSSEC check: "${rule}". Enforce mode would have refused it; permissive mode let it through.`
+        : `An audit-mode list would have condemned this: "${rule}" in ${list}. Not enforced.`,
     deviceScope: 'device', // prefixes the drilled-in device's IP(s) chip
     live: 'live',
   },
