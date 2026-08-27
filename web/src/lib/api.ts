@@ -76,6 +76,42 @@ export interface Stats {
   };
 }
 
+// The machine Minos runs on. supported is false on container installs and
+// then nothing else is present — a container cannot answer "how is the
+// machine running Minos doing?", so it reports nothing rather than
+// something confidently about the wrong subject.
+//
+// Every reading is optional: a platform that cannot measure one omits it,
+// and the UI must render an em dash rather than treating absence as zero.
+export interface Host {
+  supported: boolean;
+  hostname?: string;
+  os?: string;
+  arch?: string;
+  cpus?: number;
+  kernel?: string;
+  platform?: string;
+  go_version?: string;
+  container?: boolean;
+  mem_total?: number;
+  mem_source?: 'host' | 'cgroup';
+  sample?: {
+    time: string;
+    cpu_percent?: number;
+    load1?: number;
+    load5?: number;
+    load15?: number;
+    mem_used?: number;
+    mem_available?: number;
+    disk_total?: number;
+    disk_free?: number;
+    temp_celsius?: number;
+    uptime_seconds?: number;
+    proc_rss?: number;
+    goroutines: number;
+  };
+}
+
 export interface ClientOverview {
   window_hours: number;
   total: number;
@@ -392,6 +428,8 @@ export const api = {
   },
   // Distinct list names attributed in the window, for the Docket's filter.
   querylogLists: (hours = 168) => request<string[]>('GET', `/api/querylog/lists?hours=${hours}`),
+
+  host: () => request<Host>('GET', '/api/host'),
 
   getConfig: () => request<ConfigView>('GET', '/api/config'),
   updateConfig: (upd: SettingsUpdate) => request<ConfigView>('PUT', '/api/config', upd),

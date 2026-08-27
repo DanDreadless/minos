@@ -1,11 +1,18 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { api, type Stats, type Status } from '../lib/api';
+  import { api, type Host, type Stats, type Status } from '../lib/api';
   import BarList from '../lib/components/BarList.svelte';
   import SetupCard from '../lib/components/SetupCard.svelte';
   import StatTile from '../lib/components/StatTile.svelte';
   import TimelineChart from '../lib/components/TimelineChart.svelte';
   import { copy } from '../lib/copy';
+  import {
+    fmtBytes,
+    fmtCelsius,
+    fmtNumber,
+    fmtPercentValue,
+    fmtUptime,
+  } from '../lib/format';
   import { docketHref } from '../lib/router';
   import { notifyError } from '../lib/toast';
 
@@ -13,8 +20,14 @@
   export let onStatusChange: () => Promise<void>;
 
   let stats: Stats | null = null;
+  let host: Host | null = null;
+  // Whether an API token is configured. Read once: it drives a one-line
+  // nudge on the host card, which is the first thing here to expose the
+  // machine's identity rather than just DNS activity.
+  let tokenSet = true;
   let customPause = '';
   let timer: ReturnType<typeof setInterval> | null = null;
+  let hostTimer: ReturnType<typeof setInterval> | null = null;
 
   // A fresh instance: nothing judged in the last 24 h. The setup checklist
   // shows until traffic arrives or the user dismisses it (SetupCard also
@@ -47,6 +60,22 @@
     }
   }
 
+  // The host card is supplementary: if it fails, the dashboard's real
+  // job is unaffected, so it degrades to hidden rather than raising a
+  // toast over the DNS numbers the user came for.
+  async function loadHost(): Promise<void> {
+    host = await api.host().catch(() => null);
+  }
+
+  $: hostSample = host?.sample;
+  $: diskUsedPct =
+    hostSample?.disk_total && hostSample?.disk_free !== undefined && hostSample.disk_total > 0
+      ? ((hostSample.disk_total - hostSample.disk_free) / hostSample.disk_total) * 100
+      : undefined;
+  // The query log lives on this filesystem, so a full disk stops Minos
+  // recording rather than merely inconveniencing the host.
+  $: diskLow = diskUsedPct !== undefined && diskUsedPct >= 90;
+
   async function recess(duration: string): Promise<void> {
     try {
       await api.pause(duration);
@@ -74,11 +103,26 @@
 
   onMount(() => {
     void loadStats();
-    timer = setInterval(loadStats, 60000);
+    void loadHost();
+    void api
+      .getConfig()
+      .then((cfg) => {
+        tokenSet = cfg.api.token_set;
+      })
+      .catch(() => {});
+    // The host sampler ticks every 10s server-side; polling it on the
+    // stats cadence would leave the card a minute stale, so it gets its
+    // own faster timer.
+    timer = setInterval(() => {
+      void loadStats();
+      void loadHost();
+    }, 60000);
+    hostTimer = setInterval(loadHost, 15000);
   });
 
   onDestroy(() => {
     if (timer) clearInterval(timer);
+    if (hostTimer) clearInterval(hostTimer);
   });
 </script>
 
@@ -138,6 +182,72 @@
         label={copy.stats.cacheRate}
         hint={copy.stats.cacheRateHint}
       />
+    {/if}
+  </section>
+{/if}
+
+{#if host?.supported}
+  <section class="card host">
+    <h2>
+      {copy.host.title}
+      <small>{copy.host.titleHint}</small>
+      <span class="host-id">
+        {host.hostname}{#if host.platform} · {host.platform}{/if}{#if host.cpus}
+          · {host.cpus} CPU{host.cpus === 1 ? '' : 's'}{/if}
+      </span>
+    </h2>
+
+    {#if diskLow}
+      <p class="warn">{copy.host.diskLow}</p>
+    {/if}
+
+    <dl class="readings">
+      <div>
+        <dt title={copy.host.cpuHint}>{copy.host.cpu}</dt>
+        <dd>{fmtPercentValue(hostSample?.cpu_percent)}</dd>
+      </div>
+      <div>
+        <dt title={copy.host.loadHint}>{copy.host.load}</dt>
+        <dd>{fmtNumber(hostSample?.load1)}</dd>
+      </div>
+      <div>
+        <dt title={copy.host.memoryHint}>{copy.host.memory}</dt>
+        <dd>
+          {fmtBytes(hostSample?.mem_used)}<span class="of"
+            >/ {fmtBytes(host.mem_total || undefined)}</span
+          >
+        </dd>
+      </div>
+      <div>
+        <dt title={copy.host.diskHint}>{copy.host.disk}</dt>
+        <dd class:bad={diskLow}>
+          {fmtPercentValue(diskUsedPct)}<span class="of"
+            >of {fmtBytes(hostSample?.disk_total)}</span
+          >
+        </dd>
+      </div>
+      <div>
+        <dt title={copy.host.temperatureHint}>{copy.host.temperature}</dt>
+        <dd>{fmtCelsius(hostSample?.temp_celsius)}</dd>
+      </div>
+      <div>
+        <dt title={copy.host.uptimeHint}>{copy.host.uptime}</dt>
+        <dd>{fmtUptime(hostSample?.uptime_seconds)}</dd>
+      </div>
+      <div>
+        <dt title={copy.host.processHint}>{copy.host.process}</dt>
+        <dd>{fmtBytes(hostSample?.proc_rss)}</dd>
+      </div>
+    </dl>
+
+    {#if host.mem_source === 'cgroup'}
+      <p class="sub">{copy.host.cgroupNote}</p>
+    {/if}
+    {#if !tokenSet}
+      <p class="sub">
+        {copy.host.tokenHint}
+        <a href="#/settings">{copy.host.tokenAction}</a>
+      </p>
     {/if}
   </section>
 {/if}
@@ -377,7 +487,14 @@
   .sub {
     color: var(--text-dim);
     font-size: 0.8rem;
+  }
+
+  .dnssec .sub {
     margin: 0 0 0.6rem;
+  }
+
+  .host .sub {
+    margin: 0.8rem 0 0;
   }
 
   .sub a {
@@ -390,6 +507,11 @@
     color: var(--text);
     font-size: 0.85rem;
     margin: 0.4rem 0 0.8rem;
+  }
+
+  /* A full disk is a failure, not a caution: it stops Minos recording. */
+  .host .warn {
+    border-left-color: var(--blocked);
   }
 
   h3 {
@@ -422,5 +544,46 @@
 
   .counters dd.bad {
     color: var(--blocked);
+  }
+
+  .host {
+    margin-bottom: 1.25rem;
+  }
+
+  .host-id {
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: normal;
+    color: var(--text-dim);
+    letter-spacing: 0;
+    margin-left: 0.6rem;
+  }
+
+  .readings {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+    gap: 0.75rem;
+    margin: 0.5rem 0 0;
+  }
+
+  .readings dt {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+
+  .readings dd {
+    margin: 0.1rem 0 0;
+    font-size: 1.15rem;
+    font-family: var(--font-mono);
+  }
+
+  .readings dd.bad {
+    color: var(--blocked);
+  }
+
+  .readings .of {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-left: 0.3rem;
   }
 </style>

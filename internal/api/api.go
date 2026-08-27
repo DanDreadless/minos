@@ -24,6 +24,7 @@ import (
 	"minos/internal/config"
 	"minos/internal/dnsproxy"
 	"minos/internal/filter"
+	"minos/internal/hostinfo"
 	"minos/internal/lists"
 	"minos/internal/querylog"
 )
@@ -43,6 +44,15 @@ type UpdateSource interface {
 	Latest() (version string, available bool)
 }
 
+// HostSource reports the machine Minos runs on; hostinfo.Collector
+// implements it. Nil when unwired, and Supported is false on container
+// installs — both mean the same thing here: report no host health.
+type HostSource interface {
+	Supported() bool
+	Info() hostinfo.Info
+	Latest() *hostinfo.Sample
+}
+
 // Server wires the HTTP surface to the running components.
 type Server struct {
 	engine  *filter.Engine
@@ -52,6 +62,7 @@ type Server struct {
 	clients *clients.Registry
 	cache   ProxyStatsSource // may be nil
 	updates UpdateSource     // may be nil
+	host    HostSource       // may be nil; nil or unsupported reports nothing
 	static  fs.FS            // embedded web/dist; nil disables UI serving
 	version string
 	// installMethod is the build-time -ldflags stamp ("binary", "docker",
@@ -63,7 +74,7 @@ type Server struct {
 
 func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
 	mgr *lists.Manager, reg *clients.Registry, cache ProxyStatsSource,
-	upd UpdateSource, static fs.FS, version, installMethod string,
+	upd UpdateSource, host HostSource, static fs.FS, version, installMethod string,
 ) *Server {
 	return &Server{
 		engine:        engine,
@@ -73,6 +84,7 @@ func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
 		clients:       reg,
 		cache:         cache,
 		updates:       upd,
+		host:          host,
 		static:        static,
 		version:       version,
 		installMethod: installMethod,
@@ -89,6 +101,7 @@ func (s *Server) Router() http.Handler {
 	r.Route("/api", func(r chi.Router) {
 		r.Use(s.auth)
 		r.Get("/status", s.handleStatus)
+		r.Get("/host", s.handleHost)
 		r.Get("/upstreams", s.handleUpstreams)
 		r.Get("/update", s.handleUpdate)
 		r.Get("/querylog", s.handleQueryLog)

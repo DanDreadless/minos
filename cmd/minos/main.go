@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"time"
 
 	"minos/internal/acme"
@@ -23,6 +24,7 @@ import (
 	"minos/internal/config"
 	"minos/internal/dnsproxy"
 	"minos/internal/filter"
+	"minos/internal/hostinfo"
 	"minos/internal/importer"
 	"minos/internal/lists"
 	"minos/internal/notify"
@@ -200,7 +202,21 @@ func serve(args []string) error {
 	if err != nil {
 		return fmt.Errorf("embedded ui: %w", err)
 	}
-	apiSrv := api.New(engine, qlog, store, mgr, reg, proxy, checker, static, version, installMethod)
+
+	// Host health samples the machine Minos runs on. Its disk figure is
+	// for the directory holding the query log — on a Pi that is the SD
+	// card, the number most likely to actually cause trouble — falling
+	// back to the config file's directory in ephemeral mode, where there
+	// is no database to point at. Run is safe to start unconditionally:
+	// on a container install it returns immediately and reports nothing.
+	hostDir := filepath.Dir(cfg.QueryLog.DBPath)
+	if cfg.QueryLog.Ephemeral || cfg.QueryLog.DBPath == "" {
+		hostDir = filepath.Dir(*cfgPath)
+	}
+	hostStats := hostinfo.New(hostDir)
+	go hostStats.Run(ctx)
+
+	apiSrv := api.New(engine, qlog, store, mgr, reg, proxy, checker, hostStats, static, version, installMethod)
 	httpSrv := &http.Server{
 		Addr:              cfg.API.Listen,
 		Handler:           apiSrv.Router(),

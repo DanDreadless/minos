@@ -91,6 +91,46 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Host health. Absent entirely on container installs and on
+	// platforms that cannot supply a metric — a scrape should show no
+	// series rather than a zero, which would graph as a healthy idle
+	// machine when the truth is that nobody measured.
+	if s.host != nil && s.host.Supported() {
+		hi := s.host.Info()
+		gauge("minos_host_info", "Host identity; the value is always 1.", 1,
+			"hostname", hi.Hostname, "os", hi.OS, "arch", hi.Arch, "platform", hi.Platform)
+		gauge("minos_host_cpus", "Logical CPUs visible to Minos.", hi.CPUs)
+		if hi.MemTotal > 0 {
+			gauge("minos_host_memory_total_bytes",
+				"Total memory, from the cgroup limit where one applies.", hi.MemTotal)
+		}
+		if hs := s.host.Latest(); hs != nil {
+			if hs.CPUPercent != nil {
+				gauge("minos_host_cpu_percent", "Host CPU utilisation across all cores.", *hs.CPUPercent)
+			}
+			if hs.Load1 != nil {
+				gauge("minos_host_load1", "1-minute load average.", *hs.Load1)
+			}
+			if hs.MemUsed != nil && hs.MemAvailable != nil {
+				fmt.Fprintf(&b, "# HELP minos_host_memory_bytes Host memory by state.\n# TYPE minos_host_memory_bytes gauge\n")
+				sample("minos_host_memory_bytes", *hs.MemUsed, "state", "used")
+				sample("minos_host_memory_bytes", *hs.MemAvailable, "state", "available")
+			}
+			if hs.DiskTotal != nil && hs.DiskFree != nil {
+				fmt.Fprintf(&b, "# HELP minos_host_disk_bytes Space on the filesystem holding the query log.\n# TYPE minos_host_disk_bytes gauge\n")
+				sample("minos_host_disk_bytes", *hs.DiskTotal, "state", "total")
+				sample("minos_host_disk_bytes", *hs.DiskFree, "state", "free")
+			}
+			if hs.TempCelsius != nil {
+				gauge("minos_host_temperature_celsius", "CPU package temperature.", *hs.TempCelsius)
+			}
+			if hs.ProcRSS != nil {
+				gauge("minos_process_resident_bytes", "Resident memory used by Minos itself.", *hs.ProcRSS)
+			}
+			gauge("minos_process_goroutines", "Goroutines running in Minos.", hs.Goroutines)
+		}
+	}
+
 	lists := s.lists.Status()
 	if len(lists) > 0 {
 		fmt.Fprintf(&b, "# HELP minos_list_rules Compiled rules contributed per blocklist.\n# TYPE minos_list_rules gauge\n")
