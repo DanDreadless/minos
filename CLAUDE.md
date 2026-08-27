@@ -590,6 +590,40 @@ This is security software; hold it to that standard.
   get RRSIG/NSEC/NSEC3 stripped from served answers (we added DO
   upstream ourselves) unless they asked for that very type; AD reaches
   only clients that set DO or AD (RFC 6840 §5.7).
+- **DNSSEC visibility** (fixed decisions, August 2026): permissive mode is
+  treated as **an audit source, not a special case** — a bogus answer it
+  lets through is docketed on `audit_list`/`audit_rule` as `dnssec`, the
+  mirror of the `list`/`rule` pair enforce writes. "What changes if I
+  enable enforce" is then exactly "these audit marks become blocks", and
+  the Docket badge, audit-only filter, list dropdown and `(audit_list, ts)`
+  index all work unchanged. Use `dnsproxy.ListDNSSEC`, never the literal.
+  `judgeDNSSEC` returns `(audit, err)`; `forwardDedup` carries the reason
+  out and stores it on `inflightCall`, so **followers of a deduped
+  exchange are attributed like their leader** — same happens-before as
+  resp/upstream/err. **Cache hits are not re-validated**, so docket rows
+  are a *sample* of `minos_dnssec_results_total{status="bogus"}`, never
+  equal to it; documented in api.md and getting-started — don't "fix" it.
+  Counters go on `/status` (process-lifetime), the windowed would-block
+  figure on `/stats` (from the audit marks) — **never blur the two clocks
+  in the UI**. Both are omitted when the mode is off, so the UI hides on
+  absence rather than carrying an enabled flag. `/stats` reports whenever
+  validation is on, not only in permissive: the mode swaps live and a
+  window can span a change. `TopAuditedDomains`/`AuditedTotal` take any
+  audit source and **pin `INDEXED BY idx_querylog_audit_ts`** — with the
+  aggregate on top SQLite otherwise plans the any-source form on
+  `idx_querylog_ts` and walks the whole window (the measured
+  seconds-per-query pathology); a test asserts all four shapes keep the
+  index. The Tribunal card warns when *indeterminate* exceeds half of all
+  judged answers: that means the upstream returns no DNSSEC records and
+  validation is near-inert, a state otherwise indistinguishable from a
+  healthy quiet card.
+- **A live bogus answer is hard to reproduce**: every public resolver
+  probed (1.1.1.1, 9.9.9.10, 208.67.222.222, 74.82.42.42) validates and
+  SERVFAILs `dnssec-failed.org` before Minos sees it, while 4.2.2.1
+  returns the answer but strips DNSSEC records, so everything becomes
+  *indeterminate*. Testing the bogus path needs the signed+tampered stub
+  in `dnssec_test.go` (`dnssecProxy(t, mode, true, true)`) — don't expect
+  to verify it against the real internet.
 - **Upstream breaker semantics** (fixed decisions): only transport errors
   count (SERVFAIL is an answer); 3 consecutive failures sidestep an
   upstream for 30 s; a lapsed cooldown admits exactly one CAS-elected

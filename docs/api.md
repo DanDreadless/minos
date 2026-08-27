@@ -38,12 +38,20 @@ Counters and state, cheap enough to poll:
   "cache_hits": 21050,
   "cache_misses": 18046,
   "cache_entries": 3120,
-  "update_available": false
+  "update_available": false,
+  "dnssec": {"mode": "permissive", "secure": 4120, "insecure": 31882,
+             "bogus": 7, "indeterminate": 44}
 }
 ```
 
 `paused_until` (RFC 3339) appears during a timed pause; `latest_version`
 appears once the opt-in update check has run.
+
+`dnssec` is **absent entirely** when `dns.dnssec` is off (or the proxy is
+not wired), so clients should treat absence as "validation disabled"
+rather than looking for a separate flag. `mode` is `permissive` or
+`enforce`. The four counters are **process-lifetime** and reset on
+restart — for a windowed figure see `GET /api/stats`.
 
 ### `GET /api/update`
 
@@ -70,6 +78,27 @@ Dashboard aggregates for a 1–2160 hour window (up to 90 days): a
 24 h, hourly to 7 days, daily beyond), `top_blocked` as `{qname, count}`,
 and `top_clients` as `{client, total, blocked}`. Entries not yet flushed
 to disk (up to 30 s) are not included.
+
+While `dns.dnssec` is on, the response also carries `dnssec`:
+
+```json
+{"dnssec": {"would_block": 12,
+            "top_domains": [{"qname": "dnssec-failed.org", "count": 9}]}}
+```
+
+`would_block` counts answers **in this window** that failed validation
+and were let through — what enforce mode would have refused. It is read
+from the `audit_list = "dnssec"` marks in the query log, so it is
+windowed, unlike the process-lifetime counters on `/api/status`. In
+steady-state `enforce` it is zero: refusals are blocks, and appear under
+`list` instead (see `GET /api/stats/lists`). The block is reported
+whenever validation is on rather than only in permissive mode, because
+the mode swaps live and a window can span a change.
+
+Same sampling caveat as audit lists: validation runs when an answer is
+fetched from upstream, so cache hits are not re-validated and add no
+rows. `would_block` is therefore lower than the `bogus` counter on
+`/api/status` — they count resolutions and lookups respectively.
 
 ### `GET /api/stats/client?client=192.168.1.50,192.168.1.51&hours=24`
 

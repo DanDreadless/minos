@@ -56,6 +56,14 @@ At or beyond parity with the field:
   attribution, and unjudgeable answers always pass so a non-DNSSEC
   upstream can never break resolution. Neither Pi-hole nor AdGuard Home
   validates in-process — this is a differentiator *(shipped, August 2026)*
+- **DNSSEC visibility** — permissive mode is only useful if you can read
+  it, so a failed answer it lets through is now recorded in the Docket the
+  way an audit list is, and the Tribunal answers the question permissive
+  exists for: *"N answers would have been refused in enforce mode"*, with
+  the domains, linked. The card also flags the quiet failure where an
+  upstream returns no DNSSEC records at all and validation is doing
+  nothing — previously indistinguishable from everything being fine
+  *(shipped, August 2026)*
 - **2M-domain memory budget verified** — the matcher was compacted from
   maps (~82 B/entry, 164 MB) to a sorted slab (~31 B/entry): 2M blocked
   domains now hold at 83 MB RSS against the 150 MB budget, with lookups

@@ -31,9 +31,12 @@ no appeals (well, except pardons).
 - A failing upstream is sidestepped automatically and re-probed until it
   recovers — one dead resolver never slows the whole network
 - Optional in-process DNSSEC validation against the root of trust —
-  permissive (validate and count) or enforce (refuse forged answers,
+  permissive (validate and record) or enforce (refuse forged answers,
   attributed in the query log); answers that can't be judged always pass,
   so it can never break resolution
+- Permissive mode tells you what enforcing would cost *before* you enforce:
+  the dashboard names the answers that would have been refused, and warns
+  when an upstream returns no DNSSEC records so validation is doing nothing
 
 **For the household**
 
