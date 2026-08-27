@@ -47,6 +47,35 @@ export const copy = {
     noData: 'No query data yet.',
   },
 
+  // The host panel. Deliberately plain-spoken: this is the one card that
+  // is not about DNS at all, and a themed name would earn nothing. Every
+  // value can be absent, so each label pairs with an em dash rather than
+  // a zero when the platform cannot measure it.
+  host: {
+    title: 'Host',
+    titleHint: 'the machine Minos runs on',
+    cpu: 'CPU',
+    cpuHint: 'utilisation across all cores since the last reading',
+    load: 'Load',
+    loadHint: '1-minute run queue — roughly, how many things are waiting for a core',
+    memory: 'Memory',
+    memoryHint: 'in use, of the total available to Minos',
+    disk: 'Disk',
+    diskHint: 'on the filesystem holding the query log — the SD card, on a Pi',
+    temperature: 'Temperature',
+    temperatureHint: 'CPU package temperature',
+    uptime: 'Uptime',
+    uptimeHint: 'since the machine last booted, not since Minos started',
+    process: 'Minos',
+    processHint: 'memory resident for Minos itself',
+    unavailable: '—',
+    unavailableHint: 'this platform cannot report that',
+    cgroupNote: 'Memory figures are the container limit set for Minos, not the whole machine.',
+    diskLow: 'Disk is nearly full. The query log lives here — pruning retention or moving db_path will buy room.',
+    tokenHint: 'This page is readable by anyone on your network. Set an API token to lock it down.',
+    tokenAction: 'Settings',
+  },
+
   docket: {
     title: 'The Docket',
     subtitle: 'live query log',
