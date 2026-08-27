@@ -17,6 +17,12 @@ import (
 	"minos/internal/filter"
 )
 
+// ListDNSSEC is the pseudo-list name validation attributes itself under in
+// the query log: on `list` for an enforced refusal, on `audit_list` for a
+// permissive would-block. Exported so the API queries the same name the
+// proxy writes rather than repeating a literal.
+const ListDNSSEC = "dnssec"
+
 // dns.dnssec modes. Off must stay the zero value: an unwired Server (New
 // before ApplyConfig) behaves exactly like today.
 const (
@@ -84,7 +90,7 @@ func (s *Server) resolveChain(ctx context.Context, qname string, qtype uint16) (
 	req.SetQuestion(dns.Fqdn(qname), qtype)
 	req.SetEdns0(1232, true)
 	norm := filter.NormalizeDomain(qname)
-	resp, _, _, err := s.forwardDedup(ctx, req, norm, cacheKey(norm, qtype, req), s.cache.Load(), false)
+	resp, _, _, _, err := s.forwardDedup(ctx, req, norm, cacheKey(norm, qtype, req), s.cache.Load(), false)
 	return resp, err
 }
 
@@ -107,14 +113,19 @@ func ensureDO(req *dns.Msg) *dns.Msg {
 // for an enforce-mode bogus answer; every other outcome stamps the AD bit
 // and a counter. The response (and therefore the cache) carries the
 // verdict, so cache hits never revalidate.
-func (s *Server) judgeDNSSEC(ctx context.Context, resp *dns.Msg) error {
+//
+// audit is the failure reason for a bogus answer that permissive mode let
+// through — the "enforce would have refused this" evidence the docket
+// records as an audit mark. It is empty in every other case, including an
+// enforce-mode refusal (that is a block, and err carries it).
+func (s *Server) judgeDNSSEC(ctx context.Context, resp *dns.Msg) (audit string, err error) {
 	mode := s.dnssecMode.Load()
 	if mode == dnssecOff {
-		return nil
+		return "", nil
 	}
 	v := s.validator.Load()
 	if v == nil {
-		return nil
+		return "", nil
 	}
 	// Chain-record queries are the validator's own food: judging a
 	// client's DNSKEY/DS answer would fetch that very record through the
@@ -123,7 +134,7 @@ func (s *Server) judgeDNSSEC(ctx context.Context, resp *dns.Msg) error {
 	if len(resp.Question) == 1 {
 		switch resp.Question[0].Qtype {
 		case dns.TypeDNSKEY, dns.TypeDS, dns.TypeRRSIG:
-			return nil
+			return "", nil
 		}
 	}
 	res := v.Validate(ctx, resp)
@@ -142,14 +153,26 @@ func (s *Server) judgeDNSSEC(ctx context.Context, resp *dns.Msg) error {
 	case dnssec.Bogus:
 		s.dnssecBogus.Add(1)
 		if mode == dnssecEnforce {
-			return &bogusAnswerError{reason: res.Reason}
+			return "", &bogusAnswerError{reason: res.Reason}
 		}
 		if slog.Default().Enabled(ctx, slog.LevelDebug) {
 			slog.Debug("dnssec: bogus answer passed in permissive mode",
 				"qname", resp.Question[0].Name, "reason", res.Reason)
 		}
+		// Permissive: the answer is served, but the docket records what
+		// enforce mode would have refused. A counter alone can't name the
+		// domain, which is the one thing a permissive-mode operator needs
+		// before flipping to enforce.
+		//
+		// The caller treats "" as "no mark", and every Bogus result
+		// currently carries a reason — so fall back rather than let a
+		// future empty reason silently erase the evidence.
+		if res.Reason == "" {
+			return "bogus", nil
+		}
+		return res.Reason, nil
 	}
-	return nil
+	return "", nil
 }
 
 // finishDNSSEC adapts a served answer to what the client asked for: DO

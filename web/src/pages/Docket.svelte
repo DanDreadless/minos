@@ -133,7 +133,11 @@
     // Honour a deep link from the dashboard, e.g.
     // #/querylog?verdict=blocked&client=192.168.1.5
     const params = currentParams();
-    if (params.verdict === 'blocked' || params.verdict === 'allowed') {
+    if (
+      params.verdict === 'blocked' ||
+      params.verdict === 'allowed' ||
+      params.verdict === 'would_block'
+    ) {
       verdictFilter = params.verdict;
     }
     if (params.client) {

@@ -427,9 +427,9 @@ and Quad9 validate, and DoH/DoT protects the path to them). Turn on
 trust itself — so even the upstream resolver cannot forge an answer for
 a signed domain:
 
-- **permissive** — validate every forwarded answer, count the outcomes,
-  never block. The right first step: run it for a while and watch
-  `minos_dnssec_results_total` in `/metrics`.
+- **permissive** — validate every forwarded answer, record the outcomes,
+  never block. The right first step: run it for a while and read the
+  DNSSEC card on the Tribunal (below).
 - **enforce** — additionally refuse answers that *fail* validation
   (bogus: a forged record, a stripped signature, a broken chain) with
   SERVFAIL. The refusal shows in the query log attributed to `dnssec`,
@@ -444,6 +444,51 @@ cache-missed answer (~50 µs on amd64, well under a millisecond on a
 Pi); cache hits and blocked queries cost nothing extra. Clients that set
 the DO bit get the full DNSSEC records and a trustworthy AD bit;
 everyone else gets clean, stripped answers.
+
+### Reading permissive mode before you enforce
+
+Permissive mode exists to answer one question: *what would break if I
+turned on enforce?* The DNSSEC card on the Tribunal answers it directly.
+
+**"N answers would have been refused in enforce mode"** is the headline,
+over the last 24 hours, and it links to those exact queries in the
+Docket. Each listed domain is one that enforce would have turned into a
+failed lookup. Work through them before switching:
+
+- A domain you do not recognise, or clearly do not need, is a free win —
+  enforce would refuse a forged answer for it.
+- A domain you *do* depend on means the zone's owner has a broken
+  signature, not that Minos is wrong. Enforcing would break it for you
+  until they fix it. That is the trade-off to make consciously, which is
+  the whole point of looking first.
+
+A quiet card — nothing failing over a representative period, ideally a
+week including a working day — is the signal that enforce is safe to
+turn on.
+
+Beneath the headline sit four counters, **since the last restart**
+(unlike the headline, they are not windowed):
+
+| Counter | Meaning |
+|---|---|
+| **Verified** | Signed, and the signature checked out. |
+| **Unsigned** | Provably not signed. Normal — most of the internet is unsigned. |
+| **Failed** | Signed, but the signature did not verify. These are the would-be refusals. |
+| **Not checkable** | No DNSSEC records came back at all. These always pass, in either mode. |
+
+If **Not checkable** dominates, the card says so explicitly, and it
+matters: it means your upstream resolver is not returning DNSSEC records,
+so validation is doing almost nothing no matter which mode you pick. A
+card that is quiet for that reason looks identical to one that is quiet
+because everything is fine. Point `dns.upstreams` at a resolver that
+supports DNSSEC (the defaults do) and the counters should start moving.
+
+One honest caveat about the numbers: **the headline counts resolutions,
+not lookups.** Validation runs when an answer is actually fetched from
+upstream, so a domain answered from the response cache is not
+re-validated and does not add a row. The Docket therefore shows fewer
+would-block rows than the "Failed" counter, sometimes far fewer on a busy
+network. Both are correct; they measure different things.
 
 ## Monitoring with Prometheus / Grafana
 
@@ -534,11 +579,13 @@ dns:
                             # 6h old) and refresh in the background
   dnssec: off               # validate forwarded answers against the DNSSEC
                             # chain of trust: off | permissive | enforce.
-                            # permissive validates and counts, never blocks;
+                            # permissive validates and records, never blocks;
                             # enforce refuses forged (bogus) answers with
                             # SERVFAIL. Answers that cannot be judged either
                             # way always pass, so an upstream without DNSSEC
                             # support degrades visibility, never resolution.
+                            # Run permissive first and read the Tribunal's
+                            # DNSSEC card: it names what enforce would refuse.
   local_ttl: 300            # TTL on locally answered records
   local_records:            # names answered here, never sent upstream
     - name: nas.home.lab

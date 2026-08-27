@@ -352,3 +352,87 @@ func srvUpstreams(s *Server) []config.Upstream {
 	}
 	return out
 }
+
+// waitForEntry returns the newest query-log entry, polling until the
+// asynchronous recorder has flushed it.
+func waitForEntry(t *testing.T, qlog *querylog.Log) querylog.Entry {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if recent := qlog.Recent(1); len(recent) == 1 {
+			return recent[0]
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("query log entry never arrived")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// Permissive mode's whole purpose is to answer "what would enforce break?".
+// The counter can't name a domain, so the answer has to reach the docket:
+// the bogus answer is served, and marked on the same audit columns an
+// audit-mode list uses — enabling enforce is exactly "these marks become
+// blocks".
+func TestDNSSECPermissiveBogusIsAudited(t *testing.T) {
+	srv, qlog, _ := dnssecProxy(t, "permissive", true, true)
+	resp := queryDO(t, srv.UDPAddr().String(), "www.com", dns.TypeA)
+	if resp.Rcode != dns.RcodeSuccess {
+		t.Fatalf("rcode = %s, want the answer served in permissive mode",
+			dns.RcodeToString[resp.Rcode])
+	}
+	e := waitForEntry(t, qlog)
+	if e.Verdict != querylog.VerdictAllowed {
+		t.Fatalf("verdict = %q, want allowed — permissive never blocks", e.Verdict)
+	}
+	if e.AuditList != "dnssec" {
+		t.Fatalf("audit_list = %q, want %q", e.AuditList, "dnssec")
+	}
+	if e.AuditRule == "" {
+		t.Fatal("audit_rule is empty, want the validation failure reason")
+	}
+	if e.List != "" {
+		t.Fatalf("list = %q, want empty — a permissive mark belongs on the audit columns only", e.List)
+	}
+}
+
+// The two modes must never both claim the same query: enforce blocks and
+// attributes on list/rule, permissive audits on audit_list/audit_rule. A
+// row carrying both would double-count in any per-list aggregate.
+func TestDNSSECEnforceBogusCarriesNoAuditMark(t *testing.T) {
+	srv, qlog, _ := dnssecProxy(t, "enforce", true, true)
+	queryDO(t, srv.UDPAddr().String(), "www.com", dns.TypeA)
+	e := waitForEntry(t, qlog)
+	if e.Verdict != querylog.VerdictBlocked || e.List != "dnssec" {
+		t.Fatalf("entry = %+v, want blocked by dnssec", e)
+	}
+	if e.AuditList != "" || e.AuditRule != "" {
+		t.Fatalf("audit mark = (%q, %q), want empty on an enforced block", e.AuditList, e.AuditRule)
+	}
+}
+
+// Only Bogus earns a mark. A verifiable answer, an unjudgeable one, and a
+// disabled validator must all leave the audit columns untouched, or the
+// dashboard's "would be blocked" count is meaningless.
+func TestDNSSECNonBogusOutcomesLeaveNoAuditMark(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mode   string
+		signed bool
+		tamper bool
+	}{
+		{"secure", "permissive", true, false},
+		{"indeterminate", "permissive", false, false},
+		{"off", "", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, qlog, _ := dnssecProxy(t, tc.mode, tc.signed, tc.tamper)
+			queryDO(t, srv.UDPAddr().String(), "www.com", dns.TypeA)
+			e := waitForEntry(t, qlog)
+			if e.AuditList != "" || e.AuditRule != "" {
+				t.Fatalf("audit mark = (%q, %q), want none for a %s outcome",
+					e.AuditList, e.AuditRule, tc.name)
+			}
+		})
+	}
+}
