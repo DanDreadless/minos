@@ -6,9 +6,11 @@ import (
 	"time"
 )
 
-// New must always yield a usable Info and a first Sample, on every
-// platform including the one with no implementation — a nil sample would
-// make the handler branch on something that should never happen.
+// New must always yield usable static Info, and on a supported host a
+// first Sample too — a request arriving before the first tick would
+// otherwise see nothing. This runs on whatever platform CI is on,
+// including inside a container, so it branches on Supported rather than
+// assuming.
 func TestNewAlwaysProducesInfoAndSample(t *testing.T) {
 	c := New(t.TempDir())
 
@@ -18,6 +20,13 @@ func TestNewAlwaysProducesInfoAndSample(t *testing.T) {
 	}
 	if info.CPUs < 1 {
 		t.Errorf("cpus = %d, want at least 1", info.CPUs)
+	}
+
+	if !c.Supported() {
+		if c.Latest() != nil {
+			t.Error("Latest() is non-nil in a container, want nil — host health is not reported there")
+		}
+		t.Skip("container host: nothing further to assert")
 	}
 
 	s := c.Latest()
@@ -40,6 +49,9 @@ func TestNewAlwaysProducesInfoAndSample(t *testing.T) {
 // would read as "idle" rather than "not known yet".
 func TestFirstSampleHasNoCPUPercent(t *testing.T) {
 	c := New(t.TempDir())
+	if !c.Supported() {
+		t.Skip("container host: no samples taken")
+	}
 	if s := c.Latest(); s.CPUPercent != nil {
 		t.Errorf("cpu_percent = %v on the first sample, want nil — there is no delta yet", *s.CPUPercent)
 	}
@@ -47,6 +59,9 @@ func TestFirstSampleHasNoCPUPercent(t *testing.T) {
 
 func TestRunSamplesUntilCancelled(t *testing.T) {
 	c := New(t.TempDir())
+	if !c.Supported() {
+		t.Skip("container host: the sampler does not run")
+	}
 	c.interval = 5 * time.Millisecond
 	first := c.Latest()
 
@@ -68,6 +83,34 @@ func TestRunSamplesUntilCancelled(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("Run did not return after its context was cancelled")
+	}
+}
+
+// A container cannot answer "how is the machine running Minos doing?" —
+// the host's figures describe a machine Minos does not have to itself,
+// and the container's budget is not the host. So it reports nothing, and
+// the sampler must not run or leak a goroutine pretending otherwise.
+func TestContainerReportsNothing(t *testing.T) {
+	c := New(t.TempDir())
+	c.info.Container = true
+	c.sample.Store(nil)
+
+	if c.Supported() {
+		t.Fatal("Supported() is true with Container set")
+	}
+	if c.Latest() != nil {
+		t.Error("Latest() is non-nil on an unsupported host")
+	}
+
+	done := make(chan struct{})
+	go func() { defer close(done); c.Run(t.Context()) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return immediately on an unsupported host")
+	}
+	if c.Latest() != nil {
+		t.Error("Run produced a sample on an unsupported host")
 	}
 }
 

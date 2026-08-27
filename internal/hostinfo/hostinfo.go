@@ -17,6 +17,8 @@
 // is a delta between two readings, so serving it on demand would mean
 // sleeping inside a request. The newest Sample lives in an atomic pointer
 // and the handler does one load.
+//
+// Containers report nothing at all — see Supported.
 package hostinfo
 
 import (
@@ -115,9 +117,10 @@ type cpuTimes struct {
 	busy, total uint64
 }
 
-// New reads the static info and takes an initial sample so a request
-// arriving before the first tick still gets numbers. dataDir is the
-// directory whose filesystem usage to report — the query log's home.
+// New reads the static info and, on a supported host, takes an initial
+// sample so a request arriving before the first tick still gets numbers.
+// dataDir is the directory whose filesystem usage to report — the query
+// log's home.
 func New(dataDir string) *Collector {
 	c := &Collector{
 		dataDir:  dataDir,
@@ -132,20 +135,46 @@ func New(dataDir string) *Collector {
 		},
 	}
 	c.info.Kernel, c.info.Platform = platformInfo()
-	c.info.MemTotal, c.info.MemSource = memoryTotal()
-	c.sample.Store(c.take())
+	if !c.info.Container {
+		c.info.MemTotal, c.info.MemSource = memoryTotal()
+		c.sample.Store(c.take())
+	}
 	return c
 }
+
+// Supported reports whether host health means anything here. It is false
+// in a container, and then Latest returns nil and Run does nothing.
+//
+// The reasoning is that a container cannot answer the question the panel
+// asks. "How is the machine running Minos doing?" has two possible
+// answers inside one, and both are wrong: the host's figures describe a
+// machine the user may not administer and whose CPU and disk Minos does
+// not have to itself, while the container's own budget is not the host
+// at all. A number that is confidently about the wrong subject is worse
+// than an absent panel, so containers get the absent panel.
+//
+// The cgroup-aware memory paths stay in the platform code deliberately.
+// Detection is a heuristic over runtime markers, so it can miss an
+// unfamiliar runtime — and when it does, those paths are what stop Minos
+// reporting the host's 32 GB as though it were its own.
+func (c *Collector) Supported() bool { return !c.info.Container }
 
 // Info returns the static picture. Safe from any goroutine; never changes.
 func (c *Collector) Info() Info { return c.info }
 
-// Latest returns the newest sample. Never nil: New takes one.
+// Latest returns the newest sample, or nil when Supported is false.
+// Callers must handle nil: that is how a container reports "no host
+// health here", and it is not an error.
 func (c *Collector) Latest() *Sample { return c.sample.Load() }
 
 // Run samples until ctx is cancelled. Call it in its own goroutine; it
 // blocks. Cheap enough that the interval, not the work, sets the cost.
+// Returns immediately on an unsupported host, so the caller can start it
+// unconditionally.
 func (c *Collector) Run(ctx context.Context) {
+	if !c.Supported() {
+		return // nothing to sample; see Supported
+	}
 	t := time.NewTicker(c.interval)
 	defer t.Stop()
 	for {

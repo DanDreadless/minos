@@ -1,4 +1,4 @@
-//go:build !linux
+//go:build !linux && !darwin && !windows
 
 package hostinfo
 
@@ -12,8 +12,9 @@ import (
 // declines rather than inventing a value, so the UI shows "—" instead of
 // a confident and wrong 0%.
 //
-// Darwin and Windows implementations land in the next PR; until then this
-// keeps every build target compiling, which is the point of having it.
+// Linux, darwin and windows have real implementations; this covers
+// anything else Go can target, so an unusual GOOS still builds and runs
+// with an honest set of blanks.
 
 func hostname() string {
 	h, err := os.Hostname()

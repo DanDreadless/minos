@@ -35,6 +35,44 @@ jobs:
       - name: filter benchmarks compile
         run: go test ./internal/filter -bench . -benchmem -benchtime=1x -run '^$'
 
+  # Build-tagged per-OS code (internal/hostinfo) only fails on the target
+  # it is written for, so a wrong tag or a missing symbol stays invisible
+  # until release day. Compiling every published target here moves that
+  # failure to the pull request.
+  cross-build:
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: linux, goarch: arm, goarm: "7" }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+        run: go build ./...
+      # vet type-checks the per-OS files the build may not reach, and
+      # catches test files that only compile on their own platform.
+      - name: vet ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+        run: go vet ./...
+
   frontend:
     if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest

@@ -106,7 +106,9 @@ Rules:
   `gopkg.in/yaml.v3`, `github.com/coder/websocket` (the maintained home
   of nhooyr.io/websocket — migrated July 2026), `golang.org/x/crypto`
   (the acme package only — Go-team maintained; chosen over lego's
-  ~100-module tree).
+  ~100-module tree), `golang.org/x/sys` (host metrics on darwin/windows;
+  approved August 2026 — it was already an indirect dependency, so making
+  it direct added no modules, and the alternative was gopsutil's tree).
 
 ## Dev environment & commands
 
