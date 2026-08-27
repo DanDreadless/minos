@@ -24,6 +24,9 @@
   // listFilter matches the exact list name attributed to an entry —
   // enforcing (List column) or audit ("would block"). '' = no constraint.
   let listFilter = '';
+  // dnssecFilter narrows to one validation outcome, arriving as a deep link
+  // from the Tribunal's DNSSEC counters. '' = no constraint.
+  let dnssecFilter = '';
   let listNames: string[] = [];
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -32,7 +35,11 @@
   let connected = false;
 
   $: hasFilter =
-    search.trim() !== '' || verdictFilter !== 'all' || clientFilter.length > 0 || listFilter !== '';
+    search.trim() !== '' ||
+    verdictFilter !== 'all' ||
+    clientFilter.length > 0 ||
+    listFilter !== '' ||
+    dnssecFilter !== '';
 
   function clientMatch(e: LogEntry): boolean {
     if (verdictFilter === 'would_block') {
@@ -40,6 +47,7 @@
     } else if (verdictFilter !== 'all' && e.verdict !== verdictFilter) return false;
     if (clientFilter.length && !clientFilter.includes(e.client)) return false;
     if (listFilter && e.list !== listFilter && e.audit_list !== listFilter) return false;
+    if (dnssecFilter && e.dnssec !== dnssecFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       return e.qname.toLowerCase().includes(q) || e.client.toLowerCase().includes(q);
@@ -64,6 +72,7 @@
         verdict: verdictFilter === 'would_block' ? 'all' : verdictFilter,
         would_block: verdictFilter === 'would_block',
         list: listFilter,
+        dnssec: dnssecFilter,
         before,
         limit: HISTORY_PAGE,
       });
@@ -84,6 +93,11 @@
 
   function clearClientFilter(): void {
     clientFilter = [];
+    refreshHistory();
+  }
+
+  function clearDNSSECFilter(): void {
+    dnssecFilter = '';
     refreshHistory();
   }
 
@@ -149,6 +163,14 @@
       search = params.qname;
     }
     if (params.list) listFilter = params.list;
+    if (
+      params.dnssec === 'secure' ||
+      params.dnssec === 'insecure' ||
+      params.dnssec === 'bogus' ||
+      params.dnssec === 'indeterminate'
+    ) {
+      dnssecFilter = params.dnssec;
+    }
 
     // Dropdown options are cosmetic — degrade silently if they fail to load.
     void api
@@ -206,6 +228,17 @@
       <option value={name}>{name}</option>
     {/each}
   </select>
+  {#if dnssecFilter}
+    <span class="chip" title={copy.docket.dnssecScopeTitle(dnssecFilter)}>
+      {copy.docket.dnssecScope}
+      {copy.docket.dnssecName(dnssecFilter)}
+      <button
+        class="chip-x"
+        on:click={clearDNSSECFilter}
+        aria-label="clear DNSSEC filter">×</button
+      >
+    </span>
+  {/if}
   {#if clientFilter.length}
     <span class="chip" title={clientFilter.join(', ')}>
       {copy.docket.deviceScope}

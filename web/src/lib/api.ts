@@ -45,6 +45,10 @@ export interface LogEntry {
   duration_ms: number;
   audit_list?: string; // an audit-mode list would have blocked this
   audit_rule?: string;
+  // DNSSEC validation outcome for this answer. Absent when validation was
+  // off, when nothing was judged (a block, a local record), or on a cache
+  // hit — hits are not re-validated, so this records resolutions.
+  dnssec?: 'secure' | 'insecure' | 'bogus' | 'indeterminate';
 }
 
 export interface UpdateInfo {
@@ -413,6 +417,7 @@ export const api = {
     verdict?: string;
     would_block?: boolean;
     list?: string; // exact list name (enforcing or audit attribution)
+    dnssec?: string; // one validation outcome, for the Tribunal drill-down
     before?: number;
     limit?: number;
   }) => {
@@ -422,6 +427,7 @@ export const api = {
     if (params.verdict && params.verdict !== 'all') sp.set('verdict', params.verdict);
     if (params.would_block) sp.set('would_block', 'true');
     if (params.list) sp.set('list', params.list);
+    if (params.dnssec) sp.set('dnssec', params.dnssec);
     if (params.before) sp.set('before', String(params.before));
     sp.set('limit', String(params.limit ?? 200));
     return request<LogEntry[]>('GET', `/api/querylog/history?${sp.toString()}`);

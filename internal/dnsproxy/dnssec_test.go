@@ -436,3 +436,47 @@ func TestDNSSECNonBogusOutcomesLeaveNoAuditMark(t *testing.T) {
 		})
 	}
 }
+
+// Every judged answer records its outcome, not just the bogus ones — that
+// column is what makes the Tribunal's four counters clickable. Before it
+// existed, secure/insecure/indeterminate incremented a counter and left no
+// row to drill into.
+func TestDNSSECOutcomeIsRecorded(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mode   string
+		signed bool
+		tamper bool
+		want   string
+	}{
+		{"secure", "permissive", true, false, querylog.DNSSECSecure},
+		{"indeterminate", "permissive", false, false, querylog.DNSSECIndeterminate},
+		{"bogus in permissive", "permissive", true, true, querylog.DNSSECBogus},
+		{"bogus in enforce", "enforce", true, true, querylog.DNSSECBogus},
+		// Validation off judges nothing, so there is no outcome to record.
+		{"off", "", true, false, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, qlog, _ := dnssecProxy(t, tc.mode, tc.signed, tc.tamper)
+			queryDO(t, srv.UDPAddr().String(), "www.com", dns.TypeA)
+			e := waitForEntry(t, qlog)
+			if e.DNSSEC != tc.want {
+				t.Fatalf("dnssec column = %q, want %q (entry %+v)", e.DNSSEC, tc.want, e)
+			}
+		})
+	}
+}
+
+// An enforced refusal is a block that still carries its outcome, so
+// clicking "Failed" finds it alongside the permissive ones.
+func TestDNSSECEnforcedBlockKeepsItsOutcome(t *testing.T) {
+	srv, qlog, _ := dnssecProxy(t, "enforce", true, true)
+	queryDO(t, srv.UDPAddr().String(), "www.com", dns.TypeA)
+	e := waitForEntry(t, qlog)
+	if e.Verdict != querylog.VerdictBlocked || e.List != ListDNSSEC {
+		t.Fatalf("entry = %+v, want a dnssec block", e)
+	}
+	if e.DNSSEC != querylog.DNSSECBogus {
+		t.Errorf("dnssec column = %q, want %q on a refused answer", e.DNSSEC, querylog.DNSSECBogus)
+	}
+}

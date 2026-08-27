@@ -63,6 +63,7 @@ export function docketHref(params: {
   clients?: string[];
   qname?: string;
   list?: string;
+  dnssec?: string;
 }): string {
   const sp = new URLSearchParams();
   if (params.verdict) sp.set('verdict', params.verdict);
@@ -70,6 +71,7 @@ export function docketHref(params: {
   if (ips.length) sp.set('client', ips.join(','));
   if (params.qname) sp.set('qname', params.qname);
   if (params.list) sp.set('list', params.list);
+  if (params.dnssec) sp.set('dnssec', params.dnssec);
   const qs = sp.toString();
   return qs ? `#/querylog?${qs}` : '#/querylog';
 }

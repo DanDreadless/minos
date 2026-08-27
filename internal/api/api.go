@@ -331,6 +331,20 @@ func (s *Server) handleQueryLogHistory(w http.ResponseWriter, r *http.Request) {
 		verdict = ""
 	}
 	filter := querylog.HistoryFilter{Search: q.Get("q"), Verdict: verdict, List: q.Get("list")}
+	// dnssec narrows to one validation outcome — the Tribunal's counter
+	// drill-down. Validated against the known set rather than passed
+	// through, so a typo returns an error instead of silently no rows.
+	if d := q.Get("dnssec"); d != "" {
+		switch d {
+		case querylog.DNSSECSecure, querylog.DNSSECInsecure,
+			querylog.DNSSECBogus, querylog.DNSSECIndeterminate:
+			filter.DNSSEC = d
+		default:
+			writeError(w, http.StatusBadRequest,
+				"dnssec must be secure, insecure, bogus, or indeterminate")
+			return
+		}
+	}
 	// would_block narrows to entries an audit-mode list flagged.
 	switch v := q.Get("would_block"); v {
 	case "", "false":

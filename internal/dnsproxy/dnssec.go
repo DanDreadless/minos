@@ -15,6 +15,7 @@ import (
 
 	"minos/internal/dnssec"
 	"minos/internal/filter"
+	"minos/internal/querylog"
 )
 
 // ListDNSSEC is the pseudo-list name validation attributes itself under in
@@ -114,18 +115,18 @@ func ensureDO(req *dns.Msg) *dns.Msg {
 // and a counter. The response (and therefore the cache) carries the
 // verdict, so cache hits never revalidate.
 //
-// audit is the failure reason for a bogus answer that permissive mode let
-// through — the "enforce would have refused this" evidence the docket
-// records as an audit mark. It is empty in every other case, including an
-// enforce-mode refusal (that is a block, and err carries it).
-func (s *Server) judgeDNSSEC(ctx context.Context, resp *dns.Msg) (audit string, err error) {
+// mark carries what the docket records: the outcome for every judged
+// answer, plus the failure reason for a bogus one that permissive mode let
+// through — the "enforce would have refused this" evidence. An enforce-mode
+// refusal is a block instead, and err carries it.
+func (s *Server) judgeDNSSEC(ctx context.Context, resp *dns.Msg) (mark dnssecMark, err error) {
 	mode := s.dnssecMode.Load()
 	if mode == dnssecOff {
-		return "", nil
+		return dnssecMark{}, nil
 	}
 	v := s.validator.Load()
 	if v == nil {
-		return "", nil
+		return dnssecMark{}, nil
 	}
 	// Chain-record queries are the validator's own food: judging a
 	// client's DNSKEY/DS answer would fetch that very record through the
@@ -134,11 +135,12 @@ func (s *Server) judgeDNSSEC(ctx context.Context, resp *dns.Msg) (audit string, 
 	if len(resp.Question) == 1 {
 		switch resp.Question[0].Qtype {
 		case dns.TypeDNSKEY, dns.TypeDS, dns.TypeRRSIG:
-			return "", nil
+			return dnssecMark{}, nil
 		}
 	}
 	res := v.Validate(ctx, resp)
 	resp.AuthenticatedData = res.Status == dnssec.Secure
+	mark.status = statusName(res.Status)
 	switch res.Status {
 	case dnssec.Secure:
 		s.dnssecSecure.Add(1)
@@ -153,7 +155,7 @@ func (s *Server) judgeDNSSEC(ctx context.Context, resp *dns.Msg) (audit string, 
 	case dnssec.Bogus:
 		s.dnssecBogus.Add(1)
 		if mode == dnssecEnforce {
-			return "", &bogusAnswerError{reason: res.Reason}
+			return mark, &bogusAnswerError{reason: res.Reason}
 		}
 		if slog.Default().Enabled(ctx, slog.LevelDebug) {
 			slog.Debug("dnssec: bogus answer passed in permissive mode",
@@ -168,11 +170,41 @@ func (s *Server) judgeDNSSEC(ctx context.Context, resp *dns.Msg) (audit string, 
 		// currently carries a reason — so fall back rather than let a
 		// future empty reason silently erase the evidence.
 		if res.Reason == "" {
-			return "bogus", nil
+			mark.audit = "bogus"
+		} else {
+			mark.audit = res.Reason
 		}
-		return res.Reason, nil
+		return mark, nil
 	}
-	return "", nil
+	return mark, nil
+}
+
+// dnssecMark is what validation concluded about one answer, on its way to
+// the query log. Kept as a struct rather than more return values: the
+// outcome and the bogus reason always travel together, and forwardDedup
+// already carries enough.
+type dnssecMark struct {
+	// status is a querylog.DNSSEC* value, or "" when nothing was judged.
+	status string
+	// audit is the permissive-mode bogus reason; empty otherwise.
+	audit string
+}
+
+// statusName maps a validator state to the querylog's stored text. The two
+// vocabularies are kept apart deliberately: querylog must not import the
+// validator to read its own column.
+func statusName(st dnssec.Status) string {
+	switch st {
+	case dnssec.Secure:
+		return querylog.DNSSECSecure
+	case dnssec.Insecure:
+		return querylog.DNSSECInsecure
+	case dnssec.Bogus:
+		return querylog.DNSSECBogus
+	case dnssec.Indeterminate:
+		return querylog.DNSSECIndeterminate
+	}
+	return ""
 }
 
 // finishDNSSEC adapts a served answer to what the client asked for: DO

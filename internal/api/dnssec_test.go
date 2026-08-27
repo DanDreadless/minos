@@ -159,3 +159,61 @@ func TestStatsDNSSECOmittedWhenOff(t *testing.T) {
 		t.Fatalf("dnssec = %+v, want omitted when validation is off", got.DNSSEC)
 	}
 }
+
+// The Tribunal's counters link here, so the filter must select exactly one
+// outcome — and reject anything else loudly rather than quietly returning
+// no rows, which would look like "nothing happened" instead of "typo".
+func TestQueryLogHistoryDNSSECFilter(t *testing.T) {
+	s, _ := newTestServer(t, "")
+	recordAndWait(t, s.qlog,
+		querylog.Entry{Client: "10.0.0.1", QName: "signed.example", Verdict: querylog.VerdictAllowed,
+			DNSSEC: querylog.DNSSECSecure},
+		querylog.Entry{Client: "10.0.0.1", QName: "unsigned.example", Verdict: querylog.VerdictAllowed,
+			DNSSEC: querylog.DNSSECInsecure},
+		querylog.Entry{Client: "10.0.0.1", QName: "forged.example", Verdict: querylog.VerdictBlocked,
+			List: "dnssec", DNSSEC: querylog.DNSSECBogus},
+		querylog.Entry{Client: "10.0.0.1", QName: "plain.example", Verdict: querylog.VerdictAllowed},
+	)
+
+	// Ephemeral mode: history is nil and the Docket filters the ring, so
+	// assert the ring carries the field the frontend filters on.
+	rec := doJSON(t, s.Router(), http.MethodGet, "/api/querylog?limit=10", "", nil)
+	var ring []querylog.Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &ring); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, e := range ring {
+		got[e.QName] = e.DNSSEC
+	}
+	for qname, want := range map[string]string{
+		"signed.example":   querylog.DNSSECSecure,
+		"unsigned.example": querylog.DNSSECInsecure,
+		"forged.example":   querylog.DNSSECBogus,
+		"plain.example":    "", // never judged: no outcome to report
+	} {
+		if got[qname] != want {
+			t.Errorf("%s dnssec = %q, want %q", qname, got[qname], want)
+		}
+	}
+}
+
+func TestQueryLogHistoryDNSSECFilterRejectsUnknown(t *testing.T) {
+	s, _ := newTestServer(t, "")
+	// "secure%20" is the trailing-space case as a real client would send
+	// it; a raw space is not a legal request target.
+	for _, bad := range []string{"banana", "SECURE", "secure%20"} {
+		rec := doJSON(t, s.Router(), http.MethodGet,
+			"/api/querylog/history?dnssec="+bad, "", nil)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("dnssec=%q gave %d, want 400 — a typo must not read as 'no matches'",
+				bad, rec.Code)
+		}
+	}
+	// A valid one is accepted.
+	rec := doJSON(t, s.Router(), http.MethodGet,
+		"/api/querylog/history?dnssec=indeterminate", "", nil)
+	if rec.Code != http.StatusOK {
+		t.Errorf("dnssec=indeterminate gave %d, want 200", rec.Code)
+	}
+}
