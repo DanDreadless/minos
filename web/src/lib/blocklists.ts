@@ -23,7 +23,7 @@
 //   go test -tags catalog -timeout 20m -v ./internal/lists
 // and record the rule count it reports.
 
-export type BlocklistTier = 'balanced' | 'strict' | 'security';
+export type BlocklistTier = 'balanced' | 'strict' | 'security' | 'family';
 
 export interface BlocklistPreset {
   id: string;
@@ -34,7 +34,7 @@ export interface BlocklistPreset {
   list: { name: string; url: string; format: 'hosts' | 'plain' | 'adblock' };
 }
 
-export const blocklistTiers: BlocklistTier[] = ['balanced', 'strict', 'security'];
+export const blocklistTiers: BlocklistTier[] = ['balanced', 'strict', 'security', 'family'];
 
 export const blocklistPresets: BlocklistPreset[] = [
   {
@@ -110,6 +110,18 @@ export const blocklistPresets: BlocklistPreset[] = [
     },
   },
   {
+    id: 'hagezi-bypass',
+    label: 'DNS Bypass Blocker',
+    note: "stops devices reaching public DoH, VPN and proxy services to route around this resolver — also blocks VPN providers, so pardon yours if you use one",
+    size: '≈17k domains',
+    tier: 'security',
+    list: {
+      name: 'Hagezi Bypass',
+      url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/doh-vpn-proxy-bypass.txt',
+      format: 'adblock',
+    },
+  },
+  {
     id: 'urlhaus',
     label: 'URLhaus',
     note: 'active malware-distribution hosts from abuse.ch — small and sharp',
@@ -119,6 +131,18 @@ export const blocklistPresets: BlocklistPreset[] = [
       name: 'URLhaus',
       url: 'https://urlhaus.abuse.ch/downloads/hostfile/',
       format: 'hosts',
+    },
+  },
+  {
+    id: 'oisd-nsfw',
+    label: 'OISD NSFW',
+    note: 'adult content — the biggest list here by some way, so watch the memory budget on a Pi if you already run a large blocklist',
+    size: '≈480k domains',
+    tier: 'family',
+    list: {
+      name: 'OISD NSFW',
+      url: 'https://nsfw.oisd.nl/domainswild2',
+      format: 'plain',
     },
   },
 ];

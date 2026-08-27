@@ -178,6 +178,7 @@ export const copy = {
       balanced: { label: 'Balanced', hint: 'recommended — blocks ads & tracking with very low breakage' },
       strict: { label: 'Strict', hint: 'wider nets; keep an eye on the Docket and pardon what breaks' },
       security: { label: 'Security', hint: 'malware & phishing feeds — protection, not ad blocking' },
+      family: { label: 'Family', hint: 'content you choose to keep off the network, not threats' },
     },
     serviceShuttleAvailable: 'Available',
     serviceShuttleAllAdded: 'All added.',
