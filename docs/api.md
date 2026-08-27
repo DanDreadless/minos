@@ -45,6 +45,52 @@ Counters and state, cheap enough to poll:
 `paused_until` (RFC 3339) appears during a timed pause; `latest_version`
 appears once the opt-in update check has run.
 
+### `GET /api/host`
+
+The machine Minos runs on, for the dashboard's Host card.
+
+```json
+{
+  "supported": true,
+  "hostname": "vault-tec", "os": "linux", "arch": "arm64", "cpus": 4,
+  "kernel": "6.6.51+rpt-rpi-v8", "platform": "Debian GNU/Linux 12 (bookworm)",
+  "go_version": "go1.26.4", "container": false,
+  "mem_total": 4127195136, "mem_source": "host",
+  "sample": {
+    "time": "2026-08-27T14:31:02Z",
+    "cpu_percent": 3.9, "load1": 0.21, "load5": 0.18, "load15": 0.14,
+    "mem_used": 512483328, "mem_available": 3614711808,
+    "disk_total": 31427035136, "disk_free": 24903090176,
+    "temp_celsius": 48.7, "uptime_seconds": 934812,
+    "proc_rss": 94371840, "goroutines": 38
+  }
+}
+```
+
+**On a container install the entire response is `{"supported": false}`.**
+Not a 404 — the endpoint exists and answered; the feature does not apply
+there. Clients must branch on `supported` rather than reading missing
+fields as zeroes. See the Host health section of the getting-started
+guide for why containers report nothing.
+
+**Every field inside `sample` is optional except `time` and
+`goroutines`.** A platform that cannot measure a reading omits it:
+Windows has no `load*`, macOS no `cpu_percent` or memory breakdown, and
+`temp_celsius` needs a hardware sensor. Render an absent field as
+unknown, never as zero.
+
+`mem_source` is `host` or `cgroup`. When it is `cgroup`, `mem_total` and
+the sample's memory figures describe the limit Minos was given rather
+than the machine — do not present them as the host's RAM.
+
+`disk_total`/`disk_free` are for the filesystem holding the query log,
+not the largest one. `uptime_seconds` is the host's; the process's own
+uptime is on `/api/status`.
+
+The values come from a sampler on its own ticker (10s), so this endpoint
+never blocks. `cpu_percent` is a delta between two readings and is
+therefore absent from the very first sample after start.
+
 ### `GET /api/update`
 
 The running and latest versions plus an actionable upgrade command for how

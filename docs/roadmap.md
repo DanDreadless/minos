@@ -134,6 +134,17 @@ complete 2026-07-12:
 - **Install-method build stamp** — release/Docker builds stamp upgrade
   guidance
 
+## Host health — shipped (August 2026)
+
+- **The Tribunal reports the machine Minos runs on** — CPU, load, memory,
+  disk, temperature, uptime and Minos's own footprint, plus Prometheus
+  gauges. The disk figure is the query log's filesystem (the SD card on a
+  Pi) and warns past 90%, because a full disk stops Minos recording.
+- Readings the platform cannot measure show an em dash, never a zero, and
+  **container installs report nothing at all** — inside a container the
+  host's figures describe a machine Minos does not have to itself and the
+  container's limits are not the host, so neither answer is worth showing.
+
 ## Recent polish — shipped (v0.18.1–v0.18.2, July 2026)
 
 Small UX corrections from real-world use, refining the shipped feature set

@@ -445,6 +445,45 @@ Pi); cache hits and blocked queries cost nothing extra. Clients that set
 the DO bit get the full DNSSEC records and a trustworthy AD bit;
 everyone else gets clean, stripped answers.
 
+## Host health
+
+The Tribunal carries a **Host** card describing the machine Minos runs
+on: CPU, load, memory, disk, temperature, uptime, and how much memory
+Minos itself is using. It refreshes every 15 seconds.
+
+The disk figure is deliberately not the biggest filesystem — it is the
+one holding the **query log**. On a Pi that is usually the SD card, and
+it is the number most likely to actually cause trouble: when it fills,
+Minos stops recording. Past 90% the card says so and turns red. The
+remedy is to lower `querylog.retention_days`, or move `querylog.db_path`
+to other storage.
+
+**Not everything is measurable everywhere, and Minos will not pretend
+otherwise.** A reading the platform cannot supply shows an em dash, with
+a hover saying so — never a zero, which would read as an idle, healthy
+machine:
+
+| Reading | Where it works |
+|---|---|
+| CPU, memory, disk, uptime | Linux, Windows |
+| Load average | Linux, macOS — Windows has no such concept |
+| CPU utilisation | Linux, Windows — macOS needs a call unavailable in a static build |
+| Temperature | Linux where the hardware exposes a sensor, including the Pi |
+
+**Container installs report no host health at all**, and the card does
+not appear. This is deliberate. Inside a container the question "how is
+the machine running Minos doing?" has two possible answers and both are
+wrong: the host's figures describe a machine you may not administer and
+whose CPU and disk Minos does not have to itself, while the container's
+own limits are not the host. A number confidently about the wrong
+subject is worse than no number, so Docker installs get no card. Use
+your container platform's own metrics for that layer.
+
+If no API token is set, the card points that out. It is the first part
+of the UI to expose the machine's identity rather than DNS activity, so
+it is worth deciding consciously — see `api.token` in the configuration
+reference.
+
 ## Monitoring with Prometheus / Grafana
 
 `GET /metrics` on the API port serves Prometheus exposition format:
@@ -452,6 +491,14 @@ query/block counters, cache hit rate, per-upstream request counts,
 failures, and cumulative latency, per-list rule counts, pause state, and
 (when `dns.dnssec` is on) validation outcomes as
 `minos_dnssec_results_total{status="secure|insecure|bogus|indeterminate"}`.
+On a non-container install it also exports host health as
+`minos_host_cpu_percent`, `minos_host_load1`,
+`minos_host_memory_bytes{state=…}`, `minos_host_disk_bytes{state=…}`,
+`minos_host_temperature_celsius`, and `minos_process_resident_bytes`.
+A metric this platform cannot measure exports **no series at all**
+rather than a zero — a zero would graph as a healthy idle machine when
+the truth is that nobody measured it.
+
 It is scrape-only — Minos never pushes data anywhere, so the no-telemetry
 promise holds; these are your own numbers on your own network.
 

@@ -592,6 +592,46 @@ This is security software; hold it to that standard.
   get RRSIG/NSEC/NSEC3 stripped from served answers (we added DO
   upstream ourselves) unless they asked for that very type; AD reaches
   only clients that set DO or AD (RFC 6840 §5.7).
+- **Host-health semantics** (fixed decisions, August 2026):
+  `internal/hostinfo` is a **leaf package** — it imports nothing from
+  Minos, so the per-OS files stay testable and the dependency direction
+  holds. **Container installs report nothing at all**: `Supported()` is
+  false, `Latest()` is nil, the sampler never starts, `/api/host` answers
+  exactly `{"supported": false}` (a 200, not a 404 — the endpoint
+  answered; the feature does not apply) and no `minos_host_` series are
+  exported. The reasoning is that "how is the machine running Minos
+  doing?" has two wrong answers inside a container — the host's figures
+  describe a machine Minos does not have to itself, the container's
+  budget is not the host — and a number confidently about the wrong
+  subject is worse than none. The cgroup-aware memory paths stay anyway:
+  detection is a heuristic and can miss an unfamiliar runtime, and they
+  are what stop Minos reporting the host's 32 GB as its own when it does.
+  **Every dynamic reading is optional and absence is never zero** — nil
+  in Go, omitted in JSON, no Prometheus series, an em dash in the UI. A
+  zero graphs as an idle healthy machine when the truth is nobody
+  measured. **Sampling is on a ticker (10s), never in the handler**: CPU
+  is a delta, so serving it on demand would sleep inside a request; the
+  handler does one atomic load. CPU percent is absent on the first sample
+  and whenever the counter stalls or goes backwards. Known platform gaps,
+  deliberate: darwin has no CPU percent or memory breakdown (Mach calls
+  need cgo, and releases are CGO_ENABLED=0) and windows has no load
+  average (not a Windows concept). Disk is the **query log's**
+  filesystem, not the largest — on a Pi that is the SD card, and 90% full
+  is warned about because a full disk stops Minos recording. `x/sys` is
+  used for darwin/windows only; the three Windows counters it lacks
+  (`GlobalMemoryStatusEx`, `GetSystemTimes`, `GetTickCount64`) are lazy
+  kernel32 procs.
+- **CI cross-builds all six release targets** (`cross-build` matrix,
+  build + vet): build-tagged per-OS code only fails on its own platform,
+  so a wrong tag or a missing symbol is otherwise invisible until release
+  day. It caught three x/sys symbols that do not exist.
+- **There is a project skill for local verification**:
+  `.claude/skills/verify/SKILL.md` — build/launch/drive recipe for this
+  Windows box, including the excluded-port range, the async matcher
+  rebuild race, and the SQLite flush delay. Read it before hand-rolling a
+  local test run. It also records that **no browser-automation harness
+  exists here**: UI checking beyond grepping the served `assets/index-*.js`
+  for new copy strings is manual.
 - **Upstream breaker semantics** (fixed decisions): only transport errors
   count (SERVFAIL is an answer); 3 consecutive failures sidestep an
   upstream for 30 s; a lapsed cooldown admits exactly one CAS-elected

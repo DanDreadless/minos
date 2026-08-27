@@ -61,6 +61,9 @@ no appeals (well, except pardons).
 - Web dashboard with query charts, top blocked domains, and busiest clients
   — all clickable to drill straight into the matching (full-history) log —
   cache hit rate, and a live query log streamed over WebSocket
+- Host health on the dashboard for non-container installs — CPU, memory,
+  temperature, and free space on the disk holding the query log, which is
+  the number that actually bites on a Pi
 - Full management from the UI: blocklists, allow/deny domains, upstreams,
   blocking mode, retention, API token — all applied live, no restarts
 - Migrate in one command (`minos import pihole /etc/pihole`) or by
