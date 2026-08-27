@@ -113,7 +113,11 @@ type inflightCall struct {
 	done     chan struct{}
 	resp     *dns.Msg // a private copy; nil on error
 	upstream string
-	err      error
+	// dnssecAudit is the leader's permissive-mode bogus reason, shared so
+	// followers of the same exchange are attributed identically — they
+	// received the leader's answer, so they carry its verdict too.
+	dnssecAudit string
+	err         error
 }
 
 // forwardDedup forwards req, collapsing concurrent identical queries: the
@@ -122,22 +126,22 @@ type inflightCall struct {
 // validate runs DNSSEC judgment on the leader's answer (client-facing
 // queries); the validator's own chain fetches pass false — they are
 // verified cryptographically by the validator itself.
-func (s *Server) forwardDedup(ctx context.Context, req *dns.Msg, qname, key string, cache *dnsCache, validate bool) (resp *dns.Msg, upstream string, shared bool, err error) {
+func (s *Server) forwardDedup(ctx context.Context, req *dns.Msg, qname, key string, cache *dnsCache, validate bool) (resp *dns.Msg, upstream string, shared bool, dnssecAudit string, err error) {
 	call := &inflightCall{done: make(chan struct{})}
 	if v, loaded := s.inflight.LoadOrStore(key, call); loaded {
 		prior := v.(*inflightCall)
 		select {
 		case <-prior.done:
 			if prior.err != nil {
-				return nil, prior.upstream, true, prior.err
+				return nil, prior.upstream, true, "", prior.err
 			}
 			resp := prior.resp.Copy()
 			// The leader's question may differ in case (0x20); answer
 			// under the follower's own casing, as the cache does.
 			resp.Question = req.Question
-			return resp, prior.upstream, true, nil
+			return resp, prior.upstream, true, prior.dnssecAudit, nil
 		case <-ctx.Done():
-			return nil, "", true, ctx.Err()
+			return nil, "", true, "", ctx.Err()
 		}
 	}
 	defer s.inflight.Delete(key)
@@ -154,9 +158,17 @@ func (s *Server) forwardDedup(ctx context.Context, req *dns.Msg, qname, key stri
 			if s.dnssecMode.Load() != dnssecOff {
 				r.AuthenticatedData = false
 			}
-		} else if verr := s.judgeDNSSEC(ctx, r); verr != nil {
-			// Enforce-mode bogus: SERVFAIL, and never cache it.
-			r, err = nil, verr
+		} else {
+			audit, verr := s.judgeDNSSEC(ctx, r)
+			if verr != nil {
+				// Enforce-mode bogus: SERVFAIL, and never cache it.
+				r, err = nil, verr
+			} else {
+				// Permissive-mode bogus: served and cached like any other
+				// answer, but the reason travels out so handle() can
+				// docket what enforce would have refused.
+				dnssecAudit = audit
+			}
 		}
 	}
 	if err == nil {
@@ -167,9 +179,9 @@ func (s *Server) forwardDedup(ctx context.Context, req *dns.Msg, qname, key stri
 		// (ID stamping) after this returns.
 		call.resp = r.Copy()
 	}
-	call.upstream, call.err = name, err
+	call.upstream, call.err, call.dnssecAudit = name, err, dnssecAudit
 	close(call.done)
-	return r, name, false, err
+	return r, name, false, dnssecAudit, err
 }
 
 // refreshStale re-resolves a stale cache key in the background, deduped
@@ -187,7 +199,7 @@ func (s *Server) refreshStale(key, qname string, qtype uint16) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*upstreamTimeout)
 		defer cancel()
-		_, _, _, _ = s.forwardDedup(ctx, req, qname, key, s.cache.Load(), true)
+		_, _, _, _, _ = s.forwardDedup(ctx, req, qname, key, s.cache.Load(), true)
 	}()
 }
 
@@ -611,7 +623,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*upstreamTimeout)
 	defer cancel()
-	resp, upstreamName, _, err := s.forwardDedup(ctx, req, qname, key, cache, true)
+	resp, upstreamName, _, dnssecAudit, err := s.forwardDedup(ctx, req, qname, key, cache, true)
 	if err != nil {
 		reply := new(dns.Msg)
 		reply.SetRcode(req, dns.RcodeServerFailure)
@@ -635,6 +647,17 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 	resp.Id = req.Id
 	s.finishDNSSEC(req, resp, q.Qtype)
 	_ = w.WriteMsg(resp)
+	if dnssecAudit != "" {
+		// Permissive mode: the answer was served, but enforce mode would
+		// have refused it. Recorded on the same columns an audit list
+		// uses, so "what changes if I enable enforce" is exactly "these
+		// audit marks become blocks" — and the Docket's would-block badge
+		// and list filter work with no further plumbing. Only resolutions
+		// carry the mark: a cache hit never reaches this path, so docket
+		// rows are a sample of the minos_dnssec_results_total counter,
+		// never equal to it.
+		entry.AuditList, entry.AuditRule = "dnssec", dnssecAudit
+	}
 	entry.Verdict = querylog.VerdictAllowed
 	entry.Upstream = upstreamName
 	s.record(entry, start)
