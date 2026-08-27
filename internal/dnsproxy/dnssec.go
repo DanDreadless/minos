@@ -17,6 +17,12 @@ import (
 	"minos/internal/filter"
 )
 
+// ListDNSSEC is the pseudo-list name validation attributes itself under in
+// the query log: on `list` for an enforced refusal, on `audit_list` for a
+// permissive would-block. Exported so the API queries the same name the
+// proxy writes rather than repeating a literal.
+const ListDNSSEC = "dnssec"
+
 // dns.dnssec modes. Off must stay the zero value: an unwired Server (New
 // before ApplyConfig) behaves exactly like today.
 const (

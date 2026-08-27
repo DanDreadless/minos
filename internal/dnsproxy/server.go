@@ -632,7 +632,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 			// A refused bogus answer is a judgment, not an upstream
 			// failure: condemned in the docket with its reason.
 			entry.Verdict = querylog.VerdictBlocked
-			entry.List = "dnssec"
+			entry.List = ListDNSSEC
 			entry.Rule = bogus.reason
 		} else {
 			if slog.Default().Enabled(ctx, slog.LevelDebug) {
@@ -656,7 +656,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		// carry the mark: a cache hit never reaches this path, so docket
 		// rows are a sample of the minos_dnssec_results_total counter,
 		// never equal to it.
-		entry.AuditList, entry.AuditRule = "dnssec", dnssecAudit
+		entry.AuditList, entry.AuditRule = ListDNSSEC, dnssecAudit
 	}
 	entry.Verdict = querylog.VerdictAllowed
 	entry.Upstream = upstreamName

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"minos/internal/dnsproxy"
 	"minos/internal/filter"
 	"minos/internal/querylog"
 )
@@ -16,6 +17,18 @@ type statsResponse struct {
 	Timeline    []querylog.TimelineBucket `json:"timeline"`
 	TopBlocked  []querylog.TopDomain      `json:"top_blocked"`
 	TopClients  []querylog.ClientStat     `json:"top_clients"`
+	// DNSSEC is present only while permissive mode is recording audit
+	// marks — the windowed answer to "what would enforce refuse?", which
+	// the process-lifetime counters on /status cannot give.
+	DNSSEC *dnssecAudit `json:"dnssec,omitempty"`
+}
+
+// dnssecAudit is the windowed would-block picture for the dashboard card:
+// how many answers permissive mode let through that enforce would have
+// refused, and which domains they were.
+type dnssecAudit struct {
+	WouldBlock int                  `json:"would_block"`
+	TopDomains []querylog.TopDomain `json:"top_domains"`
 }
 
 // handleStats aggregates the query log for the dashboard: a bucketed
@@ -60,12 +73,34 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	if topClients == nil {
 		topClients = []querylog.ClientStat{}
 	}
-	writeJSON(w, http.StatusOK, statsResponse{
+	out := statsResponse{
 		WindowHours: hours,
 		Timeline:    timeline,
 		TopBlocked:  topBlocked,
 		TopClients:  topClients,
-	})
+	}
+	// Reported whenever validation is on, not only in permissive mode:
+	// the mode is live-swappable, so a window that begins in permissive
+	// and ends in enforce still holds marks worth showing. In steady-state
+	// enforce the figures are simply zero — enforced refusals are blocks,
+	// and the Codex list stats already count them under "dnssec".
+	if s.cache != nil && s.cache.DNSSECStats().Mode != "off" {
+		total, err := s.qlog.AuditedTotal(ctx, since, dnsproxy.ListDNSSEC)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		top, err := s.qlog.TopAuditedDomains(ctx, since, dnsproxy.ListDNSSEC, 10)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if top == nil {
+			top = []querylog.TopDomain{}
+		}
+		out.DNSSEC = &dnssecAudit{WouldBlock: total, TopDomains: top}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handleClientStats aggregates one device's traffic for the client

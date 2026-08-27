@@ -1,6 +1,7 @@
 package querylog
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -328,5 +329,149 @@ func TestResizePreservesNewest(t *testing.T) {
 	drain(t, l, 4)
 	if l.Recent(1)[0].QName != "new.example.com" {
 		t.Error("ring broken after resize: newest entry missing")
+	}
+}
+
+func seedAuditMarks(t *testing.T, l *Log) {
+	t.Helper()
+	now := time.Now()
+	rec := func(qname, auditList, verdict string, at time.Time) {
+		e := Entry{Time: at, Client: "10.0.0.1", QName: qname, QType: "A", Verdict: verdict}
+		if auditList != "" {
+			e.AuditList, e.AuditRule = auditList, "reason for "+qname
+		}
+		l.Record(e)
+	}
+	rec("bogus.example.com", "dnssec", VerdictAllowed, now.Add(-40*time.Minute))
+	rec("bogus.example.com", "dnssec", VerdictAllowed, now.Add(-30*time.Minute))
+	rec("expired.example.com", "dnssec", VerdictAllowed, now.Add(-20*time.Minute))
+	// A different audit source must not be counted under dnssec…
+	rec("strict.example.com", "hagezi-pro", VerdictAllowed, now.Add(-15*time.Minute))
+	// …nor an unmarked query…
+	rec("fine.example.com", "", VerdictAllowed, now.Add(-10*time.Minute))
+	// …nor an enforced DNSSEC block, which lives on list/rule instead.
+	l.Record(Entry{Time: now.Add(-5 * time.Minute), Client: "10.0.0.1",
+		QName: "forged.example.com", QType: "A", Verdict: VerdictBlocked,
+		List: "dnssec", Rule: "signature verification failed"})
+}
+
+func assertAuditAggregates(t *testing.T, l *Log) {
+	t.Helper()
+	ctx := t.Context()
+	since := time.Now().Add(-time.Hour)
+
+	total, err := l.AuditedTotal(ctx, since, "dnssec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 3 {
+		t.Errorf("AuditedTotal(dnssec) = %d, want 3", total)
+	}
+	// An empty list means "any audit source": the three dnssec marks plus
+	// the one hagezi-pro mark.
+	anyTotal, err := l.AuditedTotal(ctx, since, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if anyTotal != 4 {
+		t.Errorf("AuditedTotal(any) = %d, want 4", anyTotal)
+	}
+
+	top, err := l.TopAuditedDomains(ctx, since, "dnssec", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(top) != 2 {
+		t.Fatalf("TopAuditedDomains = %+v, want 2 domains", top)
+	}
+	if top[0].QName != "bogus.example.com" || top[0].Count != 2 {
+		t.Errorf("top[0] = %+v, want bogus.example.com x2", top[0])
+	}
+	if top[1].QName != "expired.example.com" || top[1].Count != 1 {
+		t.Errorf("top[1] = %+v, want expired.example.com x1", top[1])
+	}
+}
+
+func TestAuditAggregatesFromRing(t *testing.T) {
+	l, err := Open(Options{RingSize: 100, Ephemeral: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	seedAuditMarks(t, l)
+	drain(t, l, 6)
+	assertAuditAggregates(t, l)
+}
+
+func TestAuditAggregatesFromSQLite(t *testing.T) {
+	path := t.TempDir() + "/q.db"
+	l, err := Open(Options{RingSize: 100, DBPath: path, RetentionDays: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedAuditMarks(t, l)
+	drain(t, l, 6)
+	if err := l.Close(); err != nil { // Close flushes the batch to SQLite
+		t.Fatal(err)
+	}
+	// A fresh Log with an empty ring proves the aggregates read the database.
+	reopened, err := Open(Options{RingSize: 100, DBPath: path, RetentionDays: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	assertAuditAggregates(t, reopened)
+}
+
+// Both audit aggregates must ride idx_querylog_audit_ts. Without the
+// pinned index SQLite plans the any-source form on idx_querylog_ts and
+// walks the whole time window — the measured seconds-per-query pathology
+// on SD storage. A silent plan regression is invisible until a big log.
+func TestAuditAggregatesUseAuditIndex(t *testing.T) {
+	l, err := Open(Options{RingSize: 10, DBPath: t.TempDir() + "/idx.db", RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	for _, tc := range []struct {
+		name string
+		sql  string
+		args []any
+	}{
+		{"total by list", `SELECT COUNT(*) FROM querylog WHERE ts >= ? AND audit_list = ?`,
+			[]any{int64(0), "dnssec"}},
+		{"total any source", `SELECT COUNT(*) FROM querylog WHERE ts >= ? AND audit_list > ''`,
+			[]any{int64(0)}},
+		{"top by list", `SELECT qname, COUNT(*) AS c FROM querylog INDEXED BY idx_querylog_audit_ts
+			WHERE ts >= ? AND audit_list = ? GROUP BY qname ORDER BY c DESC, qname LIMIT ?`,
+			[]any{int64(0), "dnssec", 10}},
+		{"top any source", `SELECT qname, COUNT(*) AS c FROM querylog INDEXED BY idx_querylog_audit_ts
+			WHERE ts >= ? AND audit_list > '' GROUP BY qname ORDER BY c DESC, qname LIMIT ?`,
+			[]any{int64(0), 10}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows, err := l.db.Query("EXPLAIN QUERY PLAN "+tc.sql, tc.args...)
+			if err != nil {
+				t.Fatalf("shape rejected: %v", err)
+			}
+			defer rows.Close()
+			found := false
+			for rows.Next() {
+				var a, b, c int
+				var detail string
+				if err := rows.Scan(&a, &b, &c, &detail); err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(detail, "idx_querylog_audit_ts") {
+					found = true
+				}
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
+			if !found {
+				t.Error("plan does not use idx_querylog_audit_ts")
+			}
+		})
 	}
 }

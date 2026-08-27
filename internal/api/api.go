@@ -185,6 +185,22 @@ type statusResponse struct {
 	// LatestVersion is set once an opt-in update check has succeeded.
 	LatestVersion   string `json:"latest_version,omitempty"`
 	UpdateAvailable bool   `json:"update_available"`
+	// DNSSEC is omitted entirely when validation is off, so the UI hides
+	// the card on absence rather than needing a separate enabled flag —
+	// the same gate /metrics uses.
+	DNSSEC *dnssecStatus `json:"dnssec,omitempty"`
+}
+
+// dnssecStatus is the validation scoreboard for the dashboard. Counters
+// are process-lifetime totals (they reset on restart), which is why the
+// windowed "would have been blocked" figure lives on /stats instead —
+// these two must not be presented as if they covered the same period.
+type dnssecStatus struct {
+	Mode          string `json:"mode"`
+	Secure        uint64 `json:"secure"`
+	Insecure      uint64 `json:"insecure"`
+	Bogus         uint64 `json:"bogus"`
+	Indeterminate uint64 `json:"indeterminate"`
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -204,6 +220,15 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.cache != nil {
 		resp.CacheHits, resp.CacheMisses, resp.CacheEntries, resp.CacheEnabled = s.cache.CacheStats()
+		if d := s.cache.DNSSECStats(); d.Mode != "off" {
+			resp.DNSSEC = &dnssecStatus{
+				Mode:          d.Mode,
+				Secure:        d.Secure,
+				Insecure:      d.Insecure,
+				Bogus:         d.Bogus,
+				Indeterminate: d.Indeterminate,
+			}
+		}
 	}
 	if s.updates != nil {
 		resp.LatestVersion, resp.UpdateAvailable = s.updates.Latest()

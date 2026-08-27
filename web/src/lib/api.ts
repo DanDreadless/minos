@@ -18,6 +18,19 @@ export interface Status {
   cache_entries: number;
   latest_version?: string;
   update_available: boolean;
+  // Absent entirely when dns.dnssec is off — the UI hides the card on
+  // absence rather than reading a separate enabled flag. Counters are
+  // process-lifetime totals and reset on restart; the windowed
+  // would-block figure lives on Stats.dnssec instead.
+  dnssec?: DNSSECStatus;
+}
+
+export interface DNSSECStatus {
+  mode: 'permissive' | 'enforce';
+  secure: number;
+  insecure: number;
+  bogus: number;
+  indeterminate: number;
 }
 
 export interface LogEntry {
@@ -54,6 +67,13 @@ export interface Stats {
   timeline: TimelineBucket[];
   top_blocked: { qname: string; count: number }[];
   top_clients: { client: string; total: number; blocked: number }[];
+  // Present while validation is on: how many answers permissive mode let
+  // through that enforce would have refused, over the same window. The
+  // /status counters are process-lifetime; this one is windowed.
+  dnssec?: {
+    would_block: number;
+    top_domains: { qname: string; count: number }[];
+  };
 }
 
 export interface ClientOverview {

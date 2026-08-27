@@ -151,6 +151,100 @@ func (l *Log) TopBlockedDomains(ctx context.Context, since time.Time, n int) ([]
 	return out, nil
 }
 
+// TopAuditedDomains returns the domains a given audit source marked most
+// often — "what would this source block if you enforced it". The mirror of
+// TopBlockedDomains on the audit columns, so an audit list and DNSSEC's
+// permissive mode both answer the question the same way.
+//
+// list is matched exactly (e.g. "dnssec"); an empty list means any audit
+// source. Rides the (audit_list, ts) index — the any-source form compares
+// the column as a range rather than for inequality, which is equivalent on
+// a NOT NULL text column but is something the index can actually serve.
+func (l *Log) TopAuditedDomains(ctx context.Context, since time.Time, list string, n int) ([]TopDomain, error) {
+	if n <= 0 || n > 100 {
+		n = 10
+	}
+	if l.db != nil {
+		where, args := "audit_list > ''", []any{since.UnixMilli()}
+		if list != "" {
+			where = "audit_list = ?"
+			args = append(args, list)
+		}
+		args = append(args, n)
+		// INDEXED BY is not decoration: with the aggregate on top, SQLite
+		// picks idx_querylog_ts for the any-source form and walks the
+		// whole time window (the measured seconds-per-query pathology on
+		// SD). The exact-list form chooses the audit index on its own;
+		// pinning both keeps the two shapes from diverging silently.
+		rows, err := l.db.QueryContext(ctx, `SELECT qname, COUNT(*) AS c
+			FROM querylog INDEXED BY idx_querylog_audit_ts
+			WHERE ts >= ? AND `+where+`
+			GROUP BY qname ORDER BY c DESC, qname LIMIT ?`, args...)
+		if err != nil {
+			return nil, fmt.Errorf("top audited domains query: %w", err)
+		}
+		defer rows.Close()
+		out := make([]TopDomain, 0, n)
+		for rows.Next() {
+			var d TopDomain
+			if err := rows.Scan(&d.QName, &d.Count); err != nil {
+				return nil, fmt.Errorf("top audited domains scan: %w", err)
+			}
+			out = append(out, d)
+		}
+		return out, rows.Err()
+	}
+	counts := make(map[string]int)
+	l.scanRing(since, func(e Entry) {
+		if e.AuditList == "" || (list != "" && e.AuditList != list) {
+			return
+		}
+		counts[e.QName]++
+	})
+	out := make([]TopDomain, 0, len(counts))
+	for q, c := range counts {
+		out = append(out, TopDomain{QName: q, Count: c})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].QName < out[j].QName
+	})
+	if len(out) > n {
+		out = out[:n]
+	}
+	return out, nil
+}
+
+// AuditedTotal counts every query an audit source marked in the window —
+// the headline TopAuditedDomains can't give, since that is capped at n.
+// Same list semantics: exact match, or empty for any audit source.
+func (l *Log) AuditedTotal(ctx context.Context, since time.Time, list string) (int, error) {
+	if l.db != nil {
+		where, args := "audit_list > ''", []any{since.UnixMilli()}
+		if list != "" {
+			where = "audit_list = ?"
+			args = append(args, list)
+		}
+		var n int
+		err := l.db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM querylog WHERE ts >= ? AND `+where, args...).Scan(&n)
+		if err != nil {
+			return 0, fmt.Errorf("audited total query: %w", err)
+		}
+		return n, nil
+	}
+	var n int
+	l.scanRing(since, func(e Entry) {
+		if e.AuditList == "" || (list != "" && e.AuditList != list) {
+			return
+		}
+		n++
+	})
+	return n, nil
+}
+
 // BlocksByList groups blocked queries by the list that condemned them,
 // busiest first — "is this list earning its keep" on the lists page. Every
 // list is small in number (subscriptions plus a few built-in pseudo-lists
