@@ -35,7 +35,24 @@ type Entry struct {
 	// have condemned ("would block") — attribution without enforcement.
 	AuditList string `json:"audit_list,omitempty"`
 	AuditRule string `json:"audit_rule,omitempty"`
+	// DNSSEC is the validation outcome for this answer — one of the
+	// DNSSEC* constants — so the dashboard's counters can be drilled into
+	// rather than only counted. Empty when validation is off, when the
+	// answer was never judged (a block, a local record, a route), or on a
+	// cache hit: hits are not re-validated, so this column records
+	// resolutions, not lookups.
+	DNSSEC string `json:"dnssec,omitempty"`
 }
+
+// DNSSEC outcomes, mirroring the validator's states (RFC 4033). Text, to
+// match list/audit_list, rather than a numeric code nobody could read
+// straight out of the table.
+const (
+	DNSSECSecure        = "secure"
+	DNSSECInsecure      = "insecure"
+	DNSSECBogus         = "bogus"
+	DNSSECIndeterminate = "indeterminate"
+)
 
 const (
 	VerdictBlocked = "blocked"
@@ -142,7 +159,8 @@ CREATE TABLE IF NOT EXISTS querylog (
 	upstream    TEXT NOT NULL DEFAULT '',
 	duration_ms REAL NOT NULL DEFAULT 0,
 	audit_list  TEXT NOT NULL DEFAULT '',
-	audit_rule  TEXT NOT NULL DEFAULT ''
+	audit_rule  TEXT NOT NULL DEFAULT '',
+	dnssec      TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_querylog_ts ON querylog(ts);`
 	if _, err := db.Exec(schema); err != nil {
@@ -182,6 +200,12 @@ func migrate(db *sql.DB) error {
 	for col, ddl := range map[string]string{
 		"audit_list": `ALTER TABLE querylog ADD COLUMN audit_list TEXT NOT NULL DEFAULT ''`,
 		"audit_rule": `ALTER TABLE querylog ADD COLUMN audit_rule TEXT NOT NULL DEFAULT ''`,
+		// Deliberately no index for this one. Every drill-down is
+		// time-bounded so it rides (ts) already, and the column is
+		// low-selectivity — most answers are insecure, i.e. unsigned —
+		// so an index would cost the measured ~45% file growth to serve
+		// the case it helps least.
+		"dnssec": `ALTER TABLE querylog ADD COLUMN dnssec TEXT NOT NULL DEFAULT ''`,
 	} {
 		if have[col] {
 			continue
@@ -432,8 +456,8 @@ func (l *Log) writeBatch(batch []Entry) error {
 	}
 	defer tx.Rollback() //nolint:errcheck // no-op after Commit
 	stmt, err := tx.Prepare(`INSERT INTO querylog
-		(ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms, audit_list, audit_rule)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		(ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms, audit_list, audit_rule, dnssec)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare: %w", err)
 	}
@@ -441,7 +465,7 @@ func (l *Log) writeBatch(batch []Entry) error {
 	for _, e := range batch {
 		if _, err := stmt.Exec(e.Time.UnixMilli(), e.Client, e.QName, e.QType,
 			e.Verdict, e.List, e.Rule, e.Upstream, e.DurationMs,
-			e.AuditList, e.AuditRule); err != nil {
+			e.AuditList, e.AuditRule, e.DNSSEC); err != nil {
 			return fmt.Errorf("insert: %w", err)
 		}
 	}
@@ -485,6 +509,11 @@ type HistoryFilter struct {
 	// enforcing (blocked, or allowed via a pardon list) or audit
 	// ("would block"). Matches the Docket's List column semantics.
 	List string
+	// DNSSEC restricts to answers with this validation outcome (one of the
+	// DNSSEC* constants) — the dashboard's counter drill-down. Deliberately
+	// unindexed: callers always bound it by time, so it rides (ts), and the
+	// column is too low-selectivity for an index to earn its cost.
+	DNSSEC string
 }
 
 // QueryHistory returns judged queries newest-first, older than `before`, that
@@ -532,7 +561,14 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 		// the audit-attributed rows; the sort is bounded by their count.
 		where = append(where, "audit_list > ''")
 	}
-	const cols = `ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms, audit_list, audit_rule`
+	if f.DNSSEC != "" {
+		// No INDEXED BY here: the caller has always bounded this by time,
+		// so the (ts) index does the work and this is a filter applied to
+		// the rows it returns. See HistoryFilter.DNSSEC.
+		where = append(where, "dnssec = ?")
+		args = append(args, f.DNSSEC)
+	}
+	const cols = `ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms, audit_list, audit_rule, dnssec`
 	var query string
 	switch {
 	case f.List == "" && f.WouldBlock:
@@ -581,7 +617,7 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 		var ts int64
 		if err := rows.Scan(&ts, &e.Client, &e.QName, &e.QType, &e.Verdict,
 			&e.List, &e.Rule, &e.Upstream, &e.DurationMs,
-			&e.AuditList, &e.AuditRule); err != nil {
+			&e.AuditList, &e.AuditRule, &e.DNSSEC); err != nil {
 			return nil, fmt.Errorf("scan history: %w", err)
 		}
 		e.Time = time.UnixMilli(ts)

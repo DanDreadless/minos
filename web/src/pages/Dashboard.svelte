@@ -316,23 +316,37 @@
         <p class="sub">{copy.dnssec.enforceNote}</p>
       {/if}
 
-      <h3>{copy.dnssec.countersTitle}</h3>
+      <h3>{copy.dnssec.countersTitle} <small>{copy.dnssec.countersHint}</small></h3>
       <dl class="counters">
+        <!-- Each counter drills into the Docket for that outcome. The
+             counters are process-lifetime while the Docket is windowed and
+             retention-bounded, so the two will not tally — countersHint
+             says so rather than leaving it to be discovered. -->
         <div>
           <dt title={copy.dnssec.secureHint}>{copy.dnssec.secure}</dt>
-          <dd>{dnssec.secure.toLocaleString()}</dd>
+          <dd>
+            <a href={docketHref({ dnssec: 'secure' })}>{dnssec.secure.toLocaleString()}</a>
+          </dd>
         </div>
         <div>
           <dt title={copy.dnssec.insecureHint}>{copy.dnssec.insecure}</dt>
-          <dd>{dnssec.insecure.toLocaleString()}</dd>
+          <dd>
+            <a href={docketHref({ dnssec: 'insecure' })}>{dnssec.insecure.toLocaleString()}</a>
+          </dd>
         </div>
         <div>
           <dt title={copy.dnssec.bogusHint}>{copy.dnssec.bogus}</dt>
-          <dd class="bad">{dnssec.bogus.toLocaleString()}</dd>
+          <dd class="bad">
+            <a href={docketHref({ dnssec: 'bogus' })}>{dnssec.bogus.toLocaleString()}</a>
+          </dd>
         </div>
         <div>
           <dt title={copy.dnssec.indeterminateHint}>{copy.dnssec.indeterminate}</dt>
-          <dd class:bad={dnssecUpstreamBlind}>{dnssec.indeterminate.toLocaleString()}</dd>
+          <dd class:bad={dnssecUpstreamBlind}>
+            <a href={docketHref({ dnssec: 'indeterminate' })}>
+              {dnssec.indeterminate.toLocaleString()}
+            </a>
+          </dd>
         </div>
       </dl>
     </section>
@@ -544,6 +558,17 @@
 
   .counters dd.bad {
     color: var(--blocked);
+  }
+
+  /* The number is the link: underlining only on hover keeps the row
+     reading as a figure rather than a list of links. */
+  .counters dd a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .counters dd a:hover {
+    text-decoration: underline;
   }
 
   .host {

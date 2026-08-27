@@ -521,6 +521,13 @@ Beneath the headline sit four counters, **since the last restart**
 | **Failed** | Signed, but the signature did not verify. These are the would-be refusals. |
 | **Not checkable** | No DNSSEC records came back at all. These always pass, in either mode. |
 
+**Each counter is a link.** Clicking one opens the Docket filtered to the
+queries with that outcome, so "286 unsigned" becomes a list of which
+domains those actually were. Two things to expect: the counters are
+process-lifetime while the Docket covers the retained log, so the totals
+will not tally; and because validation runs on resolution, a name answered
+from the cache adds to neither.
+
 If **Not checkable** dominates, the card says so explicitly, and it
 matters: it means your upstream resolver is not returning DNSSEC records,
 so validation is doing almost nothing no matter which mode you pick. A

@@ -221,7 +221,12 @@ entry may also carry `audit_list`/`audit_rule`: an audit-mode list would
 have blocked it ("would block" in the UI). Cached answers skip judgment,
 so audit marks are sampled at resolution time, not on every hit.
 
-### `GET /api/querylog/history?q=&client=&verdict=&would_block=&list=&before=&limit=`
+`dnssec` carries the validation outcome — `secure`, `insecure`, `bogus` or
+`indeterminate` — and is absent when validation is off, when nothing was
+judged (a block, a local record, a route), or on a cache hit. Same
+sampling rule as audit marks: it records resolutions, not lookups.
+
+### `GET /api/querylog/history?q=&client=&verdict=&would_block=&list=&dnssec=&before=&limit=`
 
 The persisted log (SQLite), newest first — the full retained history behind
 search and the dashboard drill-downs, not just the in-memory ring. `q`
@@ -232,6 +237,9 @@ drill-down), distinct from the `q` substring; `verdict` is
 audit-mode list flagged; `list` is an **exact** list-name filter matching
 either the enforcing attribution (`list`) or the audit one (`audit_list`) —
 so it finds what a list condemned, pardoned, or would have blocked;
+`dnssec` narrows to one validation outcome (the Tribunal's counter
+drill-down) and rejects anything outside the four with a 400, so a typo
+reads as an error rather than as "no matches";
 `before` is a unix-millis cursor for "load older"
 pagination; `limit` 1–1000. Returns `[]` in ephemeral mode (there the ring
 already backs both the log and the dashboard, so the UI filters it directly).

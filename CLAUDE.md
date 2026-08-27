@@ -695,6 +695,18 @@ This is security software; hold it to that standard.
   local test run. It also records that **no browser-automation harness
   exists here**: UI checking beyond grepping the served `assets/index-*.js`
   for new copy strings is manual.
+- **DNSSEC outcome column** (fixed decision, August 2026): the querylog
+  carries `dnssec` (secure|insecure|bogus|indeterminate, empty when nothing
+  was judged) so the Tribunal's four counters drill into the Docket. It is
+  **deliberately unindexed**: every drill-down is time-bounded so it rides
+  `(ts)`, and the column is too low-selectivity to earn one — most answers
+  are `insecure` (unsigned), which is exactly the case an index would serve
+  worst, at the measured ~45% file-growth cost. Same sampling rule as audit
+  marks: written on the leader path only, so it records resolutions, not
+  lookups, and the counters will never tally with the row count (they are
+  also process-lifetime against a retention-bounded log — say so in the UI).
+  The API validates the value against the four and 400s otherwise, so a typo
+  cannot masquerade as "no matches".
 - **Upstream breaker semantics** (fixed decisions): only transport errors
   count (SERVFAIL is an answer); 3 consecutive failures sidestep an
   upstream for 30 s; a lapsed cooldown admits exactly one CAS-elected

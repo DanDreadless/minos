@@ -66,6 +66,7 @@ export const copy = {
     seeDocket: 'Review them in the Docket',
     enforceNote: 'Refused answers are condemned in the Docket under the dnssec list.',
     countersTitle: 'Since restart',
+    countersHint: 'click a number to see those queries — the Docket covers the retained log, so the totals will differ',
     secure: 'Verified',
     secureHint: 'signed, and the signature checked out',
     insecure: 'Unsigned',
@@ -127,6 +128,21 @@ export const copy = {
       list === 'dnssec'
         ? `This answer failed its DNSSEC check: "${rule}". Enforce mode would have refused it; permissive mode let it through.`
         : `An audit-mode list would have condemned this: "${rule}" in ${list}. Not enforced.`,
+    dnssecScope: 'DNSSEC', // prefixes the drilled-in validation-outcome chip
+    dnssecName: (s: string) =>
+      ({
+        secure: 'Verified',
+        insecure: 'Unsigned',
+        bogus: 'Failed',
+        indeterminate: 'Not checkable',
+      })[s] ?? s,
+    dnssecScopeTitle: (s: string) =>
+      ({
+        secure: 'Signed, and the signature checked out.',
+        insecure: 'Provably not signed — normal for most of the internet.',
+        bogus: 'Signed, but the signature did not verify.',
+        indeterminate: 'No DNSSEC records came back, so nothing could be checked.',
+      })[s] ?? s,
     deviceScope: 'device', // prefixes the drilled-in device's IP(s) chip
     live: 'live',
   },
