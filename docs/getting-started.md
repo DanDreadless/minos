@@ -339,9 +339,10 @@ Open `http://<host>:8080`. Six pages, one per concern:
 - **The Codex** (blocklists) — add, enable/disable, or remove list
   subscriptions and refresh them on demand, with per-list rule counts and
   fetch errors. The **Choose your blocklists** catalog offers curated,
-  verified lists (Hagezi, OISD, StevenBlack, threat feeds) in three plain
-  tiers — Balanced, Strict, Security — each card one click to subscribe,
-  with a size hint so you know what you're loading on a Pi. The manual
+  verified lists (Hagezi, OISD, StevenBlack, threat feeds) in four plain
+  tiers — Balanced, Strict, Security, Family (see "Choosing blocklists"
+  below) — each card one click to subscribe, with a size hint so you know
+  what you're loading on a Pi. The manual
   add-by-URL form below it takes any list the catalog doesn't carry
   (see the YAML example in the configuration reference). A list can run
   in **audit mode**: its rules are logged as amber "would block" entries
@@ -378,6 +379,50 @@ Open `http://<host>:8080`. Six pages, one per concern:
 
 If you set `api.token` (in the config file or from Settings), the UI and
 CLI require it.
+
+## Choosing blocklists
+
+The catalog's tiers are not a quality ranking. Three of them are a ladder
+graded by how much they might break; the fourth is a different question
+entirely.
+
+| Tier | What it is | Pick it when |
+|---|---|---|
+| **Balanced** | Ads, tracking and telemetry, tuned to avoid breakage | You want it to work and never think about it. Start here. |
+| **Strict** | Wider nets, occasional collateral damage | You are willing to pardon the odd thing in exchange for more blocking. |
+| **Security** | Malware, phishing, and resolver-bypass protection | Always — these are cheap and orthogonal to ad blocking. |
+| **Family** | Content you have chosen to keep off the network | You want it. Nothing here is a threat; it is a policy choice. |
+
+**One list per tier is usually the right answer.** Two ad-blocking lists
+overlap heavily: the second typically adds a fraction of its size in new
+domains while costing its full size in memory. A sensible Pi setup is one
+Balanced list plus a Security list, which is roughly 200k rules — well
+inside budget. If you want more blocking, move *up* a tier rather than
+adding a second list at the same one.
+
+**The memory rule of thumb**: budget about 31 bytes of matcher per rule,
+and keep the total under ~2 million rules on a Pi (about 83 MB resident).
+Every card shows its size so you can add up before subscribing. The one
+catalog entry large enough to notice on its own is OISD NSFW at ~480k.
+
+**Try a strict list safely with audit mode.** Subscribe, tick Audit, and
+its rules are recorded in the Docket as amber "would block" entries
+without ever being enforced. Watch a week; if nothing you care about
+appears, untick Audit and it starts blocking for real. This is the same
+mechanism permissive DNSSEC uses, and it is the honest way to answer
+"would this break my household?" — rather than finding out live.
+
+**A note on the Bypass Blocker.** It stops devices reaching public DoH,
+VPN and proxy endpoints, which is what keeps a device from stepping
+around Minos entirely and quietly ignoring every other list you run. It
+also blocks commercial VPN providers, because that is the same set of
+hostnames — so if someone in the house uses a VPN deliberately, pardon it
+and expect that to be a conscious exception.
+
+The catalog is checked weekly in CI by compiling every list through the
+real parser, so a list that is deleted, repurposed, emptied, reformatted,
+or has drifted from its advertised size fails the build rather than
+quietly leaving you subscribed to nothing.
 
 ## Bypass resistance — no side doors
 
