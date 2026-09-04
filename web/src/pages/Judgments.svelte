@@ -31,6 +31,13 @@
   let newLocalName = '';
   let newLocalType = 'A';
   let newLocalValue = '';
+  // Inline edit of one record's value. The name is the record's identity
+  // (removal keys on it, and duplicates are a validation error), so a
+  // rename stays a remove-then-add; what people actually come here to
+  // change is the address behind a name that moved.
+  let editingLocal: string | null = null;
+  let editLocalType = 'A';
+  let editLocalValue = '';
 
   async function load(): Promise<void> {
     try {
@@ -202,6 +209,52 @@
     if (r.a?.length) parts.push(r.a.join(', '));
     if (r.aaaa?.length) parts.push(r.aaaa.join(', '));
     return parts.join(' · ');
+  }
+
+  // The record's type, for the badge and for pre-selecting the edit form.
+  function recordType(r: LocalRecord): string {
+    if (r.cname) return 'CNAME';
+    if (r.a?.length) return 'A';
+    if (r.aaaa?.length) return 'AAAA';
+    return 'A';
+  }
+
+  function startEditLocal(r: LocalRecord): void {
+    editingLocal = r.name;
+    editLocalType = recordType(r);
+    editLocalValue = r.cname ?? (editLocalType === 'AAAA' ? r.aaaa : r.a)?.join(', ') ?? '';
+  }
+
+  function cancelEditLocal(): void {
+    editingLocal = null;
+    editLocalValue = '';
+  }
+
+  async function saveEditLocal(name: string): Promise<void> {
+    const value = editLocalValue.trim();
+    if (!value) return;
+    const values = value
+      .split(/[\s,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const updated = localRecords.map((r) => {
+      if (r.name !== name) return r;
+      // Rebuild from the original so the other address family survives an
+      // edit: A and AAAA may coexist, and only CNAME excludes them both.
+      const next: LocalRecord = { name: r.name };
+      if (editLocalType === 'CNAME') {
+        next.cname = values[0];
+      } else if (editLocalType === 'AAAA') {
+        next.aaaa = values;
+        if (r.a?.length) next.a = r.a;
+      } else {
+        next.a = values;
+        if (r.aaaa?.length) next.aaaa = r.aaaa;
+      }
+      return next;
+    });
+    await saveLocalRecords(updated);
+    if (editingLocal === name) cancelEditLocal();
   }
 
   async function saveLocalRecords(records: LocalRecord[]): Promise<void> {
@@ -482,14 +535,56 @@
   {#if localRecords.length === 0}
     <p class="empty">{copy.domains.localEmpty}</p>
   {:else}
-    <ul>
+    <ul class="local-list">
       {#each localRecords as r (r.name)}
         <li>
-          <span class="domain">{r.name}</span>
-          <span class="record-value">{describeRecord(r)}</span>
-          <button class="row-action" title="remove record" on:click={() => removeLocalRecord(r.name)}>
-            Remove
-          </button>
+          {#if editingLocal === r.name}
+            <form class="local-edit" on:submit|preventDefault={() => saveEditLocal(r.name)}>
+              <span class="domain">{r.name}</span>
+              <select bind:value={editLocalType} title="record type">
+                <option value="A">A</option>
+                <option value="AAAA">AAAA</option>
+                <option value="CNAME">CNAME</option>
+              </select>
+              <!-- svelte-ignore a11y-autofocus -->
+              <input
+                class="edit-value"
+                autofocus
+                bind:value={editLocalValue}
+                placeholder={copy.domains.localValuePlaceholder(editLocalType)}
+                aria-label={copy.domains.localEditValueLabel(r.name)}
+                required
+              />
+              <span class="row-actions">
+                <button type="submit" class="row-action primary" disabled={!editLocalValue.trim()}>
+                  {copy.domains.localSave}
+                </button>
+                <button type="button" class="row-action" on:click={cancelEditLocal}>
+                  {copy.domains.localCancel}
+                </button>
+              </span>
+            </form>
+          {:else}
+            <span class="domain">{r.name}</span>
+            <span class="record-type">{recordType(r)}</span>
+            <span class="record-value">{describeRecord(r)}</span>
+            <span class="row-actions">
+              <button
+                class="row-action"
+                title={copy.domains.localEditTitle}
+                on:click={() => startEditLocal(r)}
+              >
+                {copy.domains.localEdit}
+              </button>
+              <button
+                class="row-action"
+                title="remove record"
+                on:click={() => removeLocalRecord(r.name)}
+              >
+                Remove
+              </button>
+            </span>
+          {/if}
         </li>
       {/each}
     </ul>
@@ -677,15 +772,66 @@
     min-width: 12rem;
   }
 
+  /* The local-record rows read left to right as one phrase — name, type,
+     value — with the actions on the right. They used to be a name pinned
+     to the far left and a value pinned to the far right, which on a laptop
+     put half a screen of nothing between a host and its address. The list
+     is width-capped for the same reason: a full-width row is unreadable
+     however its parts are justified. */
+  .local-list {
+    max-width: 48rem;
+  }
+
+  .local-list li {
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    padding: 0.4rem 0;
+  }
+
+  .local-list .domain {
+    min-width: 11rem;
+  }
+
+  .record-type {
+    color: var(--text-dim);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.05rem 0.35rem;
+    flex: 0 0 auto;
+  }
+
   .record-value {
     color: var(--text-dim);
     font-family: var(--font-mono);
     font-size: 0.8rem;
-    flex: 1;
-    text-align: right;
-    margin-right: 0.8rem;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .row-actions {
+    display: flex;
+    gap: 0.35rem;
+    margin-left: auto;
+    flex: 0 0 auto;
+  }
+
+  .local-edit {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    width: 100%;
+    margin: 0;
+  }
+
+  .local-edit .edit-value {
+    flex: 1 1 12rem;
+    min-width: 8rem;
   }
 
   .note {
