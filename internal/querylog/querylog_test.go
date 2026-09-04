@@ -437,3 +437,104 @@ func TestWouldBlockUsesAuditIndex(t *testing.T) {
 		t.Errorf("would-block on empty log = %d rows, want 0", len(got))
 	}
 }
+
+// The ring and the WebSocket fan-out must keep working while SQLite is
+// unavailable to the writer. Disk writes used to happen inline in the same
+// goroutine, so anything holding the write lock — an index build takes
+// minutes on a large log — froze the live Docket and made a perfectly
+// healthy resolver look dead. Holding the single writer connection here
+// reproduces exactly that condition.
+func TestRingStaysLiveWhileWriterIsBlocked(t *testing.T) {
+	l, err := Open(Options{RingSize: 4000, DBPath: t.TempDir() + "/blocked.db", RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	<-l.Ready() // let the migration finish so we contend with nothing else
+
+	// Take the one writer connection and keep it, the way a long CREATE
+	// INDEX or a slow prune would. Begin blocks until the pool's single
+	// connection is free, so this also waits out the startup prune. No
+	// context: the transaction has to outlive its own acquisition, and a
+	// deadline on BeginTx rolls it back the moment that deadline passes.
+	tx, err := l.db.Begin()
+	if err != nil {
+		t.Fatalf("could not take the writer connection: %v", err)
+	}
+	// Force the transaction to actually hold the write lock.
+	if _, err := tx.Exec(`INSERT INTO querylog (ts, client, qname, qtype, verdict)
+		VALUES (?, '10.0.0.1', 'lock.example', 'A', 'allowed')`, time.Now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+
+	// More than a batch's worth, so the flush path is exercised repeatedly.
+	const n = flushBatch * 3
+	now := time.Now()
+	for range n {
+		l.Record(Entry{Time: now, Client: "10.0.0.2", QName: "live.example",
+			QType: "A", Verdict: VerdictAllowed})
+	}
+
+	// The ring must still take every one of them, with the writer stuck.
+	deadline := time.Now().Add(5 * time.Second)
+	got := 0
+	for time.Now().Before(deadline) {
+		if got = len(l.Recent(0)); got >= n {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got < n {
+		t.Fatalf("ring stalled behind the blocked writer: %d of %d entries", got, n)
+	}
+	if _, _, dropped := l.Stats(); dropped != 0 {
+		t.Errorf("dropped %d entries well under the pending cap", dropped)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Holding entries in memory while the writer is behind must stay bounded:
+// past maxPending the oldest are dropped and counted, the same contract
+// Record has when its own channel fills.
+func TestPendingEntriesAreBounded(t *testing.T) {
+	l, err := Open(Options{RingSize: 100, DBPath: t.TempDir() + "/bounded.db", RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	<-l.Ready()
+
+	tx, err := l.db.Begin()
+	if err != nil {
+		t.Fatalf("could not take the writer connection: %v", err)
+	}
+	if _, err := tx.Exec(`INSERT INTO querylog (ts, client, qname, qtype, verdict)
+		VALUES (?, '10.0.0.1', 'lock.example', 'A', 'allowed')`, time.Now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Comfortably past the in-flight queue plus the pending cap.
+	n := flushQueue*flushBatch + maxPending + 2*flushBatch
+	now := time.Now()
+	for range n {
+		l.Record(Entry{Time: now, Client: "10.0.0.2", QName: "flood.example",
+			QType: "A", Verdict: VerdictAllowed})
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	var dropped uint64
+	for time.Now().Before(deadline) {
+		if _, _, dropped = l.Stats(); dropped > 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if dropped == 0 {
+		t.Error("nothing was dropped, so the pending buffer is unbounded")
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}

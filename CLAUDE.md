@@ -137,8 +137,9 @@ not the lore terms.
 - Logging: `log/slog`, structured. The per-query hot path logs at Debug
   only — a Level check guards any allocation-heavy logging.
 - Concurrency: blocklist storage is an atomic-pointer swap on reload
-  (readers lock-free); querylog uses a buffered channel into a single
-  writer goroutine. Don't introduce mutexes on the query path.
+  (readers lock-free); querylog uses a buffered channel into a ring-owning
+  goroutine, which hands batches to a separate disk-writing goroutine.
+  Don't introduce mutexes on the query path.
 - Config changes via the API are validated, applied atomically, and
   persisted; the process must never need a restart for a settings change.
 - Frontend: Svelte, TypeScript strict, talk to the backend only through
@@ -591,6 +592,25 @@ This is security software; hold it to that standard.
   `fresh`) instead of skipping it — the old `LoadOrStore`-and-skip silently
   lost all history for any device that queried in the first seconds. Don't
   put anything back in front of the listeners.
+- **The ring never waits on the disk** (fixed decision, September 2026): a
+  field failure the day v0.21.1 shipped — the Docket looked frozen and the
+  server looked dead while DNS was in fact resolving perfectly. `run()` used
+  to call `writeBatch` inline, in the same goroutine that owns the ring and
+  the WebSocket fan-out, so anything holding SQLite's write lock froze the
+  live UI. Moving index migration into the background (v0.21.1) is what made
+  that reachable: the build holds the write lock for minutes. **Note the
+  fix is not a second connection** — SQLite serialises writers whatever
+  connection they are on, so `CREATE INDEX` blocks every other write
+  regardless; the answer is to decouple the goroutines, not the handles.
+  `run()` is now purely in-memory and hands batches to `flushLoop`, which
+  owns *all* writer-side DB calls including the daily prune (the other one
+  that could stall the ring). Backpressure: batches accumulate in `run()` up
+  to `maxPending` (~1 MB), then the oldest are dropped and counted — the
+  same trade `Record` makes on a full channel. Shutdown waits are bounded
+  (`shutdownFlushWait`), because an unbounded `Close()` during a migration
+  reads as a hang and ends in SIGKILL. `TestRingStaysLiveWhileWriterIsBlocked`
+  holds the writer connection and asserts the ring still fills; restore the
+  inline flush and it hangs to the test timeout, which is the point.
 - **Reads and writes have separate SQLite pools** (fixed decision): `Log.db`
   is the writer (`MaxOpenConns(1)` — inserts, prunes and migrations
   serialise), `Log.rdb` is a 4-connection reader pool. Every read path uses

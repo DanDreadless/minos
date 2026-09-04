@@ -1,8 +1,10 @@
 // Package querylog records every judged query. The hot path does one
-// non-blocking channel send; a single writer goroutine owns the in-memory
-// ring buffer (which feeds the live UI), fans entries out to WebSocket
-// subscribers, and flushes batches to SQLite — never per query, to keep
-// SD cards alive.
+// non-blocking channel send. Two goroutines take it from there, and the
+// split between them matters: run() owns the in-memory ring (which feeds
+// the live UI) and the WebSocket fan-out and touches SQLite nowhere, while
+// flushLoop owns every writer-side database call — batched inserts, never
+// per query, to keep SD cards alive, plus the retention prune. Anything
+// holding SQLite's write lock therefore costs entries, never liveness.
 package querylog
 
 import (
@@ -61,6 +63,15 @@ const (
 	flushInterval = 30 * time.Second
 	flushBatch    = 500
 	subBuffer     = 256
+	// flushQueue is how many completed batches may be in flight to the
+	// disk writer before run() starts holding them in memory instead.
+	flushQueue = 4
+	// maxPending caps what run() will hold while the writer is behind
+	// (~1 MB of entries). Beyond it the oldest are dropped and counted,
+	// exactly as Record does when its own channel fills.
+	maxPending = 10 * flushBatch
+	// shutdownFlushWait bounds each wait on the disk writer at shutdown.
+	shutdownFlushWait = 5 * time.Second
 
 	// searchDeadline caps a free-text history search: an unindexable LIKE
 	// scan with no matches would otherwise read the entire table.
@@ -107,6 +118,12 @@ type Log struct {
 	rdb       *sql.DB
 	retention atomic.Int64 // nanoseconds; settable at runtime
 
+	// flushCh carries completed batches from run() to flushLoop, which is
+	// the only goroutine that writes. Nil in ephemeral mode.
+	flushCh chan []Entry
+	// flushDead closes when flushLoop has exited.
+	flushDead chan struct{}
+
 	// indexed reports whether migrateIndexes has finished. Index builds run
 	// in the background (they take minutes on a large SD-card log), so the
 	// one query that names an index explicitly has to ask before doing so.
@@ -151,10 +168,13 @@ func Open(opts Options) (*Log, error) {
 		return nil, err
 	}
 	l.db, l.rdb = db, rdb
+	l.flushCh = make(chan []Entry, flushQueue)
+	l.flushDead = make(chan struct{})
 	// Indexes are built off the startup path: on a log of any size the
 	// build takes minutes, and it used to run before the DNS and HTTP
 	// listeners came up — the whole machine silent while it worked.
 	go l.buildIndexes()
+	go l.flushLoop()
 	go l.run()
 	return l, nil
 }
@@ -476,26 +496,43 @@ func (l *Log) Close() error {
 	return err
 }
 
-// run is the single writer goroutine.
+// run owns the in-memory side of the log: the ring buffer the live UI reads
+// and the fan-out to WebSocket subscribers. It touches SQLite nowhere.
+//
+// That separation is the point. Disk writes used to happen inline here, so
+// anything that held SQLite's write lock stalled the ring and the WebSocket
+// with it — and an index build holds that lock for minutes on a large log,
+// which made the Docket look frozen and DNS look dead while it was in fact
+// resolving perfectly. Batches are handed to flushLoop instead, and a
+// writer that falls behind now costs entries, never liveness.
 func (l *Log) run() {
 	defer close(l.dead)
 	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()
-	pruneTicker := time.NewTicker(24 * time.Hour)
-	defer pruneTicker.Stop()
 
 	batch := make([]Entry, 0, flushBatch)
+	// flush hands the batch to the disk writer without ever waiting for it.
+	// If the writer is behind, entries keep accumulating here up to
+	// maxPending and the oldest are dropped beyond that — the same trade
+	// Record already makes on a full channel, and counted the same way.
 	flush := func() {
 		if l.db == nil || len(batch) == 0 {
 			return
 		}
-		if err := l.writeBatch(batch); err != nil {
-			slog.Error("query log flush failed", "err", err, "entries", len(batch))
+		select {
+		case l.flushCh <- batch:
+			batch = make([]Entry, 0, flushBatch) // the writer owns that one now
+		default:
+			if len(batch) >= maxPending {
+				drop := len(batch) - maxPending + flushBatch
+				l.dropped.Add(uint64(drop))
+				slog.Warn("query log writer is behind; dropping oldest entries",
+					"dropped", drop, "pending", len(batch))
+				batch = append(batch[:0], batch[drop:]...)
+			}
 		}
-		batch = batch[:0]
 	}
 
-	l.prune()
 	for {
 		select {
 		case e := <-l.ch:
@@ -509,24 +546,72 @@ func (l *Log) run() {
 			}
 		case <-ticker.C:
 			flush()
-		case <-pruneTicker.C:
-			flush()
-			l.prune()
 		case <-l.done:
-			// Drain whatever is already queued, then final flush.
+			// Drain whatever is already queued, then hand over the tail.
 			for {
 				select {
 				case e := <-l.ch:
 					l.append(e)
+					l.fanOut(e)
 					if l.db != nil {
 						batch = append(batch, e)
 					}
 				default:
-					flush()
+					l.finalFlush(batch)
 					return
 				}
 			}
 		}
+	}
+}
+
+// flushLoop owns every writer-side SQLite operation: batch inserts and the
+// daily prune. One goroutine, so they serialise with each other rather than
+// contending for the single writer connection, and neither can reach the
+// ring. Index migration runs elsewhere but shares that connection, so a
+// build in progress simply delays this loop — which is now harmless.
+func (l *Log) flushLoop() {
+	defer close(l.flushDead)
+	pruneTicker := time.NewTicker(24 * time.Hour)
+	defer pruneTicker.Stop()
+	l.prune()
+	for {
+		select {
+		case batch, ok := <-l.flushCh:
+			if !ok {
+				return
+			}
+			if err := l.writeBatch(batch); err != nil {
+				slog.Error("query log flush failed", "err", err, "entries", len(batch))
+			}
+		case <-pruneTicker.C:
+			l.prune()
+		}
+	}
+}
+
+// finalFlush hands the last batch over on the way out, bounded on both
+// waits. A migration can hold the write lock for minutes, and a shutdown
+// that waits on it reads as a hang and ends in SIGKILL; losing the tail of
+// the query log is the better trade.
+func (l *Log) finalFlush(batch []Entry) {
+	if l.db == nil {
+		return
+	}
+	if len(batch) > 0 {
+		select {
+		case l.flushCh <- batch:
+		case <-time.After(shutdownFlushWait):
+			l.dropped.Add(uint64(len(batch)))
+			slog.Warn("query log: writer busy at shutdown, dropping unflushed entries",
+				"entries", len(batch))
+		}
+	}
+	close(l.flushCh)
+	select {
+	case <-l.flushDead:
+	case <-time.After(shutdownFlushWait):
+		slog.Warn("query log: disk writer still busy at shutdown, leaving it")
 	}
 }
 
