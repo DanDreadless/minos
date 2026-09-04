@@ -124,6 +124,16 @@ Dashboard aggregates for a 1–2160 hour window (up to 90 days): a
 and `top_clients` as `{client, total, blocked}`. Entries not yet flushed
 to disk (up to 30 s) are not included.
 
+These three aggregates group by time, domain and client, and no index
+answers "group the last 90 days by domain" — each one walks every row in
+the window. A wide window over a large log is therefore genuinely
+expensive, and the stats endpoints (`/api/stats`, `/api/stats/client`,
+`/api/stats/lists`) cap a single request at 20 seconds, answering
+`503` with a message naming the window rather than holding the connection
+open indefinitely. Ask for less history; the dashboard's own 24-hour window
+is unaffected. Reads use a separate SQLite connection pool from the writer,
+so a slow aggregate never stalls query logging or the rest of the API.
+
 While `dns.dnssec` is on, the response also carries `dnssec`:
 
 ```json

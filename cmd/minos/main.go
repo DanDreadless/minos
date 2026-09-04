@@ -130,15 +130,6 @@ func serve(args []string) error {
 		notifier.Publish("device_new", "New device on your network",
 			detail+" made its first DNS query through Minos.")
 	})
-	// Rehydrate the device list from persisted history (best effort).
-	if summaries, err := qlog.ClientsSummary(context.Background()); err != nil {
-		slog.Warn("device history hydration failed", "err", err)
-	} else {
-		for _, s := range summaries {
-			reg.Seed(s.Client, s.Total, s.Blocked, s.First, s.Last)
-		}
-	}
-
 	proxy, err := dnsproxy.New(cfg, engine, qlog, reg)
 	if err != nil {
 		return err
@@ -230,6 +221,8 @@ func serve(args []string) error {
 		}
 	}()
 
+	go hydrateDevices(ctx, qlog, reg, started)
+
 	select {
 	case <-ctx.Done():
 		slog.Info("shutting down")
@@ -250,6 +243,43 @@ func serve(args []string) error {
 		slog.Warn("query log close", "err", err)
 	}
 	return nil
+}
+
+// hydrateDevices rebuilds the device list from persisted query history.
+//
+// It runs in the background, after the DNS and HTTP listeners are up, and
+// that ordering is the whole point. It used to run inline during startup,
+// where its unbounded scan of the query log held everything else back:
+// measured at 40 seconds on a 7.4M-row log, with no DNS on the network and
+// nothing in the journal for the duration — indistinguishable from a crash,
+// and growing with the log.
+//
+// Two consequences of moving it, both handled. It waits for the background
+// index migration first, because the covering index that migration builds
+// is what makes the scan cheap (39s → 1.0s). And it counts only rows older
+// than `started`, so the live registry's own counting of everything since
+// startup is additive rather than overlapping — see Registry.Seed.
+//
+// Best effort throughout: a failure costs the device list its history, not
+// the resolver its function.
+func hydrateDevices(ctx context.Context, qlog *querylog.Log, reg *clients.Registry, started time.Time) {
+	select {
+	case <-qlog.Ready():
+	case <-ctx.Done():
+		return
+	}
+	summaries, err := qlog.ClientsSummary(ctx, started)
+	if err != nil {
+		slog.Warn("device history hydration failed", "err", err)
+		return
+	}
+	for _, s := range summaries {
+		reg.Seed(s.Client, s.Total, s.Blocked, s.First, s.Last)
+	}
+	if len(summaries) > 0 {
+		slog.Info("device history hydrated", "devices", len(summaries),
+			"took", time.Since(started).Round(time.Millisecond))
+	}
 }
 
 // runImport merges another resolver's settings into the Minos config file.

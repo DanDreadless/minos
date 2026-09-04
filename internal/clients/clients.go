@@ -454,16 +454,41 @@ func (r *Registry) hasSchedules() bool {
 
 // Seed pre-populates a device from persisted history (query log DB), so the
 // device list survives restarts. Never overwrites live state.
+// Seed adds a device's persisted history to the registry. It merges rather
+// than overwrites: hydration runs after the listeners are up (it used to
+// block them for as long as the scan took), so a device that queries in the
+// first seconds is already here, live, by the time its history arrives.
+// The caller supplies counts strictly older than process start, so adding
+// them to the live counters double-counts nothing.
 func (r *Registry) Seed(ip string, total, blocked uint64, first, last time.Time) {
 	d := &device{}
 	d.firstSeen.Store(first.UnixNano())
 	d.lastSeen.Store(last.UnixNano())
 	d.total.Store(total)
 	d.blocked.Store(blocked)
-	if _, loaded := r.seen.LoadOrStore(ip, d); !loaded {
+	v, loaded := r.seen.LoadOrStore(ip, d)
+	if !loaded {
 		select {
 		case r.enrichCh <- ip:
 		default:
+		}
+		return
+	}
+	// Already live. Fold history into it: counts add, first-seen moves
+	// back to the older of the two, last-seen stays whatever is newer
+	// (live, by construction). It is also not a new device, whatever the
+	// live path assumed when it created the row.
+	live := v.(*device)
+	live.total.Add(total)
+	live.blocked.Add(blocked)
+	live.fresh.Store(false)
+	for f := first.UnixNano(); ; {
+		cur := live.firstSeen.Load()
+		if cur != 0 && cur <= f {
+			break
+		}
+		if live.firstSeen.CompareAndSwap(cur, f) {
+			break
 		}
 	}
 }

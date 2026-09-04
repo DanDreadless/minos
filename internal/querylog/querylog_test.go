@@ -261,6 +261,7 @@ func TestMigrateBuildsIndexes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		<-l.Ready() // index migration runs in the background now
 		have := map[string]bool{}
 		rows, err := l.db.Query(`SELECT name FROM sqlite_master WHERE type = 'index'`)
 		if err != nil {
@@ -278,12 +279,18 @@ func TestMigrateBuildsIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, want := range []string{
-			"idx_querylog_ts", "idx_querylog_client_ts",
+			"idx_querylog_ts", "idx_querylog_client_ts_verdict",
 			"idx_querylog_list_ts", "idx_querylog_audit_ts",
 		} {
 			if !have[want] {
 				t.Errorf("round %d: index %s missing (have %v)", round, want, have)
 			}
+		}
+		// The narrow (client, ts) index is a prefix of the widened one and
+		// must not survive alongside it — it costs ~12% of the file to
+		// answer nothing the wider index cannot.
+		if have["idx_querylog_client_ts"] {
+			t.Errorf("round %d: superseded index idx_querylog_client_ts still present", round)
 		}
 	}
 }
@@ -400,6 +407,7 @@ func TestWouldBlockUsesAuditIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer l.Close()
+	<-l.Ready()
 	rows, err := l.db.Query(`EXPLAIN QUERY PLAN SELECT ts FROM querylog INDEXED BY idx_querylog_audit_ts
 		WHERE ts < ? AND audit_list > '' ORDER BY ts DESC LIMIT 200`, time.Now().UnixMilli())
 	if err != nil {

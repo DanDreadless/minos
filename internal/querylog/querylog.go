@@ -97,8 +97,24 @@ type Log struct {
 	subMu sync.Mutex
 	subs  map[chan Entry]struct{}
 
+	// db is the writer: one connection, so inserts, prunes and schema
+	// migrations serialise against each other rather than inviting
+	// SQLITE_BUSY. rdb is a separate pool the reads use — WAL admits
+	// concurrent readers alongside the single writer, so an aggregate that
+	// walks the whole window can no longer stall the flush, the websocket,
+	// or every other API call behind it. Both are nil in ephemeral mode.
 	db        *sql.DB
+	rdb       *sql.DB
 	retention atomic.Int64 // nanoseconds; settable at runtime
+
+	// indexed reports whether migrateIndexes has finished. Index builds run
+	// in the background (they take minutes on a large SD-card log), so the
+	// one query that names an index explicitly has to ask before doing so.
+	indexed atomic.Bool
+	// ready closes when the background migration is done, whether it
+	// succeeded or not. Callers that only want the fast path — the device
+	// hydration at startup — wait on it; nothing else has to.
+	ready chan struct{}
 
 	total   atomic.Uint64
 	blocked atomic.Uint64
@@ -112,39 +128,96 @@ func Open(opts Options) (*Log, error) {
 		opts.RingSize = 10000
 	}
 	l := &Log{
-		ch:   make(chan Entry, 4096),
-		done: make(chan struct{}),
-		dead: make(chan struct{}),
-		ring: make([]Entry, opts.RingSize),
-		subs: make(map[chan Entry]struct{}),
+		ch:    make(chan Entry, 4096),
+		done:  make(chan struct{}),
+		dead:  make(chan struct{}),
+		ring:  make([]Entry, opts.RingSize),
+		subs:  make(map[chan Entry]struct{}),
+		ready: make(chan struct{}),
 	}
 	l.retention.Store(int64(time.Duration(opts.RetentionDays) * 24 * time.Hour))
-	if !opts.Ephemeral {
-		db, err := openDB(opts.DBPath)
-		if err != nil {
-			return nil, err
-		}
-		l.db = db
+	if opts.Ephemeral {
+		close(l.ready)
+		go l.run()
+		return l, nil
 	}
+	db, err := openDB(opts.DBPath)
+	if err != nil {
+		return nil, err
+	}
+	rdb, err := openReader(opts.DBPath)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	l.db, l.rdb = db, rdb
+	// Indexes are built off the startup path: on a log of any size the
+	// build takes minutes, and it used to run before the DNS and HTTP
+	// listeners came up — the whole machine silent while it worked.
+	go l.buildIndexes()
 	go l.run()
 	return l, nil
 }
 
+// buildIndexes runs the index migration in the background and publishes the
+// result. It uses the writer handle, so it serialises with flushes rather
+// than fighting them; entries buffer in the channel meanwhile.
+func (l *Log) buildIndexes() {
+	defer close(l.ready)
+	if err := migrateIndexes(l.db); err != nil {
+		// Not fatal: every query still runs, some by a worse plan. A
+		// failed build is worth shouting about but not worth refusing
+		// to resolve DNS over.
+		slog.Error("query log index migration failed", "err", err)
+		return
+	}
+	l.indexed.Store(true)
+}
+
+// Ready returns a channel closed once the background index migration has
+// finished (successfully or not). Reads never need to wait on it; the
+// startup device hydration does, because the index it builds is what makes
+// that scan cheap.
+func (l *Log) Ready() <-chan struct{} { return l.ready }
+
+// dsnPragmas are applied to every connection in a pool. busy_timeout is the
+// one that matters now there is more than one connection: a reader that
+// arrives mid-checkpoint, or during an index build, waits instead of
+// failing outright.
+const dsnPragmas = "?_pragma=busy_timeout(10000)&_pragma=synchronous(NORMAL)"
+
+// openReader opens the read-only-by-convention pool. It shares the file
+// with the writer; WAL keeps the two out of each other's way. The pool is
+// small on purpose — these are Raspberry Pis, and four concurrent
+// full-window scans would thrash the SD card rather than finish sooner.
+func openReader(path string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", path+dsnPragmas)
+	if err != nil {
+		return nil, fmt.Errorf("open query log db (reader): %w", err)
+	}
+	db.SetMaxOpenConns(4)
+	db.SetMaxIdleConns(2)
+	db.SetConnMaxIdleTime(5 * time.Minute)
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("open query log db (reader): %w", err)
+	}
+	return db, nil
+}
+
 func openDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", path+dsnPragmas)
 	if err != nil {
 		return nil, fmt.Errorf("open query log db: %w", err)
 	}
-	// One writer goroutine; a second connection would only invite SQLITE_BUSY.
+	// One writer connection; a second would only invite SQLITE_BUSY.
 	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA synchronous=NORMAL",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("apply %s: %w", pragma, err)
-		}
+	// journal_mode is a property of the file, not the connection, so it is
+	// set once here and every later connection — including the reader
+	// pool's — inherits it.
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("apply PRAGMA journal_mode=WAL: %w", err)
 	}
 	const schema = `
 CREATE TABLE IF NOT EXISTS querylog (
@@ -214,14 +287,16 @@ func migrate(db *sql.DB) error {
 			return fmt.Errorf("add query log column %s: %w", col, err)
 		}
 	}
-	return migrateIndexes(db)
+	return nil
 }
 
 // migrateIndexes builds indexes introduced after a database was first
 // created. Unlike ADD COLUMN, building an index on a large existing log is
 // NOT instant — minutes on a Pi reading a 90-day SD-card database — so it
-// happens once, is announced in the log, and every read that needs it is
-// fast forever after. The client/list indexes back the device page and the
+// runs in the background (see buildIndexes), is announced in the log, and
+// every read that needs it is fast forever after. It must not go back on
+// the startup path: that is exactly the stall this file used to impose on
+// every restart. The client/list indexes back the device page and the
 // Docket's list filter, which otherwise walk the whole time index hunting
 // for a sparse client or list (seconds per page on SD).
 //
@@ -250,7 +325,14 @@ func migrateIndexes(db *sql.DB) error {
 	}
 	built := false
 	for _, idx := range []struct{ name, ddl string }{
-		{"idx_querylog_client_ts", `CREATE INDEX idx_querylog_client_ts ON querylog(client, ts)`},
+		// (client, ts, verdict) rather than (client, ts): the trailing
+		// column is what makes the device summary a covering scan.
+		// Without it the startup hydration reads every row of the table
+		// to answer SUM(verdict = 'blocked') — 39s on a 7.4M-row log,
+		// against 1.0s with it. (client, ts) is a prefix of this, so the
+		// device drill-downs it used to serve are served by this too and
+		// the narrower index is dropped below.
+		{"idx_querylog_client_ts_verdict", `CREATE INDEX idx_querylog_client_ts_verdict ON querylog(client, ts, verdict)`},
 		{"idx_querylog_list_ts", `CREATE INDEX idx_querylog_list_ts ON querylog(list, ts)`},
 		{"idx_querylog_audit_ts", `CREATE INDEX idx_querylog_audit_ts ON querylog(audit_list, ts)`},
 	} {
@@ -263,6 +345,18 @@ func migrateIndexes(db *sql.DB) error {
 			return fmt.Errorf("build query log index %s: %w", idx.name, err)
 		}
 		slog.Info("query log index built", "index", idx.name, "took", time.Since(start).Round(time.Millisecond))
+		built = true
+	}
+	// idx_querylog_client_ts is a strict prefix of the widened index above,
+	// so once that exists the narrow one earns nothing and costs ~12% of
+	// the file. Dropped after the build, never before: a crash in between
+	// leaves the old index in place and the next start rebuilds from
+	// there, which is the safe direction to fail in.
+	if have["idx_querylog_client_ts"] {
+		slog.Info("dropping superseded query log index", "index", "idx_querylog_client_ts")
+		if _, err := db.Exec(`DROP INDEX idx_querylog_client_ts`); err != nil {
+			return fmt.Errorf("drop superseded index idx_querylog_client_ts: %w", err)
+		}
 		built = true
 	}
 	// Fresh indexes get planner statistics once (the query planner falls
@@ -368,10 +462,18 @@ func (l *Log) Resize(n int) {
 func (l *Log) Close() error {
 	l.closeOnce.Do(func() { close(l.done) })
 	<-l.dead
-	if l.db != nil {
-		return l.db.Close()
+	// Readers first: the writer holds the file's WAL, and an in-flight
+	// aggregate should be let go of before it is closed under it.
+	var err error
+	if l.rdb != nil {
+		err = l.rdb.Close()
 	}
-	return nil
+	if l.db != nil {
+		if dbErr := l.db.Close(); err == nil {
+			err = dbErr
+		}
+	}
+	return err
 }
 
 // run is the single writer goroutine.
@@ -523,7 +625,7 @@ type HistoryFilter struct {
 // already feeds both the Docket and the dashboard so the frontend's live
 // filtering stays consistent. Off the hot path.
 func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, before time.Time) ([]Entry, error) {
-	if l.db == nil {
+	if l.rdb == nil {
 		return nil, nil
 	}
 	if limit <= 0 || limit > 1000 {
@@ -573,7 +675,14 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 	switch {
 	case f.List == "" && f.WouldBlock:
 		args = append(args, limit)
-		query = `SELECT ` + cols + ` FROM querylog INDEXED BY idx_querylog_audit_ts WHERE ` +
+		// Conditional for the same reason as TopAuditedDomains: the index
+		// build is in the background now, and naming an index before it
+		// exists fails the query outright.
+		from := "querylog"
+		if l.indexed.Load() {
+			from = "querylog INDEXED BY idx_querylog_audit_ts"
+		}
+		query = `SELECT ` + cols + ` FROM ` + from + ` WHERE ` +
 			strings.Join(where, " AND ") + ` ORDER BY ts DESC LIMIT ?`
 	case f.List == "":
 		args = append(args, limit)
@@ -606,7 +715,7 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 		defer cancel()
 	}
 
-	rows, err := l.db.QueryContext(ctx, query, args...)
+	rows, err := l.rdb.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, historyErr(ctx, err)
 	}

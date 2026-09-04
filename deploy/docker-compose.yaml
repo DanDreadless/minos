@@ -4,12 +4,36 @@ services:
     image: ghcr.io/dandreadless/minos:latest
     container_name: minos
     restart: unless-stopped
-    ports:
-      - "53:53/udp"
-      - "53:53/tcp"
-      - "8080:8080/tcp"
+    # Host networking, deliberately. Under Docker's default bridge every
+    # query arrives from the bridge gateway, so Minos sees one client
+    # instead of your network: the Devices page, per-device rules, groups
+    # and every device drill-down collapse into a single row. Discovery
+    # needs it too — SSDP is multicast and the DHCP listener reads
+    # broadcasts, neither of which crosses a bridge.
+    #
+    # Linux only. On Docker Desktop (macOS/Windows) host mode does not hand
+    # the container the LAN, so use the bridge block below and accept that
+    # every device looks the same — a fine way to try Minos out, not a way
+    # to run it for a household.
+    #
+    # Host mode publishes nothing itself, so the API is reachable on
+    # whatever api.listen says (0.0.0.0:8080 by default). Set an api.token
+    # in /data/minos.yaml, or narrow api.listen to one interface.
+    network_mode: host
     volumes:
       - minos-data:/data
+
+    # --- Bridge alternative (non-Linux hosts) -------------------------
+    # Comment out `network_mode: host` above and uncomment this. Every
+    # client will appear as the bridge gateway; that is the cost.
+    #
+    # ports:
+    #   - "53:53/udp"
+    #   - "53:53/tcp"
+    #   - "8080:8080/tcp"
+    #   # Only if you serve DoT/DoH (dns.tls) to clients:
+    #   # - "853:853/tcp"
+    #   # - "443:443/tcp"
 
 volumes:
   minos-data:

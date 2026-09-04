@@ -433,6 +433,7 @@ func TestAuditAggregatesUseAuditIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer l.Close()
+	<-l.Ready() // index migration runs in the background now
 	for _, tc := range []struct {
 		name string
 		sql  string
@@ -473,5 +474,88 @@ func TestAuditAggregatesUseAuditIndex(t *testing.T) {
 				t.Error("plan does not use idx_querylog_audit_ts")
 			}
 		})
+	}
+}
+
+// ClientsSummary counts only what happened before the cutoff. That bound is
+// what lets the caller add these figures to the live registry's own counting
+// without double-counting: hydration runs after the listeners are up now, so
+// the two overlap in time unless the query excludes the live half.
+func TestClientsSummaryExcludesRowsAfterCutoff(t *testing.T) {
+	path := t.TempDir() + "/summary.db"
+	l, err := Open(Options{RingSize: 100, DBPath: path, RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cutoff := time.Now().Add(-time.Hour)
+	// Three rows before the cutoff (one of them blocked), two after it.
+	record(l, "ads.example.com", "10.0.0.1", VerdictBlocked, cutoff.Add(-3*time.Hour))
+	record(l, "a.example.com", "10.0.0.1", VerdictAllowed, cutoff.Add(-2*time.Hour))
+	record(l, "b.example.com", "10.0.0.1", VerdictAllowed, cutoff.Add(-time.Minute))
+	record(l, "live.example.com", "10.0.0.1", VerdictBlocked, cutoff.Add(time.Minute))
+	record(l, "live2.example.com", "10.0.0.1", VerdictAllowed, cutoff.Add(2*time.Minute))
+	drain(t, l, 5)
+	if err := l.Close(); err != nil { // Close flushes the batch to SQLite
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(Options{RingSize: 100, DBPath: path, RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	<-reopened.Ready()
+
+	got, err := reopened.ClientsSummary(t.Context(), cutoff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d client summaries, want 1: %+v", len(got), got)
+	}
+	s := got[0]
+	if s.Total != 3 || s.Blocked != 1 {
+		t.Errorf("summary = %d total / %d blocked, want 3/1 (the post-cutoff rows are the live half)",
+			s.Total, s.Blocked)
+	}
+	if !s.First.Before(cutoff) || !s.Last.Before(cutoff) {
+		t.Errorf("summary spans %v..%v, both should predate the %v cutoff", s.First, s.Last, cutoff)
+	}
+}
+
+// The widened client index must cover the hydration scan: it reads client,
+// ts and verdict, and all three live in the index. Without the trailing
+// verdict column SQLite fetches every row from the table to answer the SUM
+// — 39s against 1.0s on a 7.4M-row log, and it ran before the listeners.
+func TestClientsSummaryScanIsCovering(t *testing.T) {
+	l, err := Open(Options{RingSize: 10, DBPath: t.TempDir() + "/cover.db", RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	<-l.Ready()
+	rows, err := l.db.Query(`EXPLAIN QUERY PLAN SELECT client, COUNT(*),
+		SUM(verdict = ?), MIN(ts), MAX(ts) FROM querylog
+		WHERE ts < ? GROUP BY client`, VerdictBlocked, time.Now().UnixMilli())
+	if err != nil {
+		t.Fatalf("hydration shape rejected: %v", err)
+	}
+	defer rows.Close()
+	covering := false
+	for rows.Next() {
+		var a, b, c int
+		var detail string
+		if err := rows.Scan(&a, &b, &c, &detail); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(detail, "COVERING INDEX idx_querylog_client_ts_verdict") {
+			covering = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !covering {
+		t.Error("hydration scan is not covering — it will read the table for every row")
 	}
 }

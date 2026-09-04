@@ -542,10 +542,11 @@ This is security software; hold it to that standard.
   on `:root` is the other half: without it every browser-drawn widget (popup,
   date picker, autofill, spinners) renders light regardless.
 - **Query-log read indexes** (fixed decisions): the log carries
-  `(client, ts)`, `(list, ts)`, and `(audit_list, ts)` composite indexes —
-  without them the device page and Docket list filter walk the whole time
-  index hunting for a sparse client/list (measured 1 s per page at 2M rows
-  on NVMe; tens of seconds on Pi/SD). Two traps, both measured: **SQLite
+  `(client, ts, verdict)`, `(list, ts)`, and `(audit_list, ts)` composite
+  indexes — without them the device page and Docket list filter walk the
+  whole time index hunting for a sparse client/list (measured 1 s per page
+  at 2M rows on NVMe; tens of seconds on Pi/SD). Two traps, both measured:
+  **SQLite
   ignores a partial index when the query binds the filtered column as a
   parameter** (it can't prove `list = ?` implies `WHERE list != ''` at
   prepare time — the scan silently returns), so these are full indexes; and
@@ -553,9 +554,68 @@ This is security software; hold it to that standard.
   compiles to two UNION ALL halves each walking its own index. ListNames
   skip-walks distinct names via repeated `MIN(col) > ?` seeks — O(lists),
   never O(rows); plain DISTINCT visits every index entry (146 ms at 2M).
-  Index migration (`migrateIndexes`) is announced in the log: the one-time
-  build on a large existing DB takes minutes on SD. Cost: ~+45% file size
-  at 2M rows — disk-only, bounded by retention; accepted.
+  The client index carries a **trailing `verdict`** so the device summary
+  is a *covering* scan: without it the hydration query reads every row of
+  the table to answer `SUM(verdict = 'blocked')` — measured 39s against
+  1.0s on a 7.4M-row log. `(client, ts)` is a prefix of it, so the narrow
+  index it replaced is dropped by the migration (it cost ~12% of the file
+  to answer nothing the wider one cannot). Index migration
+  (`migrateIndexes`) runs in a **background goroutine** (`buildIndexes`),
+  never on the startup path — the one-time build on a large existing DB
+  takes minutes on SD, and it used to hold the listeners back for all of
+  it. Two consequences: a query naming an index with `INDEXED BY` must
+  check `l.indexed.Load()` first (naming a not-yet-built index is a hard
+  error, and a worse plan beats a failed request), and any test asserting a
+  plan must `<-l.Ready()` after `Open`. Cost: ~+45% file size at 2M rows —
+  disk-only, bounded by retention; accepted.
+- **Nothing expensive runs before the listeners** (fixed decision,
+  September 2026): this was a real field failure — v0.21.0 looked like it
+  crashed on restart. `main.serve` called `qlog.ClientsSummary` inline to
+  rehydrate the device list, an **unbounded** `GROUP BY client` over the
+  whole retained log, before `proxy.Start()` and before the HTTP listener.
+  On a 7.4M-row log that was **40 seconds with no DNS on the network, no
+  web UI, and nothing in the journal** — indistinguishable from a crash,
+  silent, and growing with the log. It hid from `/api/status` too, because
+  `s.started` is set in `api.New`, *after* it, so `uptime_seconds` never
+  counted the stall. Index migration had the same shape and the same fix.
+  The rule now: **`querylog.Open` does only what is instant** (schema,
+  `ADD COLUMN`), and everything else — index builds, device hydration —
+  runs in a goroutine after the listeners are up. Measured after: 1 ms to
+  listening, hydration finishing 1.1s later on a warm log (16.8s on the
+  upgrade that also builds the new index, all of it in the background).
+  Two things fall out of moving hydration late, both handled and both
+  load-bearing: `ClientsSummary` takes a `before` cutoff (process start) so
+  history and the live registry's own counting are **disjoint and additive**
+  rather than overlapping, and `Registry.Seed` **merges** into a device live
+  traffic already created (adding counts, pulling first-seen back, clearing
+  `fresh`) instead of skipping it — the old `LoadOrStore`-and-skip silently
+  lost all history for any device that queried in the first seconds. Don't
+  put anything back in front of the listeners.
+- **Reads and writes have separate SQLite pools** (fixed decision): `Log.db`
+  is the writer (`MaxOpenConns(1)` — inserts, prunes and migrations
+  serialise), `Log.rdb` is a 4-connection reader pool. Every read path uses
+  `rdb`; only `writeBatch`, `prune` and the migrations use `db`. Before
+  this, one connection served everything, so a wide-window `/api/stats`
+  froze the whole instance: measured, a 720h stats call left concurrent
+  `querylog/history` requests waiting 25.2s, 8.6s and 19.8s, and the 30s
+  batch flush queued behind it too. WAL admits concurrent readers alongside
+  one writer, so this is what WAL was for. Per-connection PRAGMAs go in the
+  **DSN** (`?_pragma=busy_timeout(10000)&...`) — a `db.Exec("PRAGMA …")`
+  only touches whichever pooled connection served that call, which is why
+  it was safe with one connection and is not with four. `journal_mode` is
+  the exception: it is a property of the file, set once by the writer.
+- **Stats aggregates are deadline-capped** (fixed decision): Timeline,
+  TopBlockedDomains and TopClients group by time, domain and client, and no
+  index answers "group 90 days by domain" — each walks every row in the
+  window. `/api/stats`, `/api/stats/client` and `/api/stats/lists` cap one
+  request at `statsDeadline` (20s) and answer 503 with the window in the
+  message. The driver's context cancellation is a real `sqlite3_interrupt`,
+  so the work actually stops rather than running on unwatched. The `hours`
+  cap stays 1–2160: the windows are legal, they just are not free, and the
+  deadline is a better answer than a narrower contract. Counter-intuitive
+  but measured: 2160h can be *faster* than 720h, because a range covering
+  every row lets SQLite pick a sequential table scan over an index range
+  scan with scattered row lookups.
 - **Audit-list semantics** (fixed decisions): audit mode is **two matchers,
   never a flag inside one** — `lists.Manager` owns a second audit engine
   (`AuditEngine()`), compiled from only `audit: true` sources, so the

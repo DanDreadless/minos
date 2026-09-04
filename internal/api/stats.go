@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,6 +13,36 @@ import (
 	"minos/internal/filter"
 	"minos/internal/querylog"
 )
+
+// statsDeadline caps the dashboard aggregates. Timeline, top-domains and
+// top-clients each walk every row in the window — no index answers "group
+// the last 90 days by domain" — so a wide window is genuinely expensive:
+// 90s over the 7.4M-row log this was measured against. Reads have their own
+// connection pool now, so a slow one no longer stalls the writer or the
+// rest of the API, but it can still hold a browser open long past the point
+// the user gave up. The deadline turns waiting into an answer, and the
+// driver's context cancellation is a real sqlite3_interrupt, so the work
+// actually stops rather than running on unwatched.
+const statsDeadline = 20 * time.Second
+
+// statsTimeout is what the caller sees when an aggregate outruns the
+// deadline. Actionable, because the fix genuinely is a shorter window.
+func statsTimeout(hours int) string {
+	return fmt.Sprintf(
+		"that window (%dh) is too much history to summarise in one request — try a shorter one",
+		hours)
+}
+
+// writeStatsErr reports an aggregate failure, distinguishing "took too
+// long" from "went wrong": the first is the user's window choice and is
+// fixable by them, the second is ours.
+func writeStatsErr(ctx context.Context, w http.ResponseWriter, err error, hours int) {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		writeError(w, http.StatusServiceUnavailable, statsTimeout(hours))
+		return
+	}
+	writeError(w, http.StatusInternalServerError, err.Error())
+}
 
 type statsResponse struct {
 	WindowHours int                       `json:"window_hours"`
@@ -51,20 +83,21 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	if hours > 168 {
 		bucket = 24 * time.Hour // month-scale windows chart per day
 	}
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(r.Context(), statsDeadline)
+	defer cancel()
 	timeline, err := s.qlog.Timeline(ctx, since, bucket)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeStatsErr(ctx, w, err, hours)
 		return
 	}
 	topBlocked, err := s.qlog.TopBlockedDomains(ctx, since, 10)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeStatsErr(ctx, w, err, hours)
 		return
 	}
 	topClients, err := s.qlog.TopClients(ctx, since, 10)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeStatsErr(ctx, w, err, hours)
 		return
 	}
 	if topBlocked == nil {
@@ -87,12 +120,12 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	if s.cache != nil && s.cache.DNSSECStats().Mode != "off" {
 		total, err := s.qlog.AuditedTotal(ctx, since, dnsproxy.ListDNSSEC)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeStatsErr(ctx, w, err, hours)
 			return
 		}
 		top, err := s.qlog.TopAuditedDomains(ctx, since, dnsproxy.ListDNSSEC, 10)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeStatsErr(ctx, w, err, hours)
 			return
 		}
 		if top == nil {
@@ -132,9 +165,11 @@ func (s *Server) handleClientStats(w http.ResponseWriter, r *http.Request) {
 		hours = n
 	}
 	since := time.Now().Add(-time.Duration(hours) * time.Hour)
-	overview, err := s.qlog.ClientOverview(r.Context(), clients, since, 10)
+	ctx, cancel := context.WithTimeout(r.Context(), statsDeadline)
+	defer cancel()
+	overview, err := s.qlog.ClientOverview(ctx, clients, since, 10)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeStatsErr(ctx, w, err, hours)
 		return
 	}
 	writeJSON(w, http.StatusOK, struct {
@@ -157,9 +192,11 @@ func (s *Server) handleListStats(w http.ResponseWriter, r *http.Request) {
 		hours = n
 	}
 	since := time.Now().Add(-time.Duration(hours) * time.Hour)
-	stats, err := s.qlog.BlocksByList(r.Context(), since)
+	ctx, cancel := context.WithTimeout(r.Context(), statsDeadline)
+	defer cancel()
+	stats, err := s.qlog.BlocksByList(ctx, since)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeStatsErr(ctx, w, err, hours)
 		return
 	}
 	if stats == nil {
