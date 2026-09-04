@@ -291,6 +291,11 @@ export const copy = {
     localValuePlaceholder: (t: string) =>
       t === 'CNAME' ? 'target.home.lab' : 'address (comma-separate several)',
     localAdd: 'Add record',
+    localEdit: 'Edit',
+    localEditTitle: 'change this record’s address',
+    localEditValueLabel: (name: string) => `new address for ${name}`,
+    localSave: 'Save',
+    localCancel: 'Cancel',
     localWildcardNote: 'A leading *. matches all subdomains. Address records also answer reverse (PTR) lookups.',
   },
 
