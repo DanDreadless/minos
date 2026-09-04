@@ -180,8 +180,13 @@ Upgrade the way you installed:
 
 **Quick-install script (binary + systemd — the Raspberry Pi default):**
 re-run the installer. It fetches the latest release, verifies its checksum,
-and replaces `/usr/local/bin/minos`; it leaves your systemd unit and state
-alone. It does *not* restart the service, so restart it yourself:
+and replaces `/usr/local/bin/minos`. Your state is left alone; the systemd
+unit is refreshed only if this release changed it, and the old one is kept
+as `minos.service.bak`.
+
+It does *not* restart the service by default — a DNS resolver going away is
+a whole-network event, and the script won't decide that for you. It says so
+plainly at the end, and then you restart:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/DanDreadless/minos/main/deploy/install.sh | sudo sh
@@ -189,11 +194,28 @@ sudo systemctl restart minos
 minos version                             # confirm the new version
 ```
 
+Or have it restart for you:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/DanDreadless/minos/main/deploy/install.sh | sudo MINOS_RESTART=1 sh
+```
+
 Replacing a running binary is safe — the live process keeps the old file
 open until the restart loads the new one.
 
+Minos serves DNS and the web UI within milliseconds of starting, whatever
+the size of your query log. An upgrade that introduces a new query-log index
+builds it in the background afterwards, which can take minutes on a large
+log on an SD card; everything stays available while it does, and
+`journalctl -u minos` announces the start and finish.
+
 **Docker:** pull the new image and recreate the container; the config volume
-is preserved:
+is preserved. Note that `deploy/docker-compose.yaml` uses `network_mode:
+host` — under a bridge network every query arrives from the bridge gateway,
+so Minos sees one client instead of your network and the Devices page,
+groups, per-device rules and discovery all stop working. The compose file
+carries a commented bridge block for non-Linux hosts, where that trade is
+the only option:
 
 ```sh
 docker compose pull && docker compose up -d

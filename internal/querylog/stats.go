@@ -61,8 +61,8 @@ func (l *Log) Timeline(ctx context.Context, since time.Time, bucket time.Duratio
 		b.Blocked += blocked
 	}
 
-	if l.db != nil {
-		rows, err := l.db.QueryContext(ctx, `SELECT ts/? * ? AS bucket,
+	if l.rdb != nil {
+		rows, err := l.rdb.QueryContext(ctx, `SELECT ts/? * ? AS bucket,
 			COUNT(*), SUM(verdict = ?) FROM querylog
 			WHERE ts >= ? GROUP BY bucket`,
 			bucketMs, bucketMs, VerdictBlocked, since.UnixMilli())
@@ -110,8 +110,8 @@ func (l *Log) TopBlockedDomains(ctx context.Context, since time.Time, n int) ([]
 	if n <= 0 || n > 100 {
 		n = 10
 	}
-	if l.db != nil {
-		rows, err := l.db.QueryContext(ctx, `SELECT qname, COUNT(*) AS c
+	if l.rdb != nil {
+		rows, err := l.rdb.QueryContext(ctx, `SELECT qname, COUNT(*) AS c
 			FROM querylog WHERE ts >= ? AND verdict = ?
 			GROUP BY qname ORDER BY c DESC, qname LIMIT ?`,
 			since.UnixMilli(), VerdictBlocked, n)
@@ -164,7 +164,7 @@ func (l *Log) TopAuditedDomains(ctx context.Context, since time.Time, list strin
 	if n <= 0 || n > 100 {
 		n = 10
 	}
-	if l.db != nil {
+	if l.rdb != nil {
 		where, args := "audit_list > ''", []any{since.UnixMilli()}
 		if list != "" {
 			where = "audit_list = ?"
@@ -176,8 +176,17 @@ func (l *Log) TopAuditedDomains(ctx context.Context, since time.Time, list strin
 		// whole time window (the measured seconds-per-query pathology on
 		// SD). The exact-list form chooses the audit index on its own;
 		// pinning both keeps the two shapes from diverging silently.
-		rows, err := l.db.QueryContext(ctx, `SELECT qname, COUNT(*) AS c
-			FROM querylog INDEXED BY idx_querylog_audit_ts
+		//
+		// It is conditional because index migration now runs in the
+		// background: naming an index that does not exist yet is a hard
+		// error, and answering by a worse plan for the seconds that build
+		// takes beats failing the request outright.
+		from := "querylog"
+		if l.indexed.Load() {
+			from = "querylog INDEXED BY idx_querylog_audit_ts"
+		}
+		rows, err := l.rdb.QueryContext(ctx, `SELECT qname, COUNT(*) AS c
+			FROM `+from+`
 			WHERE ts >= ? AND `+where+`
 			GROUP BY qname ORDER BY c DESC, qname LIMIT ?`, args...)
 		if err != nil {
@@ -221,14 +230,14 @@ func (l *Log) TopAuditedDomains(ctx context.Context, since time.Time, list strin
 // the headline TopAuditedDomains can't give, since that is capped at n.
 // Same list semantics: exact match, or empty for any audit source.
 func (l *Log) AuditedTotal(ctx context.Context, since time.Time, list string) (int, error) {
-	if l.db != nil {
+	if l.rdb != nil {
 		where, args := "audit_list > ''", []any{since.UnixMilli()}
 		if list != "" {
 			where = "audit_list = ?"
 			args = append(args, list)
 		}
 		var n int
-		err := l.db.QueryRowContext(ctx,
+		err := l.rdb.QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM querylog WHERE ts >= ? AND `+where, args...).Scan(&n)
 		if err != nil {
 			return 0, fmt.Errorf("audited total query: %w", err)
@@ -252,8 +261,8 @@ func (l *Log) AuditedTotal(ctx context.Context, since time.Time, list string) (i
 // defensive cap.
 func (l *Log) BlocksByList(ctx context.Context, since time.Time) ([]ListStat, error) {
 	const maxLists = 200
-	if l.db != nil {
-		rows, err := l.db.QueryContext(ctx, `SELECT list, COUNT(*) AS c
+	if l.rdb != nil {
+		rows, err := l.rdb.QueryContext(ctx, `SELECT list, COUNT(*) AS c
 			FROM querylog WHERE ts >= ? AND verdict = ? AND list != ''
 			GROUP BY list ORDER BY c DESC, list LIMIT ?`,
 			since.UnixMilli(), VerdictBlocked, maxLists)
@@ -299,7 +308,7 @@ func (l *Log) BlocksByList(ctx context.Context, since time.Time) ([]ListStat, er
 // BlocksByList, lists are few by nature; the cap is defensive only.
 func (l *Log) ListNames(ctx context.Context, since time.Time) ([]string, error) {
 	const maxLists = 200
-	if l.db != nil {
+	if l.rdb != nil {
 		// The previous shape range-scanned every row in the ts window
 		// (seconds on an SD-card log), and even a plain DISTINCT visits
 		// every index entry. Instead, skip-walk each (column, ts) index
@@ -311,7 +320,7 @@ func (l *Log) ListNames(ctx context.Context, since time.Time) ([]string, error) 
 			name := "" // MIN(col) > '' also skips the unattributed rows
 			for range maxLists {
 				var next sql.NullString
-				err := l.db.QueryRowContext(ctx,
+				err := l.rdb.QueryRowContext(ctx,
 					`SELECT MIN(`+col+`) FROM querylog WHERE `+col+` > ?`, name).Scan(&next)
 				if err != nil {
 					return nil, fmt.Errorf("list names walk: %w", err)
@@ -365,7 +374,7 @@ func (l *Log) ListNames(ctx context.Context, since time.Time) ([]string, error) 
 func (l *Log) attributedSince(ctx context.Context, name string, sinceMs int64) (bool, error) {
 	for _, col := range []string{"list", "audit_list"} {
 		var one int
-		err := l.db.QueryRowContext(ctx,
+		err := l.rdb.QueryRowContext(ctx,
 			`SELECT 1 FROM querylog WHERE `+col+` = ? AND ts >= ? LIMIT 1`,
 			name, sinceMs).Scan(&one)
 		switch {
@@ -384,8 +393,8 @@ func (l *Log) TopClients(ctx context.Context, since time.Time, n int) ([]ClientS
 	if n <= 0 || n > 100 {
 		n = 10
 	}
-	if l.db != nil {
-		rows, err := l.db.QueryContext(ctx, `SELECT client, COUNT(*) AS c,
+	if l.rdb != nil {
+		rows, err := l.rdb.QueryContext(ctx, `SELECT client, COUNT(*) AS c,
 			SUM(verdict = ?) FROM querylog WHERE ts >= ?
 			GROUP BY client ORDER BY c DESC, client LIMIT ?`,
 			VerdictBlocked, since.UnixMilli(), n)
@@ -452,7 +461,7 @@ func (l *Log) ClientOverview(ctx context.Context, clients []string, since time.T
 		return out, nil
 	}
 
-	if l.db != nil {
+	if l.rdb != nil {
 		in := strings.Repeat("?,", len(clients))
 		in = in[:len(in)-1]
 		args := make([]any, 0, len(clients)+2)
@@ -460,7 +469,7 @@ func (l *Log) ClientOverview(ctx context.Context, clients []string, since time.T
 			args = append(args, c)
 		}
 
-		err := l.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(verdict = ?), 0)
+		err := l.rdb.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(verdict = ?), 0)
 			FROM querylog WHERE client IN (`+in+`) AND ts >= ?`,
 			append([]any{VerdictBlocked}, append(args, since.UnixMilli())...)...,
 		).Scan(&out.Total, &out.Blocked)
@@ -469,7 +478,7 @@ func (l *Log) ClientOverview(ctx context.Context, clients []string, since time.T
 		}
 
 		top := func(verdict string) ([]TopDomain, error) {
-			rows, err := l.db.QueryContext(ctx, `SELECT qname, COUNT(*) AS c
+			rows, err := l.rdb.QueryContext(ctx, `SELECT qname, COUNT(*) AS c
 				FROM querylog WHERE client IN (`+in+`) AND ts >= ? AND verdict = ?
 				GROUP BY qname ORDER BY c DESC, qname LIMIT ?`,
 				append(append([]any{}, args...), since.UnixMilli(), verdict, n)...)
@@ -546,15 +555,28 @@ type ClientSummary struct {
 	Last    time.Time
 }
 
-// ClientsSummary aggregates the persisted log per client. Returns nil in
-// ephemeral mode. Called once at startup, never on the hot path.
-func (l *Log) ClientsSummary(ctx context.Context) ([]ClientSummary, error) {
-	if l.db == nil {
+// ClientsSummary aggregates the persisted log per client, counting only
+// rows older than `before`. Returns nil in ephemeral mode.
+//
+// The bound is not a nicety: hydration no longer runs before the listeners
+// (it stalled every restart for as long as this scan took), so live traffic
+// is already being counted by the registry when this lands. Passing the
+// process start time makes the two halves disjoint — history here, live
+// there — so the caller can add them without double-counting.
+//
+// It is still a full scan of the retained log, but a covering one:
+// idx_querylog_client_ts_verdict carries client, ts and verdict, which is
+// every column this touches. That is the difference between 39s and 1.0s on
+// a 7.4M-row log. Off the hot path, and on the reader pool, so even the
+// slow case blocks nothing.
+func (l *Log) ClientsSummary(ctx context.Context, before time.Time) ([]ClientSummary, error) {
+	if l.rdb == nil {
 		return nil, nil
 	}
-	rows, err := l.db.QueryContext(ctx, `SELECT client, COUNT(*),
-		SUM(verdict = ?), MIN(ts), MAX(ts) FROM querylog GROUP BY client`,
-		VerdictBlocked)
+	rows, err := l.rdb.QueryContext(ctx, `SELECT client, COUNT(*),
+		SUM(verdict = ?), MIN(ts), MAX(ts) FROM querylog
+		WHERE ts < ? GROUP BY client`,
+		VerdictBlocked, before.UnixMilli())
 	if err != nil {
 		return nil, fmt.Errorf("clients summary: %w", err)
 	}
@@ -578,8 +600,8 @@ func (l *Log) ClientsSummary(ctx context.Context) ([]ClientSummary, error) {
 
 // Totals counts queries and blocks since the given time.
 func (l *Log) Totals(ctx context.Context, since time.Time) (total, blocked int, err error) {
-	if l.db != nil {
-		err = l.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(verdict = ?), 0)
+	if l.rdb != nil {
+		err = l.rdb.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(verdict = ?), 0)
 			FROM querylog WHERE ts >= ?`, VerdictBlocked, since.UnixMilli()).
 			Scan(&total, &blocked)
 		if err != nil {
@@ -626,9 +648,9 @@ func (l *Log) BusiestClient(ctx context.Context, since time.Time) (client string
 // NewClientsSince counts clients whose first-ever logged query falls at or
 // after since. In ephemeral mode "first-ever" is bounded by the ring.
 func (l *Log) NewClientsSince(ctx context.Context, since time.Time) (int, error) {
-	if l.db != nil {
+	if l.rdb != nil {
 		var n int
-		err := l.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM
+		err := l.rdb.QueryRowContext(ctx, `SELECT COUNT(*) FROM
 			(SELECT client, MIN(ts) AS first FROM querylog GROUP BY client)
 			WHERE first >= ?`, since.UnixMilli()).Scan(&n)
 		if err != nil {

@@ -343,23 +343,57 @@ func TestDevicesPopulateVendorFromMAC(t *testing.T) {
 	}
 }
 
-func TestSeedDoesNotClobberLiveState(t *testing.T) {
+// Seed merges into a live device rather than replacing or skipping it.
+// Hydration runs after the listeners are up, so a busy device is often
+// already here by the time its history lands; the caller supplies only rows
+// older than process start, which makes the two halves disjoint and the sum
+// correct. Losing the history (the old skip) or the live counts (a plain
+// overwrite) were both wrong.
+func TestSeedMergesIntoLiveDevice(t *testing.T) {
 	r := NewRegistry()
 	now := time.Now()
+	firstHistorical := now.Add(-24 * time.Hour)
 	r.Touch("10.0.0.1", false, now)
-	r.Seed("10.0.0.1", 500, 100, now.Add(-24*time.Hour), now.Add(-time.Hour))
-	r.Seed("10.0.0.2", 7, 3, now.Add(-24*time.Hour), now.Add(-time.Hour))
+	r.Touch("10.0.0.1", true, now)
+	r.Seed("10.0.0.1", 500, 100, firstHistorical, now.Add(-time.Hour))
+	r.Seed("10.0.0.2", 7, 3, firstHistorical, now.Add(-time.Hour))
 
 	devs := r.Devices(config.Default())
 	byIP := map[string]Device{}
 	for _, d := range devs {
 		byIP[d.IP] = d
 	}
-	if byIP["10.0.0.1"].Queries != 1 {
-		t.Errorf("live device overwritten by seed: %+v", byIP["10.0.0.1"])
+	live := byIP["10.0.0.1"]
+	if live.Queries != 502 || live.QBlocked != 101 {
+		t.Errorf("merged device = %d/%d queries/blocked, want 502/101", live.Queries, live.QBlocked)
+	}
+	// First-seen reaches back to the history, not to when this process
+	// happened to notice the device.
+	if live.FirstSeen == nil || !live.FirstSeen.Equal(firstHistorical) {
+		t.Errorf("first seen = %v, want the historical %v", live.FirstSeen, firstHistorical)
+	}
+	// Last-seen stays the live one: it is the newer of the two.
+	if live.LastSeen == nil || !live.LastSeen.Equal(now) {
+		t.Errorf("last seen = %v, want the live %v", live.LastSeen, now)
 	}
 	if byIP["10.0.0.2"].Queries != 7 || byIP["10.0.0.2"].QBlocked != 3 {
 		t.Errorf("seeded device = %+v", byIP["10.0.0.2"])
+	}
+}
+
+// A device seeded from history is not a new device, even when live traffic
+// created its row first — the new-device notification must not fire for it.
+func TestSeedClearsFreshFlag(t *testing.T) {
+	r := NewRegistry()
+	now := time.Now()
+	r.Touch("10.0.0.9", false, now)
+	v, _ := r.seen.Load("10.0.0.9")
+	if !v.(*device).fresh.Load() {
+		t.Fatal("live discovery should mark the device fresh")
+	}
+	r.Seed("10.0.0.9", 100, 5, now.Add(-48*time.Hour), now.Add(-time.Hour))
+	if v.(*device).fresh.Load() {
+		t.Error("a device with history is not a new device")
 	}
 }
 
