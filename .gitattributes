@@ -1,1 +1,6 @@
 *.bin -text
+# Built frontend assets are generated output, byte-identical or not at all.
+# Without this, autocrlf checks them out as CRLF while `npm run build`
+# writes LF, so web/dist reads as modified the moment it is rebuilt — and
+# scripts/release.sh refuses to release on exactly that noise.
+web/dist/** -text
