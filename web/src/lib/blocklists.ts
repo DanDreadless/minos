@@ -101,7 +101,7 @@ export const blocklistPresets: BlocklistPreset[] = [
     id: 'hagezi-tif',
     label: 'Hagezi Threat Intelligence',
     note: 'malware, phishing & scam domains — the medium cut; the full feed is ~2M domains and would fill a Pi\'s memory budget on its own',
-    size: '≈328k domains',
+    size: '≈700k domains',
     tier: 'security',
     list: {
       name: 'Hagezi TIF',
