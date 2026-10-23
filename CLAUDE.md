@@ -816,3 +816,14 @@ This is security software; hold it to that standard.
   idle connections; `TestDoHUpstreamSpeaksHTTP2` uses an h2-only stub. Verify
   presets with `go test -tags presets ./internal/dnsproxy` (weekly in CI),
   never curl — curl's negotiation is not ours.
+- **Silent failures need a loud channel** (October 2026): the Gitea push
+  mirror failed for seven weeks on an expired PAT stored *in Gitea* while
+  `.env` held a valid one — so no CI ran on anything committed, and the
+  weekly catalog check, testing the frozen mirror, went red six weeks
+  running with nobody told. Now: a failing scheduled catalog/preset run
+  opens (or comments on) a `catalog-broken` GitHub issue and the next pass
+  closes it; `release.sh` refuses to start while Gitea reports a push-mirror
+  `last_error`, and runs the catalog + preset network tests before tagging.
+  Gitea cannot edit a mirror's password in place: rotate by creating a new
+  push mirror (API `POST /push_mirrors`), confirming it syncs, then deleting
+  the old one. Rotate the PAT in `.env` **and** Gitea together.
