@@ -55,10 +55,14 @@ type Server struct {
 	dot     *dns.Server
 	doh     *http.Server
 	dotAddr net.Addr
-	dohAddr net.Addr
-	policy  atomic.Pointer[blockingPolicy]
-	fwd     atomic.Pointer[forwardTable]
-	local   atomic.Pointer[localZone] // nil when no local records
+	// ddrTarget is the name the encrypted listeners' certificate covers,
+	// advertised over DDR (ddr.go); "" when there are no listeners. Set
+	// once in Start, read-only afterwards.
+	ddrTarget string
+	dohAddr   net.Addr
+	policy    atomic.Pointer[blockingPolicy]
+	fwd       atomic.Pointer[forwardTable]
+	local     atomic.Pointer[localZone] // nil when no local records
 
 	// cache is nil when disabled. Hit/miss counters live on the Server so
 	// they survive the cache flush that every config change performs.
@@ -631,6 +635,17 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		entry.Verdict = querylog.VerdictBlocked
 		entry.List = "firefox-doh-canary"
 		entry.Rule = firefoxCanary
+		s.record(entry, start)
+		return
+	}
+
+	// DDR: resolver.arpa is answered here and never forwarded (ddr.go).
+	if len(qname) == len(ddrQName) && qname == ddrQName {
+		_ = w.WriteMsg(s.answerDDR(req, q))
+		entry.Verdict = querylog.VerdictAllowed
+		entry.List = "local"
+		entry.Rule = "designated resolver discovery"
+		entry.Upstream = "local"
 		s.record(entry, start)
 		return
 	}

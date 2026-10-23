@@ -248,6 +248,16 @@ laptops resolve through it encrypted — and Android's Private DNS keeps
 your filtering active even when apps would otherwise hardcode a public
 DoH resolver.
 
+With either listener on, Minos also answers **DDR** (Discovery of
+Designated Resolvers, RFC 9462): a device using Minos over plain DNS asks
+`_dns.resolver.arpa` and learns the DoT and DoH endpoints, and Windows 11,
+iOS and macOS switch to encrypted DNS by themselves. They only do so when
+the certificate names the address they were using — a certificate that
+covers Minos's LAN IP (an IP SAN), not just a hostname — otherwise they
+stay on plain DNS, which keeps working as before. Minos never forwards
+`resolver.arpa`, so an upstream resolver cannot hand your devices its own
+encrypted endpoint and move them off Minos.
+
 ```yaml
 dns:
   tls:
