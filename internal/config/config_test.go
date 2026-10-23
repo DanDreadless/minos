@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -147,6 +148,13 @@ func TestValidateCatchesBadValues(t *testing.T) {
 		func(c *Config) { c.DNS.Upstreams = nil },
 		func(c *Config) { c.DNS.Upstreams[0].Protocol = "carrier-pigeon" },
 		func(c *Config) { c.DNS.Upstreams = []Upstream{{Address: "http://insecure", Protocol: "doh"}} },
+		// a DoH URL left under protocol dot: SplitHostPort alone accepted it (field bug)
+		func(c *Config) { c.DNS.Upstreams = []Upstream{{Address: "https://8.8.8.8/dns-query", Protocol: "dot"}} },
+		func(c *Config) { c.DNS.Upstreams = []Upstream{{Address: "1.1.1.1:dns", Protocol: "udp"}} },
+		func(c *Config) { c.DNS.Upstreams = []Upstream{{Address: ":53", Protocol: "udp"}} },
+		func(c *Config) { c.DNS.Upstreams = []Upstream{{Address: "9.9.9.9:0", Protocol: "dot"}} },
+		func(c *Config) { c.DNS.Upstreams = []Upstream{{Address: "9.9.9.9:70000", Protocol: "tcp"}} },
+		func(c *Config) { c.API.Listen = "http://0.0.0.0:8080" },
 		func(c *Config) { c.Blocking.Mode = "maim" },
 		func(c *Config) { c.Lists.Sources[0].Format = "csv" },
 		func(c *Config) { // allow-source names share the block-source namespace
@@ -492,5 +500,51 @@ func TestValidateClientNotes(t *testing.T) {
 	c.Clients[0].Notes = strings.Repeat("x", 4097)
 	if err := c.Validate(); err == nil {
 		t.Error("4097-char notes should fail validation")
+	}
+}
+
+// An older Minos accepted a DoH URL under protocol dot (the v0.21.2 field
+// config did exactly that). Upgrading onto such a file must still boot, with
+// the URL repaired to doh and anything unrepairable dropped — never a refusal.
+func TestOpenHealsUpstreamsOlderVersionsAccepted(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "minos.yaml")
+	yml := `dns:
+  upstreams:
+    - address: https://1.1.1.1/dns-query
+      protocol: doh
+    - address: https://8.8.8.8/dns-query
+      protocol: dot
+    - address: "dns.example:port"
+      protocol: tcp
+`
+	if err := os.WriteFile(path, []byte(yml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("config an older version booted on was refused: %v", err)
+	}
+	got := s.Get().DNS.Upstreams
+	want := []Upstream{
+		{Address: "https://1.1.1.1/dns-query", Protocol: "doh"},
+		{Address: "https://8.8.8.8/dns-query", Protocol: "doh"},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("upstreams = %+v, want %+v", got, want)
+	}
+}
+
+func TestOpenFallsBackToDefaultUpstreamsWhenNoneSurvive(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "minos.yaml")
+	yml := "dns:\n  upstreams:\n    - address: \"nowhere:port\"\n      protocol: udp\n"
+	if err := os.WriteFile(path, []byte(yml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(s.Get().DNS.Upstreams, Default().DNS.Upstreams) {
+		t.Errorf("upstreams = %+v, want the defaults", s.Get().DNS.Upstreams)
 	}
 }

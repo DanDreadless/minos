@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -875,8 +876,18 @@ func (c *Config) Validate() error {
 func validateUpstream(u Upstream) error {
 	switch u.Protocol {
 	case "udp", "tcp", "dot":
+		// The mistake this catches was a real one: a DoH URL left under
+		// protocol dot passed the old SplitHostPort check (host "https",
+		// port "//8.8.8.8/dns-query") and then failed every exchange.
+		if strings.Contains(u.Address, "://") {
+			return fmt.Errorf("address: %q is a URL, not host:port — for a DoH URL set protocol to doh", u.Address)
+		}
 		if err := validateHostPort(u.Address); err != nil {
 			return fmt.Errorf("address: %w", err)
+		}
+		host, port, _ := net.SplitHostPort(u.Address)
+		if host == "" || port == "0" {
+			return fmt.Errorf("address: %q needs both a host and a non-zero port", u.Address)
 		}
 	case "doh":
 		parsed, err := url.Parse(u.Address)
@@ -996,10 +1007,50 @@ func validateHostPort(addr string) error {
 	if addr == "" {
 		return fmt.Errorf("must not be empty")
 	}
-	if _, _, err := net.SplitHostPort(addr); err != nil {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
 		return fmt.Errorf("must be host:port: %w", err)
 	}
+	// SplitHostPort splits on the last colon and checks nothing else, so a
+	// URL ("https://x/y") or a path slips through. An empty host is legal
+	// (":53" listens on every address) and port 0 is legal for listeners
+	// (ephemeral, used by tests); upstreams add their own stricter check.
+	if strings.ContainsAny(host, "/?#@ ") {
+		return fmt.Errorf("%q: host must be a hostname or IP address", addr)
+	}
+	if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 {
+		return fmt.Errorf("%q: port must be a number from 0 to 65535", addr)
+	}
 	return nil
+}
+
+// healUpstreams repairs or drops on-disk upstreams that today's validation
+// refuses but an older Minos accepted, so an upgrade never bricks boot on a
+// config the previous version started with. A DoH URL filed under dot is
+// what the user evidently meant, so it becomes doh; anything else invalid is
+// dropped with a warning. If nothing usable is left, the defaults stand in —
+// the old binary would have started, but with no working upstream at all.
+func healUpstreams(c *Config) {
+	kept := c.DNS.Upstreams[:0]
+	for _, u := range c.DNS.Upstreams {
+		if validateUpstream(u) != nil && u.Protocol == "dot" &&
+			validateUpstream(Upstream{Address: u.Address, Protocol: "doh"}) == nil {
+			slog.Warn("config: upstream is a DoH URL filed under protocol dot; treating it as doh",
+				"address", u.Address)
+			u.Protocol = "doh"
+		}
+		if err := validateUpstream(u); err != nil {
+			slog.Warn("config: dropping invalid upstream", "address", u.Address,
+				"protocol", u.Protocol, "err", err)
+			continue
+		}
+		kept = append(kept, u)
+	}
+	c.DNS.Upstreams = kept
+	if len(kept) == 0 {
+		slog.Warn("config: no valid upstreams left; using the defaults")
+		c.DNS.Upstreams = Default().DNS.Upstreams
+	}
 }
 
 // save writes the config atomically: temp file in the same directory, then
@@ -1078,6 +1129,7 @@ func parseTolerant(data []byte) (*Config, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 	healDuplicateClientMACs(c)
+	healUpstreams(c)
 	if err := c.Validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}

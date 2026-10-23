@@ -142,6 +142,17 @@
     upstreams = next;
   }
 
+  // A pasted https:// URL can only be DoH; switch the protocol to match
+  // rather than let the row save as DoT and fail every exchange (the server
+  // now rejects that combination, but catching it here saves a round trip).
+  function matchProtocol<T extends { address: string; protocol: Upstream['protocol'] }>(row: T): void {
+    if (/^https:\/\//i.test(row.address.trim()) && row.protocol !== 'doh') {
+      row.protocol = 'doh';
+      upstreams = upstreams;
+      routeRows = routeRows;
+    }
+  }
+
   // The first two rows are the primary and secondary resolvers; the rest are
   // ordered fallbacks.
   function orderLabel(i: number): string {
@@ -341,6 +352,7 @@
           class="grow"
           placeholder={u.protocol === 'doh' ? 'https://resolver/dns-query' : 'host:port'}
           bind:value={u.address}
+          on:input={() => matchProtocol(u)}
         />
         <select bind:value={u.protocol} title="protocol">
           <option value="doh">DoH (encrypted, HTTPS)</option>
@@ -423,6 +435,7 @@
         <input
           placeholder={r.protocol === 'doh' ? 'https://resolver/dns-query' : 'host:port'}
           bind:value={r.address}
+          on:input={() => matchProtocol(r)}
         />
         <select bind:value={r.protocol} title="protocol">
           <option value="udp">UDP</option>
