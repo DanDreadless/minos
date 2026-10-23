@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -86,6 +87,16 @@ type DNSConfig struct {
 	// rebinding attack. Opt-in: allowed domains, local records, routes and
 	// private suffixes (.lan, .home.arpa, …) are exempt. Applies live.
 	RebindProtection bool `yaml:"rebind_protection,omitempty"`
+	// AllowedNetworks are the client networks Minos answers, as CIDRs or
+	// single addresses. Empty (the default) means private and local
+	// networks only — RFC 1918, CGNAT, loopback, link-local, ULA — so an
+	// accidentally exposed port never makes Minos an open resolver. Add
+	// 0.0.0.0/0 and ::/0 to answer everyone. Applies live.
+	AllowedNetworks []string `yaml:"allowed_networks,omitempty"`
+	// RateLimit is the most queries one device may send per minute (default
+	// 1000, as Pi-hole); further queries that minute are refused. 0 turns it
+	// off. No omitempty, so 0 is written and survives a restart.
+	RateLimit int `yaml:"rate_limit"`
 	// DNSSEC controls local validation of forwarded answers against the
 	// DNSSEC chain of trust: "" or "off" (default), "permissive"
 	// (validate, count, and log — never blocks), or "enforce" (bogus
@@ -496,7 +507,8 @@ func Default() *Config {
 				MaxTTL:     3600,
 				ServeStale: true,
 			},
-			LocalTTL: 300,
+			LocalTTL:  300,
+			RateLimit: 1000,
 		},
 		Blocking: BlockingConfig{Mode: "zero_ip", CNAMEInspection: true},
 		Lists: ListsConfig{
@@ -551,6 +563,7 @@ func (c *Config) Clone() *Config {
 		}
 	}
 	out.Clients = append([]Client(nil), c.Clients...)
+	out.DNS.AllowedNetworks = append([]string(nil), c.DNS.AllowedNetworks...)
 	out.Notifications.Mute = append([]string(nil), c.Notifications.Mute...)
 	out.DNS.LocalRecords = make([]LocalRecord, len(c.DNS.LocalRecords))
 	for i, r := range c.DNS.LocalRecords {
@@ -951,6 +964,16 @@ func (c *Config) Validate() error {
 	}
 	if !c.QueryLog.Ephemeral && c.QueryLog.DBPath == "" {
 		return fmt.Errorf("querylog.db_path: required unless querylog.ephemeral is true")
+	}
+	for _, n := range c.DNS.AllowedNetworks {
+		if _, err := netip.ParsePrefix(n); err != nil {
+			if _, err := netip.ParseAddr(n); err != nil {
+				return fmt.Errorf("dns.allowed_networks: %q is not a network (CIDR such as 192.168.1.0/24) or an address", n)
+			}
+		}
+	}
+	if c.DNS.RateLimit < 0 || c.DNS.RateLimit > 1000000 {
+		return fmt.Errorf("dns.rate_limit: must be 0 (off) to 1000000 queries a minute, got %d", c.DNS.RateLimit)
 	}
 	if err := validateHostPort(c.API.Listen); err != nil {
 		return fmt.Errorf("api.listen: %w", err)

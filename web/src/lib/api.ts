@@ -192,6 +192,8 @@ export interface ConfigView {
     cache: CacheSettings;
     local_records: LocalRecord[];
     local_ttl: number;
+    allowed_networks: string[]; // [] = private and local networks only
+    rate_limit: number; // queries a minute per device; 0 = off
     routes: Route[];
     allow_firefox_doh: boolean;
     rebind_protection: boolean;
@@ -238,6 +240,8 @@ export interface SettingsUpdate {
     cache?: Partial<CacheSettings>;
     local_records?: LocalRecord[];
     local_ttl?: number;
+    allowed_networks?: string[];
+    rate_limit?: number;
     routes?: Route[];
     allow_firefox_doh?: boolean;
     rebind_protection?: boolean;

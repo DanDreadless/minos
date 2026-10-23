@@ -28,6 +28,8 @@ type configView struct {
 		Cache            config.CacheConfig   `json:"cache"`
 		LocalRecords     []config.LocalRecord `json:"local_records"`
 		LocalTTL         uint32               `json:"local_ttl"`
+		AllowedNetworks  []string             `json:"allowed_networks"`
+		RateLimit        int                  `json:"rate_limit"`
 		Routes           []config.Route       `json:"routes"`
 		AllowFirefoxDoH  bool                 `json:"allow_firefox_doh"`
 		RebindProtection bool                 `json:"rebind_protection"`
@@ -86,6 +88,8 @@ func viewOf(c *config.Config) configView {
 		v.DNS.LocalRecords = []config.LocalRecord{}
 	}
 	v.DNS.LocalTTL = c.DNS.LocalTTL
+	v.DNS.AllowedNetworks = append([]string{}, c.DNS.AllowedNetworks...)
+	v.DNS.RateLimit = c.DNS.RateLimit
 	v.DNS.Routes = c.DNS.Routes
 	if v.DNS.Routes == nil {
 		v.DNS.Routes = []config.Route{}
@@ -158,6 +162,8 @@ type settingsUpdate struct {
 		} `json:"cache"`
 		LocalRecords     *[]config.LocalRecord `json:"local_records"`
 		LocalTTL         *uint32               `json:"local_ttl"`
+		AllowedNetworks  *[]string             `json:"allowed_networks"`
+		RateLimit        *int                  `json:"rate_limit"`
 		Routes           *[]config.Route       `json:"routes"`
 		AllowFirefoxDoH  *bool                 `json:"allow_firefox_doh"`
 		RebindProtection *bool                 `json:"rebind_protection"`
@@ -244,6 +250,12 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			if upd.DNS.LocalRecords != nil {
 				c.DNS.LocalRecords = *upd.DNS.LocalRecords
+			}
+			if upd.DNS.AllowedNetworks != nil {
+				c.DNS.AllowedNetworks = append([]string(nil), (*upd.DNS.AllowedNetworks)...)
+			}
+			if upd.DNS.RateLimit != nil {
+				c.DNS.RateLimit = *upd.DNS.RateLimit
 			}
 			if upd.DNS.LocalTTL != nil {
 				c.DNS.LocalTTL = *upd.DNS.LocalTTL

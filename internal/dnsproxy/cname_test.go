@@ -49,6 +49,7 @@ func cloakProxy(t testing.TB, inspect bool) (*Server, string) {
 	srv, _ := startProxyCfg(t, "zero_ip", func(c *config.Config) {
 		c.DNS.Upstreams = []config.Upstream{{Address: up, Protocol: "udp"}}
 		c.Blocking.CNAMEInspection = inspect
+		c.DNS.RateLimit = 1000000 // benchmarks reuse this proxy
 	}, "tracker.example")
 	return srv, srv.UDPAddr().String()
 }

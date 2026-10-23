@@ -601,6 +601,21 @@ This is security software; hold it to that standard.
   was used. `BenchmarkHandleBlocked` measures handle() end to end: plain
   ~520 ns / 7 allocs (unchanged), EDNS0 ~655 ns / 12 allocs. The Firefox
   canary NXDOMAIN deliberately carries no EDE.
+- **Access control and rate limiting** (fixed decisions, October 2026,
+  `access.go`): the first thing `handle()` does. `dns.allowed_networks`
+  empty (the default) answers private networks (RFC 1918, CGNAT, loopback,
+  link-local, ULA) **plus this machine's own interface subnets** — the
+  second half is what keeps IPv6 working, where LAN devices use global
+  addresses; on a miss the subnets are re-read at most once a minute so a
+  changed prefix heals itself. Everyone else gets REFUSED + EDE 18 and is
+  *not* query-logged (an exposed port can see thousands a minute) but is
+  counted and summarised in the application log once a minute.
+  `dns.rate_limit` (default 1000/min per device, Pi-hole parity; 0 off; no
+  omitempty) is fixed one-minute windows in a sync.Map of atomic buckets —
+  no locks — with one query-log line per device per minute (list
+  `rate-limit`) and a lazy sweep of idle devices when the minute rolls.
+  Measured: blocked path ~535 → ~600 ns, no new allocations. Benchmarks set
+  the limit to 1,000,000 — at the default they would time refusals.
 - **CNAME-cloak inspection** (fixed decisions, October 2026, `cname.go`):
   `blocking.cname_inspection`, default on (a plain bool with no omitempty —
   loading starts from `Default()`, so an older config gains it on, and
