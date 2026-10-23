@@ -372,7 +372,20 @@ type QueryLogConfig struct {
 
 type APIConfig struct {
 	Listen string `yaml:"listen"`
-	Token  string `yaml:"token"`
+	// Token is the API token for automation (Home Assistant, scripts, the
+	// CLI): sent as X-Api-Token or Authorization: Bearer. With a password
+	// set too, either one is accepted.
+	Token string `yaml:"token"`
+	// PasswordHash is the web-interface password as an argon2id PHC string
+	// ($argon2id$v=19$m=…,t=…,p=…$salt$hash); empty = no password. Set it
+	// from Settings → Access & security, never by hand.
+	PasswordHash string `yaml:"password_hash,omitempty"`
+	// SessionKey signs login sessions (base64, 32 bytes), generated with
+	// the first password and replaced to sign everyone out.
+	SessionKey string `yaml:"session_key,omitempty"`
+	// TOTPSecret turns on a second login step (an authenticator-app code):
+	// base32, empty = off.
+	TOTPSecret string `yaml:"totp_secret,omitempty"`
 }
 
 // NotificationsConfig points events (new device, upstream sick/recovered,

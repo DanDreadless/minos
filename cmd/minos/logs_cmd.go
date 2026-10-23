@@ -36,7 +36,7 @@ func clientLogs(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	base, token, err := apiClient(*cfgPath)
+	base, authorize, err := apiClient(*cfgPath)
 	if err != nil {
 		return err
 	}
@@ -53,9 +53,7 @@ func clientLogs(args []string) error {
 		if err != nil {
 			return nil, err
 		}
-		if token != "" {
-			req.Header.Set("X-Api-Token", token)
-		}
+		authorize(req)
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("is minos running? %w", err)

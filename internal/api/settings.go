@@ -54,6 +54,10 @@ type configView struct {
 	API struct {
 		Listen   string `json:"listen"`
 		TokenSet bool   `json:"token_set"`
+		// PasswordSet and TOTPEnabled describe the web login; the hash and
+		// secrets themselves are never served.
+		PasswordSet bool `json:"password_set"`
+		TOTPEnabled bool `json:"totp_enabled"`
 	} `json:"api"`
 	UpdateCheck bool `json:"update_check"`
 	// LogLevel is the saved application log level ("" = the -log-level flag's).
@@ -115,6 +119,8 @@ func viewOf(c *config.Config) configView {
 	}
 	v.API.Listen = c.API.Listen
 	v.API.TokenSet = c.API.Token != ""
+	v.API.PasswordSet = c.API.PasswordHash != ""
+	v.API.TOTPEnabled = c.API.TOTPSecret != ""
 	v.UpdateCheck = c.UpdateCheck
 	v.LogLevel = c.LogLevel
 	v.Notifications.WebhookURL = c.Notifications.WebhookURL

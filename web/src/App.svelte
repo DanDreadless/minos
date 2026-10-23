@@ -20,15 +20,23 @@
 
   let status: Status | null = null;
   let updateInfo: UpdateInfo | null = null;
-  let needsToken = false;
+  // Gate is the sign-in screen to show instead of the app: the API token, or
+  // the password (and an authenticator code when needCode).
+  let gate: '' | 'token' | 'password' = '';
   let tokenInput = '';
+  let passwordInput = '';
+  let codeInput = '';
+  let needCode = false;
+  let gateError = '';
+  let signingIn = false;
+  $: needsToken = gate !== '';
   let fatalError = '';
   let pollTimer: ReturnType<typeof setInterval> | null = null;
 
   async function refresh(): Promise<void> {
     try {
       status = await api.status();
-      needsToken = false;
+      gate = '';
       fatalError = '';
       // Fetch the actionable upgrade guidance once an update is flagged.
       if (status.update_available && !updateInfo) {
@@ -36,7 +44,10 @@
       }
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        needsToken = true;
+        if (!gate) {
+          const auth = await api.authStatus().catch(() => null);
+          gate = auth?.password_set ? 'password' : 'token';
+        }
       } else {
         fatalError = e instanceof Error ? e.message : String(e);
       }
@@ -47,6 +58,30 @@
     setToken(tokenInput.trim());
     tokenInput = '';
     await refresh();
+  }
+
+  async function submitPassword(): Promise<void> {
+    signingIn = true;
+    gateError = '';
+    try {
+      await api.login(passwordInput, codeInput.trim());
+      passwordInput = '';
+      codeInput = '';
+      needCode = false;
+      await refresh();
+    } catch (e) {
+      if (e instanceof ApiError && e.needCode) {
+        // Keep the password; a code is all that is missing (or was wrong).
+        if (needCode) gateError = e.message;
+        needCode = true;
+        codeInput = '';
+      } else {
+        gateError = e instanceof Error ? e.message : String(e);
+        passwordInput = '';
+      }
+    } finally {
+      signingIn = false;
+    }
   }
 
   async function copyCommand(): Promise<void> {
@@ -94,16 +129,63 @@
       <section class="token-gate">
         <img class="gate-logo" src="/logo.png" alt="" />
         <h1>{copy.appName}</h1>
-        <p>{copy.token.prompt}</p>
-        <form on:submit|preventDefault={submitToken}>
-          <input
-            type="password"
-            placeholder={copy.token.placeholder}
-            bind:value={tokenInput}
-            autocomplete="off"
-          />
-          <button type="submit" class="primary">{copy.token.submit}</button>
-        </form>
+        {#if gate === 'password'}
+          <p>{needCode ? copy.login.codePrompt : copy.login.prompt}</p>
+          <form class="login" on:submit|preventDefault={submitPassword}>
+            {#if !needCode}
+              <!-- svelte-ignore a11y-autofocus -->
+              <input
+                type="password"
+                placeholder={copy.login.password}
+                aria-label={copy.login.password}
+                bind:value={passwordInput}
+                autocomplete="current-password"
+                autofocus
+              />
+            {:else}
+              <!-- svelte-ignore a11y-autofocus -->
+              <input
+                class="code"
+                inputmode="numeric"
+                pattern="[0-9 ]*"
+                maxlength="7"
+                placeholder={copy.login.code}
+                aria-label={copy.login.code}
+                bind:value={codeInput}
+                autocomplete="one-time-code"
+                autofocus
+              />
+            {/if}
+            <button type="submit" class="primary" disabled={signingIn || (!needCode && !passwordInput)}>
+              {signingIn ? copy.login.signingIn : copy.login.submit}
+            </button>
+          </form>
+          {#if gateError}
+            <p class="gate-error" role="alert">{gateError}</p>
+          {/if}
+          {#if needCode}
+            <button
+              class="link"
+              on:click={() => {
+                needCode = false;
+                passwordInput = '';
+                gateError = '';
+              }}>{copy.login.back}</button
+            >
+          {/if}
+          <p class="gate-hint">{copy.login.forgot}</p>
+        {:else}
+          <p>{copy.token.prompt}</p>
+          <form on:submit|preventDefault={submitToken}>
+            <input
+              type="password"
+              placeholder={copy.token.placeholder}
+              bind:value={tokenInput}
+              autocomplete="off"
+            />
+            <button type="submit" class="primary">{copy.token.submit}</button>
+          </form>
+        {/if}
       </section>
     {:else}
       {#if fatalError}
@@ -205,6 +287,34 @@
     display: flex;
     gap: 0.5rem;
     justify-content: center;
+  }
+
+  .token-gate input {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .token-gate .code {
+    letter-spacing: 0.3em;
+    text-align: center;
+  }
+
+  .gate-error {
+    color: var(--blocked);
+  }
+
+  .gate-hint {
+    margin-top: 2rem;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  .token-gate .link {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    margin-top: 0.5rem;
   }
 
   .fatal {

@@ -22,6 +22,7 @@ import (
 	"minos/internal/acme"
 	"minos/internal/api"
 	"minos/internal/applog"
+	"minos/internal/auth"
 	"minos/internal/clients"
 	"minos/internal/config"
 	"minos/internal/dnsproxy"
@@ -379,21 +380,37 @@ func setupLogging(level string) (*applog.Ring, *slog.LevelVar) {
 
 // --- client subcommands: talk to a running instance over its API ---
 
-func apiClient(cfgPath string) (base string, token string, err error) {
+// apiClient is the running instance's address and a function that
+// authorizes a request to it: the API token when there is one, otherwise —
+// with only a password set — a session minted from the config's session
+// key. Whoever can read the config file already holds every secret in it,
+// so the CLI needs no separate credential.
+func apiClient(cfgPath string) (base string, authorize func(*http.Request), err error) {
 	store, err := config.Open(cfgPath)
 	if err != nil {
-		return "", "", err
+		return "", nil, err
 	}
 	cfg := store.Get()
 	host := cfg.API.Listen
 	if host[0] == ':' {
 		host = "127.0.0.1" + host
 	}
-	return "http://" + host, cfg.API.Token, nil
+	a := cfg.API
+	authorize = func(req *http.Request) {
+		switch {
+		case a.Token != "":
+			req.Header.Set("X-Api-Token", a.Token)
+		case a.PasswordHash != "" && a.SessionKey != "":
+			if s, err := auth.IssueSession(a.SessionKey, time.Now()); err == nil {
+				req.AddCookie(&http.Cookie{Name: "minos_session", Value: s})
+			}
+		}
+	}
+	return "http://" + host, authorize, nil
 }
 
 func apiDo(cfgPath, method, path string, body any) (map[string]any, error) {
-	base, token, err := apiClient(cfgPath)
+	base, authorize, err := apiClient(cfgPath)
 	if err != nil {
 		return nil, err
 	}
@@ -409,9 +426,7 @@ func apiDo(cfgPath, method, path string, body any) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if token != "" {
-		req.Header.Set("X-Api-Token", token)
-	}
+	authorize(req)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
