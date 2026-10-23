@@ -435,7 +435,14 @@ not-blocking state also shows in the top bar.
   to its members and obey the group's schedule.
 - **Blocking → Allowed** and **Blocking → Blocked** — your own rules,
   which beat the blocklists: domains you always allow or always block
-  (with their subdomains), and whole services, for everyone or one group. The **Allowed services** card fixes a
+  (with their subdomains), and whole services, for everyone or one group.
+  An entry written `/pattern/` is a **regex rule** — `/^ad[0-9]*\./`
+  blocks ad1.example.com, ad22.example.net and so on — matched
+  case-insensitively anywhere in the name. Regex rules also work in group
+  lists and AdBlock-syntax blocklists, and Pi-hole and AdGuard Home
+  imports bring theirs across. They use RE2, so a rule can never slow
+  matching down catastrophically; backreferences, lookaround and Pi-hole's
+  `;querytype=` option are not supported and are skipped with a reason. The **Allowed services** card fixes a
   streaming app a blocklist broke with one checkbox: allowing Netflix,
   Disney+, Prime Video (or any catalog service) always allows every domain
   it needs — including the playback and sign-in hosts on shared CDNs that

@@ -263,8 +263,15 @@ export const docs: Section[] = [
       'Your custom services: define your own bundle of domains, then block or allow it like any service.',
     ],
     settings: [
-      { label: 'Allowed domains', key: 'blocking.allowlist', effect: 'Always allowed, with subdomains.', applies: 'live', where: 'Blocking → Allowed' },
-      { label: 'Blocked domains', key: 'blocking.denylist', effect: 'Always blocked, with subdomains.', applies: 'live', where: 'Blocking → Blocked' },
+      {
+        label: 'Allowed domains',
+        key: 'blocking.allowlist',
+        effect:
+          'Always allowed, with subdomains. An entry written /pattern/ is a regex rule (case-insensitive, matched anywhere in the name): an allow regex beats any block.',
+        applies: 'live',
+        where: 'Blocking → Allowed',
+      },
+      { label: 'Blocked domains', key: 'blocking.denylist', effect: 'Always blocked, with subdomains. An entry written /pattern/ is a regex rule, e.g. /^ad[0-9]*\\./ — checked after the exact rules, so an allowed domain still wins. Regexes use RE2 (no backreferences or lookaround); up to 1000 per list.', applies: 'live', where: 'Blocking → Blocked' },
       { label: 'Blocked services', key: 'blocking.services', effect: 'Services blocked for everyone.', applies: 'live', where: 'Blocking → Allowed / Blocked → Services' },
       { label: 'Allowed services', key: 'blocking.allowed_services', effect: 'Services allowed for everyone; allowing beats blocking.', applies: 'live', where: 'Blocking → Allowed / Blocked → Services' },
       {

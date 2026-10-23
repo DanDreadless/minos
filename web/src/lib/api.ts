@@ -593,10 +593,10 @@ export const api = {
   denylist: () => request<string[]>('GET', '/api/denylist'),
   pardon: (domain: string) => request<unknown>('POST', '/api/allowlist', { domain }),
   unpardon: (domain: string) =>
-    request<unknown>('DELETE', `/api/allowlist/${encodeURIComponent(domain)}`),
+    request<unknown>('DELETE', `/api/allowlist?domain=${encodeURIComponent(domain)}`),
   sentence: (domain: string) => request<unknown>('POST', '/api/denylist', { domain }),
   unsentence: (domain: string) =>
-    request<unknown>('DELETE', `/api/denylist/${encodeURIComponent(domain)}`),
+    request<unknown>('DELETE', `/api/denylist?domain=${encodeURIComponent(domain)}`),
 
   clients: () => request<Device[]>('GET', '/api/clients'),
   // key is the device's MAC when it has one (so the assignment follows it
