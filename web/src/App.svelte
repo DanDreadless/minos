@@ -2,18 +2,17 @@
   import { onDestroy, onMount } from 'svelte';
   import { api, ApiError, setToken, type Status, type UpdateInfo } from './lib/api';
   import ConfirmHost from './lib/components/ConfirmHost.svelte';
-  import HeaderBar from './lib/components/HeaderBar.svelte';
+  import CheckDialog from './lib/components/CheckDialog.svelte';
   import Nav from './lib/components/Nav.svelte';
   import { copy } from './lib/copy';
   import { confirmDialog } from './lib/confirm';
   import { leaveGuarded, route, setLeaveGuard } from './lib/router';
   import { notify, notifyError, toasts } from './lib/toast';
-  import Blocklists from './pages/Blocklists.svelte';
+  import Blocking from './pages/Blocking.svelte';
   import Dashboard from './pages/Dashboard.svelte';
   import DevicePage from './pages/Device.svelte';
   import Devices from './pages/Devices.svelte';
   import QueryLog from './pages/QueryLog.svelte';
-  import AllowBlock from './pages/AllowBlock.svelte';
   import Help from './pages/Help.svelte';
   import LocalDNS from './pages/LocalDNS.svelte';
   import Logs from './pages/Logs.svelte';
@@ -88,7 +87,7 @@
 
 <div class="shell">
   <aside>
-    <Nav {status} />
+    <Nav {status} onStatusChange={refresh} />
   </aside>
   <main class:fill={!needsToken && ($route === 'querylog' || $route === 'logs')}>
     {#if needsToken}
@@ -107,7 +106,6 @@
         </form>
       </section>
     {:else}
-      <HeaderBar {status} onStatusChange={refresh} />
       {#if fatalError}
         <p class="fatal" role="alert">{fatalError}</p>
       {/if}
@@ -132,10 +130,8 @@
         <Devices />
       {:else if $route === 'device'}
         <DevicePage />
-      {:else if $route === 'lists'}
-        <Blocklists />
-      {:else if $route === 'domains'}
-        <AllowBlock />
+      {:else if $route === 'lists' || $route === 'domains'}
+        <Blocking />
       {:else if $route === 'local'}
         <LocalDNS />
       {:else if $route === 'logs'}
@@ -150,6 +146,7 @@
 </div>
 
 <ConfirmHost />
+<CheckDialog />
 
 <div class="toasts" aria-live="polite">
   {#each $toasts as t (t.id)}

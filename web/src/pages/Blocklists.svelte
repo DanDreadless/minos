@@ -3,7 +3,6 @@
   import { api, type ListStats, type ListStatus, type Service } from '../lib/api';
   import { blocklistPresets, blocklistTiers, type BlocklistPreset } from '../lib/blocklists';
   import { confirmDialog } from '../lib/confirm';
-  import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
   import { fmtAgo } from '../lib/format';
   import { docketHref } from '../lib/router';
@@ -225,7 +224,7 @@
   });
 </script>
 
-<h1>{copy.lists.title} <small>{copy.lists.subtitle}</small><HelpLink section="blocklists" /></h1>
+<p class="intro">{copy.lists.subtitle}</p>
 
 <div class="actions">
   <button class="primary" on:click={refreshAll} disabled={busy}>
@@ -430,12 +429,6 @@
 </section>
 
 <style>
-  h1 small {
-    color: var(--text-dim);
-    font-size: 0.85rem;
-    margin-left: 0.5rem;
-  }
-
   .interval {
     display: inline-flex;
     align-items: center;
@@ -449,6 +442,12 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
+  }
+
+  .intro {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    margin: 0 0 0.9rem;
   }
 
   .actions {

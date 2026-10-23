@@ -3,16 +3,17 @@
   import type { Status } from '../api';
   import { copy } from '../copy';
   import { bootOf, hasUnseen, logSeen } from '../logseen';
+  import StatusControl from './StatusControl.svelte';
   import { hrefFor, route, type Route } from '../router';
 
   export let status: Status | null;
+  export let onStatusChange: () => Promise<void>;
 
   const items: { key: Route; label: string; hint: string }[] = [
     { key: 'dashboard', ...copy.nav.dashboard },
     { key: 'querylog', ...copy.nav.querylog },
     { key: 'devices', ...copy.nav.devices },
     { key: 'lists', ...copy.nav.lists },
-    { key: 'domains', ...copy.nav.domains },
     { key: 'local', ...copy.nav.local },
     { key: 'logs', ...copy.nav.logs },
     { key: 'settings', ...copy.nav.settings },
@@ -53,6 +54,13 @@
     <span class="bars" aria-hidden="true"><span></span><span></span><span></span></span>
   </button>
   <img class="topbar-wordmark" src="/banner.png" alt={copy.appName} />
+  {#if status && (status.paused || status.rules === 0)}
+    <!-- The drawer hides the full status on phones; a paused or
+         not-blocking state must still be visible without opening it. -->
+    <button class="topbar-state" class:off={!status.paused} on:click={toggleDrawer}>
+      {status.paused ? copy.pause.headerPill : copy.header.notBlockingShort}
+    </button>
+  {/if}
 </div>
 
 {#if open}
@@ -71,7 +79,9 @@
       <li>
         <a
           href={hrefFor[item.key]}
-          class:active={$route === item.key || ($route === 'device' && item.key === 'devices')}
+          class:active={$route === item.key ||
+            ($route === 'device' && item.key === 'devices') ||
+            ($route === 'domains' && item.key === 'lists')}
           title={item.hint}
           on:click={closeDrawer}
         >
@@ -88,6 +98,7 @@
     {/each}
   </ul>
   <div class="foot">
+    <StatusControl {status} {onStatusChange} />
     {#if status}
       <span class="version">
         v{status.version}
@@ -206,9 +217,23 @@
     padding: 1rem 1.25rem;
     border-top: 1px solid var(--border);
     display: flex;
-    align-items: center;
-    gap: 0.6rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
     font-size: 0.75rem;
+  }
+
+  .topbar-state {
+    margin-left: auto;
+    padding: 0.1rem 0.55rem;
+    font-size: 0.72rem;
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .topbar-state.off {
+    border-color: var(--blocked);
+    color: var(--blocked);
   }
 
   .version {
