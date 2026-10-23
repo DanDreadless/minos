@@ -44,6 +44,11 @@ type SourceStatus struct {
 	// LastAttempt is the most recent fetch attempt, successful or not.
 	LastAttempt         time.Time `json:"last_attempt,omitempty"`
 	ConsecutiveFailures int       `json:"consecutive_failures,omitempty"`
+	// ServedBy is the mirror URL the copy in force came from (empty = the
+	// primary); PrimaryError is why the primary was passed over.
+	ServedBy     string   `json:"served_by,omitempty"`
+	PrimaryError string   `json:"primary_error,omitempty"`
+	Mirrors      []string `json:"mirrors,omitempty"`
 
 	failKind failKind
 	hasBody  bool
@@ -153,6 +158,7 @@ func (m *Manager) loadFromDisk() bool {
 		m.meta[src.Name] = meta
 		st := m.ensureStatus(src)
 		st.LastRefresh = meta.FetchedAt
+		st.ServedBy = meta.Source
 		m.mu.Unlock()
 		loaded++
 	}
@@ -464,6 +470,8 @@ func (m *Manager) Status() []SourceStatus {
 		} else {
 			s = SourceStatus{Name: src.Name, URL: src.URL, Format: src.Format}
 		}
+		s.URL = src.URL
+		s.Mirrors = append([]string(nil), src.Mirrors...)
 		s.Enabled = src.Enabled
 		s.Action = src.actionLabel()
 		s.Audit = src.Audit

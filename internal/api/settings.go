@@ -313,6 +313,8 @@ type listSourceBody struct {
 	Enabled *bool   `json:"enabled"`
 	// Audit compiles the list for "would block" logging without enforcement.
 	Audit *bool `json:"audit"`
+	// Mirrors replaces the list's fallback URLs (an empty array clears them).
+	Mirrors *[]string `json:"mirrors"`
 }
 
 func (s *Server) handleAddList(w http.ResponseWriter, r *http.Request) {
@@ -334,6 +336,9 @@ func (s *Server) handleAddList(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Audit != nil {
 		src.Audit = *body.Audit
+	}
+	if body.Mirrors != nil {
+		src.Mirrors = append([]string(nil), (*body.Mirrors)...)
 	}
 	allow := false
 	if body.Action != nil {
@@ -396,6 +401,9 @@ func (s *Server) handleUpdateList(w http.ResponseWriter, r *http.Request) {
 				}
 				if body.Audit != nil {
 					src.Audit = *body.Audit
+				}
+				if body.Mirrors != nil {
+					src.Mirrors = append([]string(nil), (*body.Mirrors)...)
 				}
 				if body.Action != nil {
 					// Moving between block and allow means moving the

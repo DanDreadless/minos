@@ -548,3 +548,30 @@ func TestOpenFallsBackToDefaultUpstreamsWhenNoneSurvive(t *testing.T) {
 		t.Errorf("upstreams = %+v, want the defaults", s.Get().DNS.Upstreams)
 	}
 }
+
+func TestListMirrorsValidatedAndDeepCopied(t *testing.T) {
+	for _, bad := range [][]string{
+		{"ftp://mirror.example/l.txt"},
+		{"not a url"},
+		{"https://a.example/1", "https://a.example/2", "https://a.example/3", "https://a.example/4", "https://a.example/5", "https://a.example/6"},
+	} {
+		c := Default()
+		c.Lists.Sources[0].Mirrors = bad
+		if err := c.Validate(); err == nil {
+			t.Errorf("mirrors %v accepted", bad)
+		}
+	}
+	c := Default()
+	c.Lists.Sources[0].Mirrors = []string{c.Lists.Sources[0].URL}
+	if err := c.Validate(); err == nil {
+		t.Error("a mirror equal to the list's own url was accepted")
+	}
+
+	c = Default()
+	c.Lists.Sources[0].Mirrors = []string{"https://mirror.example/l.txt"}
+	cl := c.Clone()
+	cl.Lists.Sources[0].Mirrors[0] = "https://changed.example/l.txt"
+	if c.Lists.Sources[0].Mirrors[0] != "https://mirror.example/l.txt" {
+		t.Error("Clone shares the Mirrors slice between snapshots")
+	}
+}

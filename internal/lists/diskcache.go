@@ -35,6 +35,9 @@ type cacheMeta struct {
 	ETag         string    `json:"etag,omitempty"`
 	LastModified string    `json:"last_modified,omitempty"`
 	FetchedAt    time.Time `json:"fetched_at"`
+	// Source is the mirror URL that served this body; empty = the primary.
+	// Validators are only ever sent back to the URL that issued them.
+	Source string `json:"source,omitempty"`
 }
 
 func newDiskCache(dir string) (*diskCache, error) {
@@ -103,6 +106,9 @@ func (c *diskCache) touch(url string, meta cacheMeta) error {
 		return fmt.Errorf("touch list cache: no entry for %s", url)
 	}
 	meta.URL, meta.SHA256 = url, prev.SHA256
+	if meta.Source == "" {
+		meta.Source = prev.Source
+	}
 	if meta.ETag == "" {
 		meta.ETag = prev.ETag
 	}
