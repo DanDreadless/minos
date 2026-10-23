@@ -16,6 +16,16 @@
   let history: LogEntry[] = [];
   let historyLoading = false;
   let historyDone = false;
+  // historyStatus says what `displayed` actually is, so a partial view is
+  // never presented as a complete one. 'failed' (timeout or error) shows the
+  // ring's matches with the reason, instead of a toast over results that
+  // silently looked complete.
+  let historyStatus: 'idle' | 'loading' | 'done' | 'failed' = 'idle';
+  let historyError = '';
+  // One controller per search: a new search aborts the one in flight, so the
+  // newest query always wins. The old code skipped any search started while
+  // one was running — typing during a slow scan did nothing until it ended.
+  let historyCtrl: AbortController | null = null;
   let search = '';
   // clientFilter holds a device's exact IP(s) when drilled in from Devices or
   // the Tribunal — whole-address matching, distinct from the substring search.
@@ -59,36 +69,63 @@
   // filtering the live ring when history is empty (ephemeral mode, where the
   // ring already backs the dashboard too, or simply no persisted matches).
   $: displayed = !hasFilter ? live : history.length ? history : live.filter(clientMatch);
+  // Matches shown came only from the live ring (the last few hundred
+  // queries), not the persisted history — say so.
+  $: recentOnly = hasFilter && history.length === 0 && displayed.length > 0;
 
   async function fetchHistory(reset: boolean): Promise<void> {
-    if (historyLoading) return;
+    if (reset) {
+      historyCtrl?.abort();
+    } else if (historyLoading) {
+      return; // "Load older" while a page is already coming
+    }
+    const ctrl = new AbortController();
+    historyCtrl = ctrl;
     historyLoading = true;
+    historyStatus = 'loading';
+    historyError = '';
     try {
       const before =
         !reset && history.length ? new Date(history[history.length - 1].time).getTime() : undefined;
-      const rows = await api.querylogHistory({
-        q: search.trim(),
-        client: clientFilter.join(','),
-        verdict: verdictFilter === 'would_block' ? 'all' : verdictFilter,
-        would_block: verdictFilter === 'would_block',
-        list: listFilter,
-        dnssec: dnssecFilter,
-        before,
-        limit: HISTORY_PAGE,
-      });
+      const rows = await api.querylogHistory(
+        {
+          q: search.trim(),
+          client: clientFilter.join(','),
+          verdict: verdictFilter === 'would_block' ? 'all' : verdictFilter,
+          would_block: verdictFilter === 'would_block',
+          list: listFilter,
+          dnssec: dnssecFilter,
+          before,
+          limit: HISTORY_PAGE,
+        },
+        ctrl.signal,
+      );
       history = reset ? rows : [...history, ...rows];
       historyDone = rows.length < HISTORY_PAGE;
+      historyStatus = 'done';
     } catch (e) {
-      notifyError(e);
+      if (ctrl.signal.aborted) return; // superseded; the newer search owns the state
+      historyStatus = 'failed';
+      historyError = e instanceof Error ? e.message : String(e);
     } finally {
-      historyLoading = false;
+      if (historyCtrl === ctrl) {
+        historyLoading = false;
+        historyCtrl = null;
+      }
     }
   }
 
   function refreshHistory(): void {
     history = [];
     historyDone = false;
-    if (hasFilter) void fetchHistory(true);
+    if (hasFilter) {
+      void fetchHistory(true);
+    } else {
+      historyCtrl?.abort();
+      historyCtrl = null;
+      historyLoading = false;
+      historyStatus = 'idle';
+    }
   }
 
   function clearClientFilter(): void {
@@ -247,14 +284,36 @@
     </span>
   {/if}
   <span class="count">
-    {displayed.length} shown{#if hasFilter && history.length}
-      <span class="scope">· searching history</span>{/if}
+    {displayed.length} shown{#if hasFilter}
+      <span class="scope">
+        · {history.length
+          ? copy.docket.scopeHistory
+          : historyStatus === 'loading'
+            ? copy.docket.scopeRecentSearching
+            : historyStatus === 'failed'
+              ? copy.docket.scopeRecentFailed
+              : copy.docket.scopeRecent}
+      </span>{/if}
   </span>
 </div>
 
+{#if hasFilter && historyStatus === 'failed'}
+  <p class="search-failed" role="alert">
+    {copy.docket.searchFailed(historyError, recentOnly)}
+  </p>
+{/if}
+
 {#if displayed.length === 0}
-  <p class="empty">{historyLoading ? 'Searching…' : copy.docket.empty}</p>
-  {#if !historyLoading && search.trim() !== ''}
+  <p class="empty">
+    {hasFilter
+      ? historyStatus === 'loading'
+        ? copy.docket.searching
+        : historyStatus === 'failed'
+          ? copy.docket.noRecentMatches
+          : copy.docket.noMatches
+      : copy.docket.empty}
+  </p>
+  {#if hasFilter && historyStatus === 'done' && search.trim() !== ''}
     <p class="empty search-hint">{copy.docket.searchScopeHint}</p>
   {/if}
 {:else}
@@ -412,6 +471,16 @@
   .empty {
     color: var(--text-dim);
     font-style: italic;
+  }
+
+  .search-failed {
+    flex: none;
+    margin: 0 0 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--blocked);
+    border-radius: 4px;
+    color: var(--blocked);
+    font-size: 0.85rem;
   }
 
   .search-hint {
