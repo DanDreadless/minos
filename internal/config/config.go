@@ -313,6 +313,11 @@ type ListSource struct {
 	// because a mirror can lag and must not replace a fresher copy. An
 	// additive key: an older Minos ignores it and just uses the primary.
 	Mirrors []string `yaml:"mirrors,omitempty"`
+	// Headers are extra request headers for the primary URL only — e.g. an
+	// abuse.ch `Auth-Key` for a keyed feed. They are credentials: set in the
+	// config file, never returned by the API, never sent to a mirror, and
+	// stripped from any redirect to another host. Additive key.
+	Headers map[string]string `yaml:"headers,omitempty"`
 }
 
 type ListsConfig struct {
@@ -529,6 +534,38 @@ func (c *Config) Clone() *Config {
 	return &out
 }
 
+// reservedListHeaders are set by Minos itself (or by the transport) and may
+// not be overridden: conditional-request validators, identification, and
+// framing headers whose override could corrupt the exchange.
+var reservedListHeaders = map[string]bool{
+	"host": true, "user-agent": true, "if-none-match": true, "if-modified-since": true,
+	"content-length": true, "transfer-encoding": true, "connection": true,
+}
+
+func notHeaderNameRune(r rune) bool {
+	isName := r == '-' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+	return !isName
+}
+
+func validateListHeaders(h map[string]string) error {
+	if len(h) > 10 {
+		return fmt.Errorf("at most 10, got %d", len(h))
+	}
+	for k, v := range h {
+		if k == "" || strings.IndexFunc(k, notHeaderNameRune) >= 0 {
+			return fmt.Errorf("%q is not a valid header name (letters, digits and dashes)", k)
+		}
+		if reservedListHeaders[strings.ToLower(k)] {
+			return fmt.Errorf("%q is set by Minos and cannot be overridden", k)
+		}
+		// CR/LF would let a value inject further headers.
+		if len(v) > 1024 || strings.ContainsAny(v, "\r\n\x00") {
+			return fmt.Errorf("%q: value must be at most 1024 characters, on one line", k)
+		}
+	}
+	return nil
+}
+
 // cloneSources deep-copies list sources: Mirrors is a slice, and a shallow
 // copy would let one config snapshot's edit show through in another.
 func cloneSources(in []ListSource) []ListSource {
@@ -539,6 +576,12 @@ func cloneSources(in []ListSource) []ListSource {
 	for i, s := range in {
 		out[i] = s
 		out[i].Mirrors = append([]string(nil), s.Mirrors...)
+		if s.Headers != nil {
+			out[i].Headers = make(map[string]string, len(s.Headers))
+			for k, v := range s.Headers {
+				out[i].Headers[k] = v
+			}
+		}
 	}
 	return out
 }
@@ -846,6 +889,9 @@ func (c *Config) Validate() error {
 				if mu == s.URL {
 					return fmt.Errorf("%s[%d].mirrors[%d]: is the list's own url", key, i, j)
 				}
+			}
+			if err := validateListHeaders(s.Headers); err != nil {
+				return fmt.Errorf("%s[%d].headers: %w", key, i, err)
 			}
 			if len(s.Mirrors) > 5 {
 				return fmt.Errorf("%s[%d].mirrors: at most 5, got %d", key, i, len(s.Mirrors))

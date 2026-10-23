@@ -342,6 +342,12 @@ always beats deny.
   copy in force is stale — never for a passing blip, because a mirror can
   lag its primary. `PUT` with `"mirrors": []` clears them. Catalog entries
   subscribe with their verified mirrors.
+- Custom request headers (`headers:` in the config file, e.g. an abuse.ch
+  `Auth-Key`) are credentials and are **not** part of the API: they are
+  never returned (`has_headers: true` says a list has some), never sent to
+  a mirror, and stripped from a redirect to another host. A `PUT` that
+  moves such a list's `url` to a different host is refused with 400 — edit
+  the config file for that.
 - `PUT /api/lists/{name}` — change any of `url`, `format`, `action`,
   `audit`, `enabled`, `mirrors`; changing `action` moves the list between `sources` and
   `allow_sources`

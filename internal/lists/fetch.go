@@ -89,12 +89,15 @@ type fetchResult struct {
 // fetch downloads one list with a hard size cap and timeout. With validators
 // in prev it asks conditionally, so an unchanged list costs a 304 instead of
 // the whole download — most refreshes, for most lists.
-func (m *Manager) fetch(ctx context.Context, url string, prev cacheMeta) (fetchResult, error) {
+func (m *Manager) fetch(ctx context.Context, url string, prev cacheMeta, headers map[string]string) (fetchResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fetchResult{}, &fetchError{kind: failRetired, err: fmt.Errorf("build request: %w", err)}
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	req.Header.Set("User-Agent", m.ua)
 	if prev.ETag != "" {
@@ -125,6 +128,22 @@ func (m *Manager) fetch(ctx context.Context, url string, prev cacheMeta) (fetchR
 	}
 	res.body = body
 	return res, nil
+}
+
+// stripCrossHostHeaders is the fetch client's redirect policy. Go strips
+// Authorization and Cookie on a cross-domain redirect but forwards every
+// other header — so a list's custom credential (an `Auth-Key`) would follow
+// a redirect anywhere. On a change of host only the User-Agent survives.
+func stripCrossHostHeaders(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	if req.URL.Host != via[0].URL.Host {
+		ua := req.Header.Get("User-Agent")
+		req.Header = http.Header{}
+		req.Header.Set("User-Agent", ua)
+	}
+	return nil
 }
 
 func classifyStatus(resp *http.Response) *fetchError {
@@ -160,9 +179,9 @@ func parseRetryAfter(v string) time.Duration {
 // fetchWithRetry retries transient failures a couple of times inside one
 // refresh, so a blip doesn't cost a whole retry cycle. Permanent ones
 // (retired, unauthorized) return at once.
-func (m *Manager) fetchWithRetry(ctx context.Context, url string, prev cacheMeta) (fetchResult, error) {
+func (m *Manager) fetchWithRetry(ctx context.Context, url string, prev cacheMeta, headers map[string]string) (fetchResult, error) {
 	for attempt := 0; ; attempt++ {
-		res, err := m.fetch(ctx, url, prev)
+		res, err := m.fetch(ctx, url, prev, headers)
 		if err == nil || kindOf(err) != failTransient || attempt >= len(attemptBackoff) {
 			return res, err
 		}
@@ -262,14 +281,16 @@ func (m *Manager) refreshSource(ctx context.Context, src annotated) {
 		prev = cacheMeta{} // no body to fall back on: must download it
 	}
 
-	res, err := m.fetchWithRetry(ctx, src.URL, validatorsFor("", prev))
+	res, err := m.fetchWithRetry(ctx, src.URL, validatorsFor("", prev), src.Headers)
 	if err == nil && !res.notModified {
 		err = m.vet(src, res.body, prevRules)
 	}
 	servedBy, primaryErr := "", err
 	if err != nil && len(src.Mirrors) > 0 && m.mirrorsAllowed(src, err, have) {
 		for _, mu := range src.Mirrors {
-			r, e := m.fetchWithRetry(ctx, mu, validatorsFor(mu, prev))
+			// A mirror never sees the primary's headers: they are credentials
+			// for the primary's publisher.
+			r, e := m.fetchWithRetry(ctx, mu, validatorsFor(mu, prev), nil)
 			if e == nil && !r.notModified {
 				e = m.vet(src, r.body, prevRules)
 			}

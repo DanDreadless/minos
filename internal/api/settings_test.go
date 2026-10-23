@@ -444,3 +444,39 @@ func TestListStatsEndpoint(t *testing.T) {
 		t.Errorf("hours=9999: status = %d, want 400", rec.Code)
 	}
 }
+
+// A list's custom headers are a credential set in the config file: the API
+// must never return it, and must not let a caller move it to another host.
+func TestListHeadersNeverLeaveTheConfigFile(t *testing.T) {
+	s, store := newTestServer(t, "")
+	if err := store.Update(func(c *config.Config) error {
+		c.Lists.Sources = []config.ListSource{{
+			Name: "keyed", URL: "http://127.0.0.1:1/list.txt", Format: "plain",
+			Headers: map[string]string{"Auth-Key": "s3cret-value"},
+		}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r := s.Router()
+	for _, path := range []string{"/api/lists", "/api/config"} {
+		rec := doJSON(t, r, "GET", path, "", nil)
+		if strings.Contains(rec.Body.String(), "s3cret-value") {
+			t.Errorf("GET %s leaked the header value", path)
+		}
+	}
+	if rec := doJSON(t, r, "GET", "/api/lists", "", nil); !strings.Contains(rec.Body.String(), `"has_headers":true`) {
+		t.Errorf("GET /api/lists does not flag has_headers: %s", rec.Body)
+	}
+	rec := doJSON(t, r, "PUT", "/api/lists/keyed", `{"url":"https://collector.example/x"}`, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("moving a keyed list to another host: status %d, want 400", rec.Code)
+	}
+	if got := store.Get().Lists.Sources[0].URL; got != "http://127.0.0.1:1/list.txt" {
+		t.Errorf("url changed to %q", got)
+	}
+	// Same host, new path: allowed — the credential stays with its publisher.
+	if rec := doJSON(t, r, "PUT", "/api/lists/keyed", `{"url":"http://127.0.0.1:1/v2.txt"}`, nil); rec.Code != http.StatusOK {
+		t.Errorf("same-host url change: status %d, want 200: %s", rec.Code, rec.Body)
+	}
+}

@@ -49,6 +49,9 @@ type SourceStatus struct {
 	ServedBy     string   `json:"served_by,omitempty"`
 	PrimaryError string   `json:"primary_error,omitempty"`
 	Mirrors      []string `json:"mirrors,omitempty"`
+	// HasHeaders says the list sends custom request headers (set in the
+	// config file). The headers themselves are credentials and never leave it.
+	HasHeaders bool `json:"has_headers,omitempty"`
 
 	failKind failKind
 	hasBody  bool
@@ -104,7 +107,7 @@ func NewManager(engine *filter.Engine, store *config.Store) *Manager {
 		engine:      engine,
 		auditEngine: filter.NewEngine(),
 		store:       store,
-		client:      &http.Client{Timeout: fetchTimeout},
+		client:      &http.Client{Timeout: fetchTimeout, CheckRedirect: stripCrossHostHeaders},
 		ua:          userAgent,
 		cached:      make(map[string][]byte),
 		meta:        make(map[string]cacheMeta),
@@ -529,6 +532,7 @@ func (m *Manager) Status() []SourceStatus {
 		}
 		s.URL = src.URL
 		s.Mirrors = append([]string(nil), src.Mirrors...)
+		s.HasHeaders = len(src.Headers) > 0
 		s.Enabled = src.Enabled
 		s.Action = src.actionLabel()
 		s.Audit = src.Audit

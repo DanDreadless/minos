@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -373,6 +375,14 @@ func (s *Server) handleAddList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, s.lists.Status())
 }
 
+func hostOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Host)
+}
+
 func (s *Server) handleUpdateList(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	var body listSourceBody
@@ -390,6 +400,12 @@ func (s *Server) handleUpdateList(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				if body.URL != nil && *body.URL != src.URL {
+					// Headers are credentials for the URL's publisher, set in
+					// the config file; moving them to another host through
+					// the API would let any API caller collect them.
+					if len(src.Headers) > 0 && hostOf(*body.URL) != hostOf(src.URL) {
+						return fmt.Errorf("url: this list sends custom headers (set in the config file); change it to another host in the config file, not through the API")
+					}
 					src.URL = *body.URL
 					urlChanged = true
 				}

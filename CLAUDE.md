@@ -879,3 +879,14 @@ This is security software; hold it to that standard.
   `notifyAfterFailures` (3) consecutive failures so a Pi booting before its
   network never pages anyone, and no recovery event for a failure nobody
   was told about.
+- **List request headers are credentials** (fixed decisions, October
+  2026): `headers:` per source, config-file only (like ACME credentials —
+  export includes them because export is a restorable backup). Sent to the
+  **primary URL only**, never a mirror; the fetch client's `CheckRedirect`
+  (`stripCrossHostHeaders`) drops everything but User-Agent on a cross-host
+  redirect, because Go strips only Authorization/Cookie by itself — a test
+  proves it forwards custom headers otherwise. The API exposes only
+  `has_headers`, and refuses a `PUT` moving a headered list's URL to
+  another host (any API caller could otherwise collect the key). Names are
+  validated, Minos-owned headers (User-Agent, validators, framing) are
+  reserved, values may not contain CR/LF/NUL.

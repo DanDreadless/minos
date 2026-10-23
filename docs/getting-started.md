@@ -799,6 +799,14 @@ lists:
       url: https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
       format: hosts         # hosts | plain | adblock
       enabled: true
+      mirrors:              # optional fallbacks, used only if the main URL is
+        - https://cdn.jsdelivr.net/gh/StevenBlack/hosts@master/hosts  # gone or stale
+    - name: abuse.ch keyed feed
+      url: https://example.abuse.ch/feed.txt   # a feed that needs a key
+      format: hosts
+      enabled: true
+      headers:              # sent to this URL only — never to mirrors, never
+        Auth-Key: "your-key" # across a redirect to another host, never via the API
   allow_sources:            # subscribed allowlists: every entry is always
     - name: unbreak         # allowed, beating any blocklist — a pardon you
       url: https://example.com/commonly-white.txt   # subscribe to
