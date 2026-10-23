@@ -417,9 +417,9 @@ not-blocking state also shows in the top bar.
   a service only for some devices, or only at certain times, set it on a
   **group** on the Devices page instead — a group's blocked services apply
   to its members and obey the group's schedule.
-- **Blocking → Allow & Block** (your own allowed and blocked domains) — manage both lists, plus a
-  **Check a domain** tool that shows exactly which rule decides any name
-  before you ever query it. The **Allowed services** card fixes a
+- **Blocking → Allowed** and **Blocking → Blocked** — your own rules,
+  which beat the blocklists: domains you always allow or always block
+  (with their subdomains), and whole services, for everyone or one group. The **Allowed services** card fixes a
   streaming app a blocklist broke with one checkbox: allowing Netflix,
   Disney+, Prime Video (or any catalog service) always allows every domain
   it needs — including the playback and sign-in hosts on shared CDNs that
@@ -562,7 +562,7 @@ log like any other rule:
 - **Hardcoded DoH/DoT apps (blockable service).** The services catalog
   carries an **Encrypted DNS bypass** entry: the public DoH/DoT provider
   hostnames (Cloudflare, Google, Quad9, AdGuard, NextDNS, …) that apps and
-  smart TVs hardcode. Block it network-wide from Allow & Block, or — the sharp
+  smart TVs hardcode. Block it network-wide from Blocking → Blocked, or — the sharp
   use — only for a kids' group, on that group's schedule, like any other
   service. Devices that can't resolve `dns.google` fall back to the DNS
   you handed them: Minos.

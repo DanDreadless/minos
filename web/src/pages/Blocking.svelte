@@ -6,14 +6,14 @@
   import Blocklists from './Blocklists.svelte';
 
   // Everything that decides what is blocked, in one place: the subscribed
-  // lists, and your own allowed/blocked domains and services. Each tab keeps
-  // its own address (#/lists, #/domains), so existing links and
-  // notification taps still land on the right one.
+  // lists, what you always allow, and what you always block. Each tab has
+  // its own address (#/lists, #/allowed, #/blocked; the old #/domains opens
+  // Allowed), so links and notification taps land on the right one.
 </script>
 
 <h1>
   {copy.nav.lists.label} <small>{copy.nav.lists.hint}</small><HelpLink
-    section={$route === 'domains' ? 'allowblock' : 'blocklists'}
+    section={$route === 'lists' ? 'blocklists' : 'allowblock'}
   />
 </h1>
 
@@ -21,13 +21,18 @@
   <a role="tab" href="#/lists" class:active={$route === 'lists'} aria-selected={$route === 'lists'}
     >{copy.blocking.tabLists}</a
   >
-  <a role="tab" href="#/domains" class:active={$route === 'domains'} aria-selected={$route === 'domains'}
-    >{copy.blocking.tabRules}</a
+  <a role="tab" href="#/allowed" class:active={$route === 'allowed'} aria-selected={$route === 'allowed'}
+    >{copy.blocking.tabAllowed}</a
+  >
+  <a role="tab" href="#/blocked" class:active={$route === 'blocked'} aria-selected={$route === 'blocked'}
+    >{copy.blocking.tabBlocked}</a
   >
 </div>
 
-{#if $route === 'domains'}
-  <AllowBlock />
+{#if $route === 'allowed'}
+  <AllowBlock mode="allow" />
+{:else if $route === 'blocked'}
+  <AllowBlock mode="block" />
 {:else}
   <Blocklists />
 {/if}

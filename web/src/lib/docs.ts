@@ -252,27 +252,27 @@ export const docs: Section[] = [
   },
   {
     id: 'allowblock',
-    title: 'Blocking → Allow & Block',
-    page: '#/domains',
+    title: 'Blocking → Allowed and Blocked',
+    page: '#/allowed',
     summary:
       'Your own rules, which beat the blocklists: domains you always allow or always block, and whole services (every domain an app uses) in one move.',
     howto: [
-      'Check a domain to see whether it is blocked now and which rule decides.',
+      'Allowed and Blocked are separate tabs; each has your domains (as chips — × removes one) and the services for everyone or for one group.',
       'Allowed and blocked domains include their subdomains. An allowed domain beats any blocked domain or blocklist.',
       'Services: block or allow a whole service — for everyone, or for one group (choose it under "Services for"). Allowing a streaming service also allows the playback and sign-in hosts it needs.',
       'Your custom services: define your own bundle of domains, then block or allow it like any service.',
     ],
     settings: [
-      { label: 'Allowed domains', key: 'blocking.allowlist', effect: 'Always allowed, with subdomains.', applies: 'live', where: 'Blocking → Allow & Block' },
-      { label: 'Blocked domains', key: 'blocking.denylist', effect: 'Always blocked, with subdomains.', applies: 'live', where: 'Blocking → Allow & Block' },
-      { label: 'Blocked services', key: 'blocking.services', effect: 'Services blocked for everyone.', applies: 'live', where: 'Blocking → Allow & Block → Services' },
-      { label: 'Allowed services', key: 'blocking.allowed_services', effect: 'Services allowed for everyone; allowing beats blocking.', applies: 'live', where: 'Blocking → Allow & Block → Services' },
+      { label: 'Allowed domains', key: 'blocking.allowlist', effect: 'Always allowed, with subdomains.', applies: 'live', where: 'Blocking → Allowed' },
+      { label: 'Blocked domains', key: 'blocking.denylist', effect: 'Always blocked, with subdomains.', applies: 'live', where: 'Blocking → Blocked' },
+      { label: 'Blocked services', key: 'blocking.services', effect: 'Services blocked for everyone.', applies: 'live', where: 'Blocking → Allowed / Blocked → Services' },
+      { label: 'Allowed services', key: 'blocking.allowed_services', effect: 'Services allowed for everyone; allowing beats blocking.', applies: 'live', where: 'Blocking → Allowed / Blocked → Services' },
       {
         label: 'Your custom services',
         key: 'blocking.custom_services',
         effect: 'Your own service bundles.',
         applies: 'live',
-        where: 'Blocking → Allow & Block → Your custom services',
+        where: 'Blocking → Allowed / Blocked → Your custom services',
         fields: [
           { key: 'blocking.custom_services.name', effect: 'Its ID (derived from the label if not given).' },
           { key: 'blocking.custom_services.label', effect: 'Its display name.' },

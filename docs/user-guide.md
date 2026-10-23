@@ -14,7 +14,7 @@ immediately. "After restart" settings live only in `minos.yaml`; restart Minos a
 - [Query Log](#querylog)
 - [Devices](#devices)
 - [Blocking → Blocklists](#blocklists)
-- [Blocking → Allow & Block](#allowblock)
+- [Blocking → Allowed and Blocked](#allowblock)
 - [Local DNS](#localdns)
 - [Logs](#logs)
 - [Settings → DNS](#settings-dns)
@@ -114,22 +114,22 @@ The lists Minos blocks from, downloaded and kept up to date automatically. If a 
 
 <a id="allowblock"></a>
 
-## Blocking → Allow & Block
+## Blocking → Allowed and Blocked
 
 Your own rules, which beat the blocklists: domains you always allow or always block, and whole services (every domain an app uses) in one move.
 
-- Check a domain to see whether it is blocked now and which rule decides.
+- Allowed and Blocked are separate tabs; each has your domains (as chips — × removes one) and the services for everyone or for one group.
 - Allowed and blocked domains include their subdomains. An allowed domain beats any blocked domain or blocklist.
 - Services: block or allow a whole service — for everyone, or for one group (choose it under "Services for"). Allowing a streaming service also allows the playback and sign-in hosts it needs.
 - Your custom services: define your own bundle of domains, then block or allow it like any service.
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
-| Allowed domains<br><small>Blocking → Allow & Block</small> | `blocking.allowlist` | — | Always allowed, with subdomains. | at once |
-| Blocked domains<br><small>Blocking → Allow & Block</small> | `blocking.denylist` | — | Always blocked, with subdomains. | at once |
-| Blocked services<br><small>Blocking → Allow & Block → Services</small> | `blocking.services` | — | Services blocked for everyone. | at once |
-| Allowed services<br><small>Blocking → Allow & Block → Services</small> | `blocking.allowed_services` | — | Services allowed for everyone; allowing beats blocking. | at once |
-| Your custom services<br><small>Blocking → Allow & Block → Your custom services</small> | `blocking.custom_services` | — | Your own service bundles.<br>`name`: Its ID (derived from the label if not given).<br>`label`: Its display name.<br>`domains`: The domains it covers.<br>`allow_extra`: Extra hosts allowed only while the service is allowed.<br>`blocked`: Blocked for everyone.<br>`allowed`: Allowed for everyone. | at once |
+| Allowed domains<br><small>Blocking → Allowed</small> | `blocking.allowlist` | — | Always allowed, with subdomains. | at once |
+| Blocked domains<br><small>Blocking → Blocked</small> | `blocking.denylist` | — | Always blocked, with subdomains. | at once |
+| Blocked services<br><small>Blocking → Allowed / Blocked → Services</small> | `blocking.services` | — | Services blocked for everyone. | at once |
+| Allowed services<br><small>Blocking → Allowed / Blocked → Services</small> | `blocking.allowed_services` | — | Services allowed for everyone; allowing beats blocking. | at once |
+| Your custom services<br><small>Blocking → Allowed / Blocked → Your custom services</small> | `blocking.custom_services` | — | Your own service bundles.<br>`name`: Its ID (derived from the label if not given).<br>`label`: Its display name.<br>`domains`: The domains it covers.<br>`allow_extra`: Extra hosts allowed only while the service is allowed.<br>`blocked`: Blocked for everyone.<br>`allowed`: Allowed for everyone. | at once |
 
 <a id="localdns"></a>
 

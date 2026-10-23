@@ -2,16 +2,20 @@
   import { onMount } from 'svelte';
   import {
     api,
-    type CheckResult,
     type CustomService,
     type Group,
     type Service,
   } from '../lib/api';
   import CustomServiceForm from '../lib/components/CustomServiceForm.svelte';
   import ServiceShuttle from '../lib/components/ServiceShuttle.svelte';
+  import { checkOpen } from '../lib/check';
   import { confirmDialog } from '../lib/confirm';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
+
+  // Which tab this is: what you always allow, or what you always block.
+  // Both share one loaded state, so switching tabs is instant.
+  export let mode: 'allow' | 'block';
 
   let allowlist: string[] = [];
   let denylist: string[] = [];
@@ -24,9 +28,6 @@
   let scope = '';
   let newPardon = '';
   let newSentence = '';
-  let checkDomain = '';
-  let checkResult: CheckResult | null = null;
-  let checkError = '';
 
   async function load(): Promise<void> {
     try {
@@ -197,22 +198,6 @@
     }
   }
 
-  async function check(): Promise<void> {
-    checkResult = null;
-    checkError = '';
-    try {
-      checkResult = await api.check(checkDomain.trim());
-    } catch (e) {
-      checkError = e instanceof Error ? e.message : String(e);
-    }
-  }
-
-  function describeCheck(r: CheckResult): string {
-    if (r.verdict === 'blocked') return copy.domains.checkBlocked(r.list, r.rule);
-    if (r.rule) return copy.domains.checkAllowedByRule(r.rule);
-    return copy.domains.checkAllowed;
-  }
-
   async function addPardon(): Promise<void> {
     try {
       await api.pardon(newPardon.trim());
@@ -256,27 +241,52 @@
   onMount(() => void load());
 </script>
 
-<p class="intro">{copy.blocking.rulesIntro}</p>
+<div class="intro">
+  <p>{mode === 'allow' ? copy.blocking.allowIntro : copy.blocking.blockIntro}</p>
+  <button class="small" on:click={() => checkOpen.set(true)}>{copy.blocking.checkButton}</button>
+</div>
 
-<section class="card check">
-  <h2>{copy.domains.checkTitle} <small>{copy.domains.checkHint}</small></h2>
-  <form on:submit|preventDefault={check}>
-    <input placeholder={copy.domains.checkPlaceholder} bind:value={checkDomain} required />
-    <button type="submit" class="primary" disabled={!checkDomain.trim()}>
-      {copy.domains.checkButton}
-    </button>
-  </form>
-  {#if checkError}
-    <p class="check-result error">{checkError}</p>
-  {:else if checkResult}
-    <p class="check-result" class:blocked={checkResult.verdict === 'blocked'}>
-      <span class="domain">{checkResult.domain}</span> — {describeCheck(checkResult)}
-    </p>
+<section class="card">
+  <h2>
+    {mode === 'allow' ? copy.domains.pardonsTitle : copy.domains.sentencesTitle}
+    <span class="count">{(mode === 'allow' ? allowlist : denylist).length}</span>
+    <small>{mode === 'allow' ? copy.domains.pardonsHint : copy.domains.sentencesHint}</small>
+  </h2>
+  {#if mode === 'allow'}
+    <form on:submit|preventDefault={addPardon}>
+      <input placeholder={copy.domains.addPlaceholder} bind:value={newPardon} required />
+      <button type="submit" class="primary" disabled={!newPardon.trim()}>{copy.blocking.add}</button>
+    </form>
+  {:else}
+    <form on:submit|preventDefault={addSentence}>
+      <input placeholder={copy.domains.addPlaceholder} bind:value={newSentence} required />
+      <button type="submit" class="primary" disabled={!newSentence.trim()}>{copy.blocking.add}</button>
+    </form>
+  {/if}
+  {#if (mode === 'allow' ? allowlist : denylist).length === 0}
+    <p class="empty">{mode === 'allow' ? copy.domains.pardonsEmpty : copy.domains.sentencesEmpty}</p>
+  {:else}
+    <ul class="chips" class:block={mode === 'block'}>
+      {#each mode === 'allow' ? allowlist : denylist as d (d)}
+        <li>
+          <span class="domain">{d}</span>
+          <button
+            class="chip-x"
+            title={copy.blocking.removeDomain(d)}
+            aria-label={copy.blocking.removeDomain(d)}
+            on:click={() => (mode === 'allow' ? removePardon(d) : removeSentence(d))}>×</button
+          >
+        </li>
+      {/each}
+    </ul>
   {/if}
 </section>
 
-<section class="card services">
-  <h2>{copy.domains.servicesTitle} <small>{copy.domains.servicesHint}</small></h2>
+<section class="card">
+  <h2>
+    {mode === 'allow' ? copy.domains.pardonedServicesTitle : copy.domains.sentencedServicesTitle}
+    <small>{mode === 'allow' ? copy.blocking.allowServicesHint : copy.blocking.blockServicesHint}</small>
+  </h2>
 
   <div class="scope-row">
     <label>
@@ -288,52 +298,47 @@
         {/each}
       </select>
     </label>
+    <span class="note">
+      {copy.domains.servicesScopeNote}
+      <a href="#/devices">{copy.domains.servicesScopeNoteLink}</a>
+    </span>
   </div>
 
-  <div class="service-grid">
-    <div class="service-col">
-      <h3>
-        {copy.domains.sentencedServicesTitle}
-        <small>{copy.domains.sentencedServicesHint}</small>
-      </h3>
-      <ServiceShuttle
-        {catalog}
-        {customs}
-        selectedCatalog={blockCatalog}
-        selectedCustom={blockCustom}
-        availableLabel={copy.lists.serviceShuttleAvailable}
-        activeLabel={copy.domains.sentencedServicesActive}
-        emptyText={copy.domains.sentencedServicesEmpty}
-        on:add={(e) => changeService('block', true, e)}
-        on:remove={(e) => changeService('block', false, e)}
-      />
-    </div>
-    <div class="service-col">
-      <h3>
-        {copy.domains.pardonedServicesTitle}
-        <small>{copy.domains.pardonedServicesHint}</small>
-      </h3>
-      <ServiceShuttle
-        {catalog}
-        {customs}
-        selectedCatalog={allowCatalog}
-        selectedCustom={allowCustom}
-        availableLabel={copy.lists.serviceShuttleAvailable}
-        activeLabel={copy.domains.pardonedServicesActive}
-        emptyText={copy.domains.pardonedServicesEmpty}
-        on:add={(e) => changeService('allow', true, e)}
-        on:remove={(e) => changeService('allow', false, e)}
-      />
-    </div>
-  </div>
+  {#if mode === 'allow'}
+    <ServiceShuttle
+      {catalog}
+      {customs}
+      selectedCatalog={allowCatalog}
+      selectedCustom={allowCustom}
+      availableLabel={copy.lists.serviceShuttleAvailable}
+      activeLabel={copy.domains.pardonedServicesActive}
+      emptyText={copy.domains.pardonedServicesEmpty}
+      on:add={(e) => changeService('allow', true, e)}
+      on:remove={(e) => changeService('allow', false, e)}
+    />
+  {:else}
+    <ServiceShuttle
+      {catalog}
+      {customs}
+      selectedCatalog={blockCatalog}
+      selectedCustom={blockCustom}
+      availableLabel={copy.lists.serviceShuttleAvailable}
+      activeLabel={copy.domains.sentencedServicesActive}
+      emptyText={copy.domains.sentencedServicesEmpty}
+      on:add={(e) => changeService('block', true, e)}
+      on:remove={(e) => changeService('block', false, e)}
+    />
+  {/if}
+</section>
 
+<section class="card">
   <details class="custom-manage" bind:open={manageOpen}>
     <summary>
-      {copy.lists.customManage}
-      {#if customs.length}
-        <span class="count">({customs.length})</span>
-      {/if}
-      <small>{copy.lists.customManageHint}</small>
+      <h2>
+        {copy.lists.customManage}
+        {#if customs.length}<span class="count">{customs.length}</span>{/if}
+        <small>{copy.lists.customManageHint}</small>
+      </h2>
     </summary>
     {#if customs.length}
       <ul class="custom-list">
@@ -346,7 +351,7 @@
             <button class="row-action" on:click={() => startEditCustom(c)}>
               {copy.lists.customEdit}
             </button>
-            <button class="row-action danger" on:click={() => removeCustom(c)}>Remove</button>
+            <button class="row-action danger" on:click={() => removeCustom(c)}>{copy.blocking.remove}</button>
           </li>
         {/each}
       </ul>
@@ -357,12 +362,7 @@
           {copy.lists.customEditing(editingCustom.label || editingCustom.name)}
         </p>
       {/if}
-      <CustomServiceForm
-        editing={editingCustom}
-        showAllowExtra
-        on:save={saveCustom}
-        on:cancel={closeCustomForm}
-      />
+      <CustomServiceForm editing={editingCustom} showAllowExtra on:save={saveCustom} on:cancel={closeCustomForm} />
     {:else}
       <button class="row-action add-custom" on:click={() => (showCustomForm = true)}>
         + {copy.lists.customAdd}
@@ -370,141 +370,130 @@
     {/if}
     <p class="note">{copy.lists.customSharedNote}</p>
   </details>
-  <p class="note">
-    {copy.domains.servicesScopeNote}
-    <a href="#/devices">{copy.domains.servicesScopeNoteLink}</a>
-  </p>
-</section>
-
-<section class="columns">
-  <div class="card">
-    <h2>{copy.domains.pardonsTitle} <small>{copy.domains.pardonsHint}</small></h2>
-    <form on:submit|preventDefault={addPardon}>
-      <input placeholder={copy.domains.addPlaceholder} bind:value={newPardon} required />
-      <button type="submit" class="primary" disabled={!newPardon.trim()}>Add</button>
-    </form>
-    {#if allowlist.length === 0}
-      <p class="empty">{copy.domains.pardonsEmpty}</p>
-    {:else}
-      <ul>
-        {#each allowlist as d (d)}
-          <li>
-            <span class="domain">{d}</span>
-            <button class="row-action" title="remove from allowlist" on:click={() => removePardon(d)}>
-              Remove
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </div>
-
-  <div class="card">
-    <h2>{copy.domains.sentencesTitle} <small>{copy.domains.sentencesHint}</small></h2>
-    <form on:submit|preventDefault={addSentence}>
-      <input placeholder={copy.domains.addPlaceholder} bind:value={newSentence} required />
-      <button type="submit" class="primary" disabled={!newSentence.trim()}>Add</button>
-    </form>
-    {#if denylist.length === 0}
-      <p class="empty">{copy.domains.sentencesEmpty}</p>
-    {:else}
-      <ul>
-        {#each denylist as d (d)}
-          <li>
-            <span class="domain">{d}</span>
-            <button class="row-action" title="remove from denylist" on:click={() => removeSentence(d)}>
-              Remove
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </div>
 </section>
 
 <style>
+  section + section {
+    margin-top: 1.1rem;
+  }
+
+  .intro {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem 1rem;
+    margin: 0 0 1rem;
+  }
+
+  .intro p {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 0.88rem;
+  }
+
+  button.small {
+    padding: 0.2rem 0.7rem;
+    font-size: 0.8rem;
+  }
+
+  h2 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.3rem 0.5rem;
+  }
+
   h2 small {
     color: var(--text-dim);
     font-size: 0.78rem;
-    margin-left: 0.5rem;
     letter-spacing: 0;
+    flex-basis: 100%;
+    font-family: var(--font-body, inherit);
+  }
+
+  .count {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 0.5rem;
+    font-family: var(--font-body, inherit);
   }
 
   form {
     display: flex;
     gap: 0.6rem;
-    margin-bottom: 0.9rem;
+    margin-bottom: 1rem;
+    max-width: 30rem;
   }
 
   form input {
     flex: 1;
-    max-width: 22rem;
+    min-width: 0;
   }
 
-  .check-result {
-    margin: 0.75rem 0 0;
+  /* Domains as removable chips: a list of dozens stays scannable, and each
+     one is a single tap to remove. */
+  .chips {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
   }
 
-  .check-result.blocked {
-    color: var(--blocked);
-  }
-
-  .check-result.error {
-    color: var(--blocked);
-  }
-
-  .intro {
-    color: var(--text-dim);
+  .chips li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.3rem 0.2rem 0.7rem;
+    border: 1px solid color-mix(in srgb, var(--allowed) 45%, var(--border));
+    border-radius: 999px;
+    background: var(--bg-sunken, transparent);
     font-size: 0.85rem;
-    margin: 0 0 0.9rem;
+    max-width: 100%;
+  }
+
+  .chips.block li {
+    border-color: color-mix(in srgb, var(--blocked) 45%, var(--border));
   }
 
   .domain {
     font-family: var(--font-mono);
+    overflow-wrap: anywhere;
   }
 
-  .columns {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-    gap: 1.25rem;
-    margin-top: 1.25rem;
+  .chip-x {
+    all: unset;
+    cursor: pointer;
+    width: 1.4rem;
+    height: 1.4rem;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 1.4rem;
+    color: var(--text-dim);
   }
 
-  ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  li {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.35rem 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 0.85rem;
-  }
-
-  li:last-child {
-    border-bottom: none;
+  .chip-x:hover,
+  .chip-x:focus-visible {
+    color: var(--blocked);
+    background: var(--bg-hover);
   }
 
   .empty {
     color: var(--text-dim);
     font-style: italic;
-  }
-
-  .row-action {
-    padding: 0.1rem 0.6rem;
-    font-size: 0.75rem;
-  }
-
-  .services {
-    margin-top: 1.25rem;
+    margin: 0;
   }
 
   .scope-row {
-    margin-bottom: 1.1rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    margin-bottom: 1rem;
   }
 
   .scope-row label {
@@ -515,60 +504,47 @@
     color: var(--text-dim);
   }
 
-  .service-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
-    gap: 1.25rem;
-  }
-
-  .service-col h3 {
-    margin: 0 0 0.6rem;
-    font-family: var(--font-display);
-    font-weight: normal;
-    font-size: 0.98rem;
-    letter-spacing: 0.02em;
-  }
-
-  .service-col h3 small {
-    margin-left: 0.4rem;
-    font-size: 0.75rem;
-    color: var(--text-dim);
-    letter-spacing: 0;
-  }
-
-  .custom-manage {
-    margin-top: 1rem;
-    border-top: 1px solid var(--border);
-    padding-top: 0.8rem;
+  .scope-row .note {
+    margin: 0;
   }
 
   .custom-manage summary {
     cursor: pointer;
+    list-style: none;
+  }
+
+  .custom-manage summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .custom-manage summary h2 {
+    margin: 0;
+  }
+
+  .custom-manage summary h2::before {
+    content: '▸';
     color: var(--text-dim);
-    font-size: 0.82rem;
+    font-size: 0.8rem;
+    margin-right: 0.2rem;
   }
 
-  .custom-manage summary .count {
-    color: var(--accent);
-  }
-
-  .custom-manage summary small {
-    margin-left: 0.5rem;
-    font-size: 0.75rem;
+  .custom-manage[open] summary h2::before {
+    content: '▾';
   }
 
   .custom-list {
     list-style: none;
-    margin: 0.7rem 0 0;
+    margin: 0.9rem 0 0;
     padding: 0;
     max-width: 34rem;
   }
 
   .custom-list li {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.8rem;
-    padding: 0.35rem 0;
+    gap: 0.4rem 0.8rem;
+    padding: 0.4rem 0;
     border-bottom: 1px solid var(--border);
     font-size: 0.85rem;
   }
@@ -588,8 +564,13 @@
     cursor: help;
   }
 
+  .row-action {
+    padding: 0.1rem 0.6rem;
+    font-size: 0.75rem;
+  }
+
   .add-custom {
-    margin-top: 0.7rem;
+    margin-top: 0.8rem;
   }
 
   .editing {
@@ -599,6 +580,6 @@
   .note {
     color: var(--text-dim);
     font-size: 0.78rem;
-    margin: 0 0 0.6rem;
+    margin: 0.8rem 0 0;
   }
 </style>

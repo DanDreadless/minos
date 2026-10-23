@@ -61,6 +61,13 @@ Rules:
 - All UI copy lives in `web/src/lib/copy.ts`. Ask of every string: could
   someone who isn't a DNS expert misread this? Name things the same way on
   every page, and say what a setting *does*, not what it is called.
+- Every label, hint, subtitle, placeholder, tooltip and message starts
+  with a capital letter (maintainer request) — including short hints shown
+  beside a heading. The exceptions are literal values (`example.com`,
+  `5m`, `type:AAAA`), brand names written lowercase (ntfy, mDNS) and
+  fragments spliced into the middle of another sentence. Comments that are
+  prose start with a capital too; Go doc comments keep the convention of
+  beginning with the identifier's own name.
 - Error messages are always plain and literal.
 - Visual direction is unchanged: dark slate/charcoal base, a single accent,
   a subtle meander motif at most — understated, not a fantasy game.

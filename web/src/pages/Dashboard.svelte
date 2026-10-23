@@ -43,7 +43,7 @@
     try {
       localStorage.setItem('minos.dashboardWindow', String(w.hours));
     } catch {
-      // per-browser convenience only
+      // Per-browser convenience only
     }
     stats = null;
     void loadStats();
@@ -257,8 +257,8 @@
     {#if stats.timeline.some((b) => b.total > 0)}
       <TimelineChart data={stats.timeline} />
       <p class="legend">
-        <span class="swatch total"></span> queries
-        <span class="swatch blocked"></span> blocked
+        <span class="swatch total"></span> Queries
+        <span class="swatch blocked"></span> Blocked
       </p>
     {:else}
       <p class="empty">{copy.dashboard.noData}</p>

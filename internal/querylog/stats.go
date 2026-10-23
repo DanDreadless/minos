@@ -69,7 +69,7 @@ func (l *Log) Timeline(ctx context.Context, since time.Time, bucket time.Duratio
 		}
 	}
 	if rolled {
-		// answered from the rollups; fill below
+		// Answered from the rollups; fill below
 	} else if l.reader() != nil {
 		rows, err := l.reader().QueryContext(ctx, `SELECT ts/? * ? AS bucket,
 			COUNT(*), SUM(verdict = ?) FROM querylog

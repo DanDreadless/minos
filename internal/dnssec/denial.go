@@ -305,7 +305,7 @@ func (p *proofs) proveNoData(qname string, qtype uint16, b *budget) Result {
 	}
 	if m := p.nsec3Matching(qname, b); m != nil {
 		if qtype != dns.TypeDS && hasType(m.TypeBitMap, dns.TypeNS) && !hasType(m.TypeBitMap, dns.TypeSOA) {
-			// parent-side NSEC3 of a delegation: unusable below the cut
+			// Parent-side NSEC3 of a delegation: unusable below the cut
 		} else if bitmapDenies(m.TypeBitMap, qtype) {
 			return Result{Status: Secure}
 		} else {

@@ -38,7 +38,7 @@
   function fmtLastSeen(iso?: string): string {
     if (!iso) return copy.devices.neverSeen;
     const s = (Date.now() - new Date(iso).getTime()) / 1000;
-    if (s < 60) return 'just now';
+    if (s < 60) return 'Just now';
     if (s < 3600) return `${Math.floor(s / 60)}m ago`;
     if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
     return `${Math.floor(s / 86400)}d ago`;
@@ -355,7 +355,7 @@
         </label>
         <p class="group-service-summary">
           {copy.devices.groupServicesSummary(groupBlockedCount(g), groupAllowedCount(g))}
-          <a href="#/domains">{copy.devices.groupServicesManage}</a>
+          <a href="#/blocked">{copy.devices.groupServicesManage}</a>
         </p>
       {/if}
       <details class="group-schedule">
@@ -398,7 +398,7 @@
   <div class="card add">
     <h2>{copy.devices.addTitle}</h2>
     <form on:submit|preventDefault={addGroup}>
-      <input placeholder="group name" bind:value={newGroupName} required size="14" />
+      <input placeholder="Group name" bind:value={newGroupName} required size="14" />
       <select bind:value={newGroupMode}>
         <option value="filter">{copy.devices.modeFilter}</option>
         <option value="bypass">{copy.devices.modeBypass}</option>

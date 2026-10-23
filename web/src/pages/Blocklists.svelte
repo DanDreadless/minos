@@ -78,7 +78,7 @@
     try {
       refreshInterval = savedInterval = (await api.getConfig()).lists.refresh_interval;
     } catch {
-      // cosmetic: the field simply stays empty
+      // Cosmetic: the field simply stays empty
     }
   }
 
@@ -267,7 +267,7 @@
               <input
                 type="checkbox"
                 checked={l.enabled}
-                title={l.enabled ? 'disable this list' : 'enable this list'}
+                title={l.enabled ? 'Disable this list' : 'Enable this list'}
                 on:change={() => toggle(l)}
               />
             </td>
@@ -405,7 +405,7 @@
 <section class="card add">
   <h2>{copy.lists.addTitle}</h2>
   <form on:submit|preventDefault={add}>
-    <input placeholder="name" bind:value={newName} required size="14" />
+    <input placeholder="Name" bind:value={newName} required size="14" />
     <input
       placeholder="https://example.com/hosts.txt"
       bind:value={newUrl}
@@ -413,12 +413,12 @@
       type="url"
       class="grow"
     />
-    <select bind:value={newFormat} title="list format">
-      <option value="hosts">hosts</option>
-      <option value="plain">plain domains</option>
-      <option value="adblock">adblock</option>
+    <select bind:value={newFormat} title="List format">
+      <option value="hosts">Hosts</option>
+      <option value="plain">Plain domains</option>
+      <option value="adblock">Adblock</option>
     </select>
-    <select bind:value={newAction} title="what the list's entries do">
+    <select bind:value={newAction} title="What the list's entries do">
       <option value="block">{copy.lists.actionBlock}</option>
       <option value="allow">{copy.lists.actionAllow}</option>
     </select>

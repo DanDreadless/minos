@@ -50,7 +50,7 @@ export const blocklistPresets: BlocklistPreset[] = [
   {
     id: 'hagezi-multi',
     label: 'Hagezi Multi Normal',
-    note: 'ads, tracking & telemetry — the sweet spot, very low breakage',
+    note: 'Ads, tracking & telemetry — the sweet spot, very low breakage',
     size: '≈190k domains',
     tier: 'balanced',
     list: {
@@ -63,7 +63,7 @@ export const blocklistPresets: BlocklistPreset[] = [
   {
     id: 'oisd-small',
     label: 'OISD Small',
-    note: 'the essentials, built to never break anything',
+    note: 'The essentials, built to never break anything',
     size: '≈59k domains',
     tier: 'balanced',
     list: {
@@ -75,7 +75,7 @@ export const blocklistPresets: BlocklistPreset[] = [
   {
     id: 'hagezi-pro',
     label: 'Hagezi Multi Pro',
-    note: 'broader coverage than Normal; expect to allow the odd domain',
+    note: 'Broader coverage than Normal; expect to allow the odd domain',
     size: '≈226k domains',
     tier: 'strict',
     list: {
@@ -88,7 +88,7 @@ export const blocklistPresets: BlocklistPreset[] = [
   {
     id: 'oisd-big',
     label: 'OISD Big',
-    note: 'the full OISD net — wide, still breakage-shy',
+    note: 'The full OISD net — wide, still breakage-shy',
     size: '≈267k domains',
     tier: 'strict',
     list: {
@@ -100,7 +100,7 @@ export const blocklistPresets: BlocklistPreset[] = [
   {
     id: 'stevenblack',
     label: 'StevenBlack',
-    note: 'the classic unified hosts file — the default on a fresh install',
+    note: 'The classic unified hosts file — the default on a fresh install',
     size: '≈81k domains',
     tier: 'strict',
     list: {
@@ -113,7 +113,7 @@ export const blocklistPresets: BlocklistPreset[] = [
   {
     id: 'hagezi-tif',
     label: 'Hagezi Threat Intelligence',
-    note: 'malware, phishing & scam domains — the medium cut; the full feed is ~2M domains and would fill a Pi\'s memory budget on its own',
+    note: 'Malware, phishing & scam domains — the medium cut; the full feed is ~2M domains and would fill a Pi\'s memory budget on its own',
     size: '≈700k domains',
     tier: 'security',
     list: {
@@ -144,7 +144,7 @@ export const blocklistPresets: BlocklistPreset[] = [
     id: 'urlhaus-filter',
     replaces: ['https://urlhaus.abuse.ch/downloads/hostfile/'],
     label: 'URLhaus Malicious Hosts',
-    note: 'malware-distribution hosts reported to abuse.ch URLhaus, republished by malware-filter — small and sharp',
+    note: 'Malware-distribution hosts reported to abuse.ch URLhaus, republished by malware-filter — small and sharp',
     size: '≈1.8k domains',
     tier: 'security',
     list: {
@@ -157,7 +157,7 @@ export const blocklistPresets: BlocklistPreset[] = [
   {
     id: 'oisd-nsfw',
     label: 'OISD NSFW',
-    note: 'adult content — the biggest list here by some way, so watch the memory budget on a Pi if you already run a large blocklist',
+    note: 'Adult content — the biggest list here by some way, so watch the memory budget on a Pi if you already run a large blocklist',
     size: '≈480k domains',
     tier: 'family',
     list: {
