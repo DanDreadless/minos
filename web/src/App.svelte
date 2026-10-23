@@ -5,12 +5,12 @@
   import { copy } from './lib/copy';
   import { route } from './lib/router';
   import { notify, notifyError, toasts } from './lib/toast';
-  import Codex from './pages/Codex.svelte';
+  import Blocklists from './pages/Blocklists.svelte';
   import Dashboard from './pages/Dashboard.svelte';
   import DevicePage from './pages/Device.svelte';
   import Devices from './pages/Devices.svelte';
-  import Docket from './pages/Docket.svelte';
-  import Judgments from './pages/Judgments.svelte';
+  import QueryLog from './pages/QueryLog.svelte';
+  import AllowBlock from './pages/AllowBlock.svelte';
   import Logs from './pages/Logs.svelte';
   import Settings from './pages/Settings.svelte';
 
@@ -106,15 +106,15 @@
       {#if $route === 'dashboard'}
         <Dashboard {status} onStatusChange={refresh} />
       {:else if $route === 'querylog'}
-        <Docket />
+        <QueryLog />
       {:else if $route === 'devices'}
         <Devices />
       {:else if $route === 'device'}
         <DevicePage />
       {:else if $route === 'lists'}
-        <Codex />
+        <Blocklists />
       {:else if $route === 'domains'}
-        <Judgments />
+        <AllowBlock />
       {:else if $route === 'logs'}
         <Logs />
       {:else if $route === 'settings'}
@@ -148,8 +148,8 @@
     overflow-y: auto;
   }
 
-  /* The Docket fills the viewport and scrolls its table internally instead
-     of growing the page (see Docket.svelte); every other page scrolls
+  /* The Query Log fills the viewport and scrolls its table internally instead
+     of growing the page (see QueryLog.svelte); every other page scrolls
      normally within main. */
   main.fill {
     display: flex;
@@ -278,7 +278,7 @@
     }
 
     /* On mobile the whole page scrolls (nav stacks on top); don't trap
-       scroll inside the Docket table on a short screen. */
+       scroll inside the Query Log table on a short screen. */
     main.fill {
       display: block;
       overflow: visible;

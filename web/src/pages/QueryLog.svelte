@@ -73,12 +73,12 @@
 
   function verdictLabel(v: Verdict): string {
     return v === 'blocked'
-      ? copy.docket.filterBlocked
+      ? copy.querylog.filterBlocked
       : v === 'allowed'
-        ? copy.docket.filterAllowed
+        ? copy.querylog.filterAllowed
         : v === 'would_block'
-          ? copy.docket.filterWouldBlock
-          : copy.docket.filterAll;
+          ? copy.querylog.filterWouldBlock
+          : copy.querylog.filterAll;
   }
 
   // requestParams is the filter as the server takes it: `range` becomes a
@@ -282,7 +282,7 @@
   async function pardon(domain: string): Promise<void> {
     try {
       await api.pardon(domain);
-      notify(copy.pardon.done(domain));
+      notify(copy.allow.done(domain));
     } catch (e) {
       notifyError(e);
     }
@@ -291,7 +291,7 @@
   async function sentence(domain: string): Promise<void> {
     try {
       await api.sentence(domain);
-      notify(copy.sentence.done(domain));
+      notify(copy.block.done(domain));
     } catch (e) {
       notifyError(e);
     }
@@ -300,7 +300,7 @@
   async function copyDomain(domain: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(domain);
-      notify(copy.docket.copied(domain));
+      notify(copy.querylog.copied(domain));
     } catch (e) {
       notifyError(e);
     }
@@ -309,7 +309,7 @@
   async function check(domain: string): Promise<void> {
     try {
       const r = await api.check(domain);
-      notify(copy.docket.checkResult(domain, r.verdict === 'blocked', r.list, r.rule));
+      notify(copy.querylog.checkResult(domain, r.verdict === 'blocked', r.list, r.rule));
     } catch (e) {
       notifyError(e);
     }
@@ -353,7 +353,7 @@
 </script>
 
 <h1>
-  {copy.docket.title} <small>{copy.docket.subtitle}</small>
+  {copy.querylog.title} <small>{copy.querylog.subtitle}</small>
 </h1>
 
 <div class="toolbar">
@@ -365,7 +365,7 @@
         <button
           class="chip-x"
           on:click={() => setFilter(removeChip(filter, c.key))}
-          aria-label={copy.docket.removeFilter(c.label)}>×</button
+          aria-label={copy.querylog.removeFilter(c.label)}>×</button
         >
       </span>
     {/each}
@@ -375,8 +375,8 @@
       bind:value={text}
       on:input={onInput}
       on:keydown={onSearchKey}
-      placeholder={activeChips.length ? '' : copy.docket.searchBoxPlaceholder}
-      aria-label={copy.docket.searchBoxLabel}
+      placeholder={activeChips.length ? '' : copy.querylog.searchBoxPlaceholder}
+      aria-label={copy.querylog.searchBoxLabel}
       spellcheck="false"
       autocomplete="off"
     />
@@ -395,9 +395,9 @@
     <select
       value={filter.list}
       on:change={(e) => narrow({ list: e.currentTarget.value })}
-      title={copy.docket.filterListTitle}
+      title={copy.querylog.filterListTitle}
     >
-      <option value="">{copy.docket.filterListAll}</option>
+      <option value="">{copy.querylog.filterListAll}</option>
       {#each listNames as name (name)}
         <option value={name}>{name}</option>
       {/each}
@@ -405,8 +405,8 @@
     <select
       value={filter.range}
       on:change={(e) => setRange(e.currentTarget.value as RangeKey)}
-      aria-label={copy.docket.rangeLabel}
-      title={copy.docket.rangeLabel}
+      aria-label={copy.querylog.rangeLabel}
+      title={copy.querylog.rangeLabel}
     >
       {#each RANGES as r (r.key)}
         <option value={r.key}>{r.label}</option>
@@ -418,61 +418,61 @@
 <div class="status">
   {#if !searching}
     {#if paused}
-      <span class="mode paused">{copy.docket.modePaused(held.length)}</span>
+      <span class="mode paused">{copy.querylog.modePaused(held.length)}</span>
     {:else if connected}
-      <span class="mode live">{copy.docket.modeLive}</span>
-      <span class="detail">{copy.docket.modeLiveDetail(live.length)}</span>
+      <span class="mode live">{copy.querylog.modeLive}</span>
+      <span class="detail">{copy.querylog.modeLiveDetail(live.length)}</span>
     {:else}
-      <span class="detail">{copy.docket.modeReconnecting}</span>
+      <span class="detail">{copy.querylog.modeReconnecting}</span>
     {/if}
   {:else}
-    <span class="mode results">{copy.docket.modeResults}</span>
+    <span class="mode results">{copy.querylog.modeResults}</span>
     <span class="detail">
       {#if resultsStatus === 'loading'}
-        {copy.docket.searching}
+        {copy.querylog.searching}
       {:else if recentOnly}
-        {displayed.length} · {copy.docket.scopeRecent}
+        {displayed.length} · {copy.querylog.scopeRecent}
       {:else}
-        {copy.docket.resultsDetail(displayed.length, !resultsDone && results.length > 0, rangeLabel)}
+        {copy.querylog.resultsDetail(displayed.length, !resultsDone && results.length > 0, rangeLabel)}
       {/if}
     </span>
-    <button class="link" on:click={clearAll}>{copy.docket.clearAll}</button>
+    <button class="link" on:click={clearAll}>{copy.querylog.clearAll}</button>
   {/if}
   <span class="spacer"></span>
   <button
     class="small"
     class:active={paused}
     on:click={togglePause}
-    title={copy.docket.pauseHint}>{paused ? copy.docket.resume : copy.docket.pause}</button
+    title={copy.querylog.pauseHint}>{paused ? copy.querylog.resume : copy.querylog.pause}</button
   >
   <span class="export">
-    {copy.docket.exportLabel}
+    {copy.querylog.exportLabel}
     {#each ['csv', 'json'] as fmt (fmt)}
       <button
         class="small"
         disabled={exporting !== ''}
-        title={copy.docket.exportHint(fmt)}
+        title={copy.querylog.exportHint(fmt)}
         on:click={() => exportAs(fmt === 'csv' ? 'csv' : 'json')}
-        >{exporting === fmt ? copy.docket.exporting : fmt.toUpperCase()}</button
+        >{exporting === fmt ? copy.querylog.exporting : fmt.toUpperCase()}</button
       >
     {/each}
   </span>
 </div>
 
 <details class="syntax">
-  <summary>{copy.docket.syntaxTitle}</summary>
+  <summary>{copy.querylog.syntaxTitle}</summary>
   <dl>
-    {#each copy.docket.syntax as [term, meaning] (term)}
+    {#each copy.querylog.syntax as [term, meaning] (term)}
       <dt><code>{term}</code></dt>
       <dd>{meaning}</dd>
     {/each}
   </dl>
-  <p>{copy.docket.syntaxKeys}</p>
+  <p>{copy.querylog.syntaxKeys}</p>
 </details>
 
 {#if searching && resultsStatus === 'failed'}
   <p class="search-failed" role="alert">
-    {copy.docket.searchFailed(resultsError, recentOnly)}
+    {copy.querylog.searchFailed(resultsError, recentOnly)}
   </p>
 {/if}
 
@@ -480,11 +480,11 @@
   <p class="empty">
     {searching
       ? resultsStatus === 'loading'
-        ? copy.docket.searching
+        ? copy.querylog.searching
         : resultsStatus === 'failed'
-          ? copy.docket.noRecentMatches
-          : copy.docket.noMatches
-      : copy.docket.empty}
+          ? copy.querylog.noRecentMatches
+          : copy.querylog.noMatches
+      : copy.querylog.empty}
   </p>
 {:else}
   <div class="table-wrap">
@@ -496,7 +496,7 @@
           <th>Domain</th>
           <th>Type</th>
           <th>Result</th>
-          <th title={copy.docket.columnSourceHint}>{copy.docket.columnSource}</th>
+          <th title={copy.querylog.columnSourceHint}>{copy.querylog.columnSource}</th>
           <th></th>
         </tr>
       </thead>
@@ -510,22 +510,22 @@
           <tr>
             <td class="when" title={fmtLogTimeFull(e.time)}>{fmtLogTime(e.time)}</td>
             <td>
-              <button class="cell" title={copy.docket.filterHint} on:click={() => narrow({ clients: [e.client] })}
+              <button class="cell" title={copy.querylog.filterHint} on:click={() => narrow({ clients: [e.client] })}
                 >{e.client}</button
               >
             </td>
             <td class="domain" title={e.qname}>
-              <button class="cell" title={copy.docket.filterHint} on:click={() => narrow({ domain: e.qname })}
+              <button class="cell" title={copy.querylog.filterHint} on:click={() => narrow({ domain: e.qname })}
                 >{e.qname}</button
               >
             </td>
             <td>
-              <button class="cell" title={copy.docket.filterHint} on:click={() => narrow({ qtype: e.qtype })}
+              <button class="cell" title={copy.querylog.filterHint} on:click={() => narrow({ qtype: e.qtype })}
                 >{e.qtype}</button
               >
             </td>
             {#if e.verdict === 'blocked'}
-              <td><span class="badge blocked">{copy.docket.verdictBlocked}</span></td>
+              <td><span class="badge blocked">{copy.querylog.verdictBlocked}</span></td>
               <td title="rule: {e.rule}">
                 {#if e.list}
                   <button class="cell" on:click={() => narrow({ list: e.list })}>{e.list}</button>
@@ -533,13 +533,13 @@
               </td>
             {:else}
               <td>
-                <span class="badge allowed">{copy.docket.verdictAllowed}</span>
+                <span class="badge allowed">{copy.querylog.verdictAllowed}</span>
                 {#if e.audit_list}
                   <span
                     class="would-badge"
-                    title={copy.docket.wouldBlockTitle(e.audit_list, e.audit_rule ?? '')}
+                    title={copy.querylog.wouldBlockTitle(e.audit_list, e.audit_rule ?? '')}
                   >
-                    {copy.docket.wouldBlockBadge}
+                    {copy.querylog.wouldBlockBadge}
                   </span>
                 {/if}
               </td>
@@ -549,7 +549,7 @@
                     >{e.list}</button
                   >
                 {:else if e.upstream}
-                  <button class="cell" title={copy.docket.filterHint} on:click={() => narrow({ upstream: e.upstream })}
+                  <button class="cell" title={copy.querylog.filterHint} on:click={() => narrow({ upstream: e.upstream })}
                     >{e.upstream}</button
                   >
                 {/if}
@@ -557,19 +557,19 @@
             {/if}
             <td class="actions">
               {#if e.verdict === 'blocked'}
-                <button class="row-action" title={copy.pardon.actionHint} on:click={() => pardon(e.rule ?? e.qname)}
-                  >{copy.pardon.action}</button
+                <button class="row-action" title={copy.allow.actionHint} on:click={() => pardon(e.rule ?? e.qname)}
+                  >{copy.allow.action}</button
                 >
               {:else}
-                <button class="row-action subtle" title={copy.sentence.actionHint} on:click={() => sentence(e.qname)}
-                  >{copy.sentence.action}</button
+                <button class="row-action subtle" title={copy.block.actionHint} on:click={() => sentence(e.qname)}
+                  >{copy.block.action}</button
                 >
               {/if}
-              <button class="row-action subtle" title={copy.docket.checkHint} on:click={() => check(e.qname)}
-                >{copy.docket.checkAction}</button
+              <button class="row-action subtle" title={copy.querylog.checkHint} on:click={() => check(e.qname)}
+                >{copy.querylog.checkAction}</button
               >
-              <button class="row-action subtle" title={copy.docket.copyHint} on:click={() => copyDomain(e.qname)}
-                >{copy.docket.copyAction}</button
+              <button class="row-action subtle" title={copy.querylog.copyHint} on:click={() => copyDomain(e.qname)}
+                >{copy.querylog.copyAction}</button
               >
             </td>
           </tr>
@@ -580,7 +580,7 @@
   {#if searching && results.length > 0 && !resultsDone}
     <div class="load-older">
       <button on:click={() => fetchResults(false)} disabled={loadingOlder}>
-        {loadingOlder ? copy.docket.loadingOlder : copy.docket.loadOlder}
+        {loadingOlder ? copy.querylog.loadingOlder : copy.querylog.loadOlder}
       </button>
     </div>
   {/if}

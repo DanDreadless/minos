@@ -163,7 +163,7 @@
   async function pardon(domain: string): Promise<void> {
     try {
       await api.pardon(domain);
-      notify(copy.pardon.done(domain));
+      notify(copy.allow.done(domain));
     } catch (e) {
       notifyError(e);
     }
@@ -172,7 +172,7 @@
   async function sentence(domain: string): Promise<void> {
     try {
       await api.sentence(domain);
-      notify(copy.sentence.done(domain));
+      notify(copy.block.done(domain));
     } catch (e) {
       notifyError(e);
     }
@@ -364,10 +364,10 @@
     <div class="history-head">
       <h2>{copy.device.historyTitle} <small>{copy.device.historyHint}</small></h2>
       <select bind:value={verdictFilter} on:change={refreshHistory}>
-        <option value="all">{copy.docket.filterAll}</option>
-        <option value="blocked">{copy.docket.filterBlocked}</option>
-        <option value="allowed">{copy.docket.filterAllowed}</option>
-        <option value="would_block">{copy.docket.filterWouldBlock}</option>
+        <option value="all">{copy.querylog.filterAll}</option>
+        <option value="blocked">{copy.querylog.filterBlocked}</option>
+        <option value="allowed">{copy.querylog.filterAllowed}</option>
+        <option value="would_block">{copy.querylog.filterWouldBlock}</option>
       </select>
     </div>
     {#if history.length === 0}
@@ -396,26 +396,26 @@
                 <td title={e.qname}>{e.qname}</td>
                 <td>{e.qtype}</td>
                 {#if e.verdict === 'blocked'}
-                  <td><span class="badge blocked">{copy.docket.verdictBlocked}</span></td>
+                  <td><span class="badge blocked">{copy.querylog.verdictBlocked}</span></td>
                   <td title="rule: {e.rule}">{e.list}</td>
                   <td>
                     <button
                       class="row-action"
-                      title={copy.pardon.actionHint}
+                      title={copy.allow.actionHint}
                       on:click={() => pardon(e.rule ?? e.qname)}
                     >
-                      {copy.pardon.action}
+                      {copy.allow.action}
                     </button>
                   </td>
                 {:else}
                   <td>
-                    <span class="badge allowed">{copy.docket.verdictAllowed}</span>
+                    <span class="badge allowed">{copy.querylog.verdictAllowed}</span>
                     {#if e.audit_list}
                       <span
                         class="would-badge"
-                        title={copy.docket.wouldBlockTitle(e.audit_list, e.audit_rule ?? '')}
+                        title={copy.querylog.wouldBlockTitle(e.audit_list, e.audit_rule ?? '')}
                       >
-                        {copy.docket.wouldBlockBadge}
+                        {copy.querylog.wouldBlockBadge}
                       </span>
                     {/if}
                   </td>
@@ -423,10 +423,10 @@
                   <td>
                     <button
                       class="row-action subtle"
-                      title={copy.sentence.actionHint}
+                      title={copy.block.actionHint}
                       on:click={() => sentence(e.qname)}
                     >
-                      {copy.sentence.action}
+                      {copy.block.action}
                     </button>
                   </td>
                 {/if}

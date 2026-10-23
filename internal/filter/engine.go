@@ -37,7 +37,7 @@ func (e *Engine) Match(qname string) Result {
 	return e.matcher.Load().Match(qname)
 }
 
-// Pause disables blocking for d (a "recess"). d <= 0 pauses indefinitely.
+// Pause disables blocking for d. d <= 0 pauses indefinitely.
 func (e *Engine) Pause(d time.Duration) {
 	if d <= 0 {
 		e.pausedUntil.Store(-1)

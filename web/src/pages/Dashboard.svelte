@@ -135,13 +135,13 @@
     {#if status.paused}
       <span class="paused-banner">
         {status.paused_until
-          ? copy.recess.active(new Date(status.paused_until).toLocaleTimeString())
-          : copy.recess.activeIndefinite}
+          ? copy.pause.active(new Date(status.paused_until).toLocaleTimeString())
+          : copy.pause.activeIndefinite}
       </span>
-      <button class="primary" on:click={resume}>{copy.recess.resume}</button>
+      <button class="primary" on:click={resume}>{copy.pause.resume}</button>
     {:else}
       <span class="control-label">
-        {copy.recess.action} <small>({copy.recess.actionHint})</small>
+        {copy.pause.action} <small>({copy.pause.actionHint})</small>
       </span>
       <button on:click={() => recess('5m')}>5 min</button>
       <button on:click={() => recess('30m')}>30 min</button>
@@ -318,8 +318,8 @@
 
       <h3>{copy.dnssec.countersTitle} <small>{copy.dnssec.countersHint}</small></h3>
       <dl class="counters">
-        <!-- Each counter drills into the Docket for that outcome. The
-             counters are process-lifetime while the Docket is windowed and
+        <!-- Each counter drills into the Query Log for that outcome. The
+             counters are process-lifetime while the Query Log is windowed and
              retention-bounded, so the two will not tally — countersHint
              says so rather than leaving it to be discovered. -->
         <div>
@@ -459,7 +459,7 @@
     margin-top: 1.25rem;
   }
 
-  /* Amber, matching the would-block badge in the Docket: the same idea
+  /* Amber, matching the would-block badge in the Query Log: the same idea
      (attributed but not enforced) should read the same colour everywhere. */
   .mode {
     font-family: var(--font-body);

@@ -307,7 +307,7 @@
   async function addPardon(): Promise<void> {
     try {
       await api.pardon(newPardon.trim());
-      notify(copy.pardon.done(newPardon.trim()));
+      notify(copy.allow.done(newPardon.trim()));
       newPardon = '';
       await load();
     } catch (e) {
@@ -318,7 +318,7 @@
   async function addSentence(): Promise<void> {
     try {
       await api.sentence(newSentence.trim());
-      notify(copy.sentence.done(newSentence.trim()));
+      notify(copy.block.done(newSentence.trim()));
       newSentence = '';
       await load();
     } catch (e) {

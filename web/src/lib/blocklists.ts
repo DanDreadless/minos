@@ -1,4 +1,4 @@
-// Curated catalog of known-good blocklists for the Codex page — the
+// Curated catalog of known-good blocklists for the Blocklists page — the
 // resolver-picker pattern applied to the harder decision.
 //
 // Every URL below is verified by fetching it and compiling it through the
@@ -40,7 +40,7 @@ export interface BlocklistPreset {
   tier: BlocklistTier;
   list: { name: string; url: string; format: 'hosts' | 'plain' | 'adblock'; mirrors?: string[] };
   // replaces: URLs of retired lists this entry supersedes. A subscription to
-  // one of them is offered a one-click swap to this entry in the Codex.
+  // one of them is offered a one-click swap to this entry on the Blocklists page.
   replaces?: string[];
 }
 
@@ -75,7 +75,7 @@ export const blocklistPresets: BlocklistPreset[] = [
   {
     id: 'hagezi-pro',
     label: 'Hagezi Multi Pro',
-    note: 'broader coverage than Normal; expect the occasional pardon',
+    note: 'broader coverage than Normal; expect to allow the odd domain',
     size: '≈226k domains',
     tier: 'strict',
     list: {
@@ -126,7 +126,7 @@ export const blocklistPresets: BlocklistPreset[] = [
   {
     id: 'hagezi-bypass',
     label: 'DNS Bypass Blocker',
-    note: "stops devices reaching public DoH, VPN and proxy services to route around this resolver — also blocks VPN providers, so pardon yours if you use one",
+    note: "stops devices reaching public DoH, VPN and proxy services to route around this resolver — also blocks VPN providers, so allow yours if you use one",
     size: '≈17k domains',
     tier: 'security',
     list: {

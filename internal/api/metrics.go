@@ -40,7 +40,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	sample("minos_querylog_dropped_total", dropped)
 
 	paused, _ := s.engine.Paused()
-	gauge("minos_blocking_paused", "1 while blocking is paused (recess), else 0.", boolVal(paused))
+	gauge("minos_blocking_paused", "1 while blocking is paused, else 0.", boolVal(paused))
 
 	m := s.engine.Current()
 	fmt.Fprintf(&b, "# HELP minos_rules Compiled rules in the active matcher.\n# TYPE minos_rules gauge\n")
