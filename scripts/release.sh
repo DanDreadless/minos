@@ -162,6 +162,30 @@ until curl -sSfL -o /dev/null "$base_url/checksums.txt" 2>/dev/null; do
   sleep 30
 done
 
+# The assets above come from the binaries job; the same workflow also
+# builds and pushes the Docker image. Wait for the whole run and stop if any
+# job failed — a broken image build went unnoticed for four releases
+# (v0.27.0–v0.28.0) because this script only waited for checksums.txt.
+say "waiting for the GitHub Release workflow to finish (Docker image included)"
+runs_url="https://api.github.com/repos/$GITHUB_REPO/actions/runs?branch=$tag&event=push&per_page=20"
+auth=()
+[ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+while :; do
+  run="$(curl -sSf "${auth[@]}" "$runs_url" | python -c '
+import json, sys
+runs = [r for r in json.load(sys.stdin)["workflow_runs"] if r["name"] == "Release"]
+if runs:
+    r = runs[0]
+    print(r["status"], r["conclusion"] or "-", r["html_url"])
+' || true)"
+  case "$run" in
+    "completed success "*) break ;;
+    completed*) die "the GitHub Release workflow did not succeed ($run) — fix it before publishing; the Gitea release is not created" ;;
+  esac
+  [ "$(date +%s)" -lt "$deadline" ] || die "the GitHub Release workflow did not finish in time (${run:-not found})"
+  sleep 30
+done
+
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
 say "downloading assets"

@@ -591,7 +591,11 @@ This is security software; hold it to that standard.
   `TestEverySettingIsDocumented` (internal/config) walks the Config YAML
   keys and fails on a key missing from docs.ts or a documented key that no
   longer exists, so a new config key ships with its documentation;
-  release.sh refuses to tag if the build changed the generated guide.
+  release.sh refuses to tag if the build changed the generated guide. The
+  generator skips when `docs/` is absent: the Docker image's frontend stage
+  copies only `web/`, and failing there broke every image build from
+  v0.27.0 to v0.28.0 unnoticed — release.sh now waits for the whole GitHub
+  Release workflow (Docker job included) and stops if any job failed.
 - **Extended DNS Errors** (fixed decisions, October 2026, `ede.go`): answers
   say why (RFC 8914) — 15 Blocked naming the list, 18 Prohibited for a
   device-level block, 6 DNSSEC Bogus with the reason, 3 Stale Answer, 23
