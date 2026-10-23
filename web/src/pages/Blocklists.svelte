@@ -245,7 +245,7 @@
   <p class="empty">{copy.lists.empty}</p>
 {:else}
   <div class="table-wrap">
-    <table>
+    <table class="stack">
       <thead>
         <tr>
           <th>On</th>
@@ -263,7 +263,7 @@
       <tbody>
         {#each lists as l (l.name)}
           <tr class:disabled={!l.enabled}>
-            <td>
+            <td data-label="On">
               <input
                 type="checkbox"
                 checked={l.enabled}
@@ -271,7 +271,7 @@
                 on:change={() => toggle(l)}
               />
             </td>
-            <td>
+            <td data-label={l.action !== 'allow' ? copy.lists.auditHeader : undefined}>
               {#if l.action !== 'allow'}
                 <input
                   type="checkbox"
@@ -281,7 +281,7 @@
                 />
               {/if}
             </td>
-            <td>
+            <td class="primary">
               {l.name}
               {#if l.audit}
                 <span class="audit-badge" title={copy.lists.auditBadgeTitle}>
@@ -295,7 +295,7 @@
               {/if}
             </td>
             <td
-              class="url"
+              class="url full"
               title={l.mirrors?.length
                 ? `${l.url}\n${copy.lists.mirrorsHint(l.mirrors.length)}\n${l.mirrors.join('\n')}`
                 : l.url}
@@ -303,9 +303,9 @@
               {l.url}{#if l.mirrors?.length}<span class="mirror-count"> +{l.mirrors.length}</span>{/if}
             </td>
             <td>{l.format}</td>
-            <td class="num">{l.rules.toLocaleString()}</td>
-            <td class="num">{l.skipped ? l.skipped.toLocaleString() : ''}</td>
-            <td class="num">
+            <td class="num" data-label="Rules">{l.rules.toLocaleString()}</td>
+            <td class="num" data-label="Skipped">{l.skipped ? l.skipped.toLocaleString() : ''}</td>
+            <td class="num" data-label={copy.lists.blocksHeader}>
               {#if l.action === 'allow'}
                 <span class="quiet" title={copy.lists.allowStatTitle}>—</span>
               {:else if listStats}
@@ -323,7 +323,7 @@
               {/if}
             </td>
             <td
-              class="state {l.state}"
+              class="state full {l.state}"
               title={`${copy.lists.stateHint(l.state, l.last_error ?? '')}${l.last_refresh ? ` Copy in force: ${fmtWhen(l.last_refresh)}.` : ''}`}
             >
               {copy.lists.state(l.state, fmtAgo(l.last_refresh))}
@@ -335,7 +335,7 @@
                 >
               {/if}
             </td>
-            <td class="row-actions">
+            <td class="row-actions end">
               {#if replacementFor(l)}
                 {@const p = replacementFor(l)}
                 {#if p}

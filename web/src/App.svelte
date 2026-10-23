@@ -157,7 +157,9 @@
 <style>
   .shell {
     display: grid;
-    grid-template-columns: 230px 1fr;
+    /* minmax(0, …): a plain 1fr can't shrink below its widest content, so
+       one wide table would stretch the whole page past the screen. */
+    grid-template-columns: 230px minmax(0, 1fr);
     height: 100vh;
     overflow: hidden;
   }
@@ -288,7 +290,7 @@
 
   @media (max-width: 800px) {
     .shell {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
       height: auto;
       overflow: visible;
     }

@@ -418,6 +418,14 @@
     margin-bottom: 1.25rem;
   }
 
+  /* Two tiles a row on a phone rather than one tall column. */
+  @media (max-width: 640px) {
+    .stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.6rem;
+    }
+  }
+
   .columns {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));

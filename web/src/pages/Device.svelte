@@ -374,7 +374,7 @@
       <p class="empty">{historyLoading ? copy.device.loading : copy.device.historyEmpty}</p>
     {:else}
       <div class="table-wrap">
-        <table>
+        <table class="stack">
           <thead>
             <tr>
               <th>Time</th>
@@ -393,12 +393,12 @@
               <tr>
                 <td class="when" title={fmtLogTimeFull(e.time)}>{fmtLogTime(e.time)}</td>
                 <td>{e.client}</td>
-                <td title={e.qname}>{e.qname}</td>
+                <td class="primary" title={e.qname}>{e.qname}</td>
                 <td>{e.qtype}</td>
                 {#if e.verdict === 'blocked'}
                   <td><span class="badge blocked">{copy.querylog.verdictBlocked}</span></td>
                   <td title="rule: {e.rule}">{e.list}</td>
-                  <td>
+                  <td class="end">
                     <button
                       class="row-action"
                       title={copy.allow.actionHint}
@@ -420,7 +420,7 @@
                     {/if}
                   </td>
                   <td>{e.upstream ?? ''}</td>
-                  <td>
+                  <td class="end">
                     <button
                       class="row-action subtle"
                       title={copy.block.actionHint}

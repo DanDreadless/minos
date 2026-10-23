@@ -188,19 +188,19 @@
   <p class="empty">{records.length ? copy.logs.noMatches : copy.logs.empty}</p>
 {:else}
   <div class="table-wrap">
-    <table>
+    <table class="stack">
       <tbody>
         {#each visible as r (r.seq)}
           <tr class={r.level}>
             <td class="when" title={fmtLogTimeFull(r.time)}>{new Date(r.time).toLocaleTimeString()}</td>
             <td class="lvl"><span class="level {r.level}">{copy.logs.levelName[r.level]}</span></td>
-            <td class="msg">
+            <td class="msg full">
               <span class="text">{r.message}</span>
               {#each r.attrs ?? [] as a, i (i)}
                 <span class="attr" title="{a.key}={a.value}"><span class="k">{a.key}</span>={a.value}</span>
               {/each}
             </td>
-            <td class="actions">
+            <td class="actions end">
               <button class="row-action" on:click={() => copyLine(r)}>{copy.logs.copyLine}</button>
             </td>
           </tr>
@@ -356,7 +356,7 @@
     border-radius: 3px;
     background: var(--surface-2, rgba(127, 127, 127, 0.15));
     font-size: 0.75rem;
-    max-width: 32rem;
+    max-width: min(32rem, 100%);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -386,6 +386,16 @@
   @media (hover: none) {
     .row-action {
       opacity: 1;
+    }
+  }
+
+  /* Stacked on a phone (table.stack): the 1% widths that keep the desktop
+     columns tight would collapse these cells to nothing. */
+  @media (max-width: 640px) {
+    td.when,
+    td.lvl,
+    td.actions {
+      width: auto;
     }
   }
 </style>

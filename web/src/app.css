@@ -289,3 +289,74 @@ tr:hover td {
   color: var(--allowed);
   border-color: color-mix(in srgb, var(--allowed) 55%, transparent);
 }
+
+/* Phones: a table marked .stack reflows each row into a wrapped block —
+   the .primary cell on its own line first, the rest as short labelled
+   items (data-label), .full cells on a line of their own, .end pushed to
+   the right — instead of a table that hides most of its columns off to
+   the side. Desktop layout is untouched. */
+@media (max-width: 640px) {
+  table.stack thead {
+    display: none;
+  }
+
+  table.stack,
+  table.stack tbody {
+    display: block;
+  }
+
+  table.stack tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.75rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  table.stack tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  table.stack td {
+    display: block;
+    padding: 0;
+    border: none;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  table.stack td.primary {
+    order: -1;
+    flex-basis: 100%;
+    font-size: 0.95rem;
+  }
+
+  table.stack td.full {
+    flex-basis: 100%;
+  }
+
+  table.stack td.end {
+    margin-left: auto;
+  }
+
+  table.stack td.hide-narrow {
+    display: none;
+  }
+
+  table.stack td[data-label]::before {
+    content: attr(data-label) ' ';
+    color: var(--text-dim);
+    font-family: var(--font-body, inherit);
+    font-size: 0.75rem;
+  }
+
+  table.stack td:empty {
+    display: none;
+  }
+
+  tr:hover td {
+    background: transparent;
+  }
+}

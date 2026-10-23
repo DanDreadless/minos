@@ -210,7 +210,7 @@
   <p class="empty">{copy.devices.empty}</p>
 {:else}
   <div class="table-wrap">
-    <table>
+    <table class="stack">
       <thead>
         <tr>
           <th>IP</th>
@@ -228,7 +228,7 @@
       <tbody>
         {#each devices as d (d.mac || d.ip)}
           <tr class:dns-blocked={d.blocked}>
-            <td>
+            <td class="primary">
               <a class="ip-link" href={deviceHref(d.mac || d.ip)} title={copy.devices.openDevice}>
                 {d.ip}
               </a>
@@ -236,7 +236,7 @@
                 <span class="ip-more" title={d.ips.join(', ')}>+{d.ips.length - 1}</span>
               {/if}
             </td>
-            <td>{d.mac ?? ''}</td>
+            <td data-label="MAC">{d.mac ?? ''}</td>
             <td>
               {#if d.vendor}
                 {d.vendor}{#if d.model}
@@ -271,7 +271,7 @@
                 {/each}
               </select>
             </td>
-            <td class="num">
+            <td class="num" data-label="Queries">
               <a
                 class="count-link"
                 title={copy.devices.activityHint}
@@ -280,9 +280,9 @@
                 {d.queries.toLocaleString()}
               </a>
             </td>
-            <td class="num">{d.queries_blocked.toLocaleString()}</td>
-            <td>{fmtLastSeen(d.last_seen)}</td>
-            <td class="row-actions">
+            <td class="num" data-label="Blocked">{d.queries_blocked.toLocaleString()}</td>
+            <td data-label="Last seen">{fmtLastSeen(d.last_seen)}</td>
+            <td class="row-actions end">
               {#if d.blocked}
                 <span class="badge blocked">{copy.devices.blockedBadge}</span>
                 <button class="row-action" on:click={() => toggleBlock(d)}>
