@@ -336,8 +336,15 @@ domain** (Ctrl+K / ⌘K): type or paste a name or URL to see whether it is
 blocked and by which rule, then allow or block it, or open it in the
 Query Log.
 
-- **Dashboard** — query counters, cache hit rate, a
-  24-hour volume chart, the most-blocked domains and the busiest devices.
+- **Dashboard** — what your network did over the window you pick (24
+  hours, 7, 30 or 90 days): queries, blocked, block rate, a volume chart,
+  the most-blocked domains and the busiest devices — every number for the
+  same window, and each one a link into the Query Log for exactly those
+  queries. A line underneath gives the totals since Minos last started.
+  **Needs attention** appears at the top only when something does — no
+  rules loaded, a list retired or failing, a resolver not answering (or all
+  of them), no API token, the disk nearly full, DNSSEC unable to check
+  answers, or new warnings in the Logs — each with a link to the fix.
 - **Query Log** — the newest queries, streaming live, and a
   search across the whole retained history. Every blocked entry shows
   *which list and rule* blocked it and has a one-click **Allow** button;

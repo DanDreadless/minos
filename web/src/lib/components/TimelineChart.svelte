@@ -18,9 +18,18 @@
       totalH,
       blockedY: H - PAD_BOTTOM - blockedH,
       blockedH,
-      title: `${new Date(b.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${b.total} queries, ${b.blocked} blocked`,
+      title: `${label(b.time, daily)} — ${b.total} queries, ${b.blocked} blocked`,
     };
   });
+  // Day-sized buckets (windows over a week) are labelled by date, the rest
+  // by time of day.
+  $: daily = data.length > 1 && new Date(data[1].time).getTime() - new Date(data[0].time).getTime() >= 86400e3;
+  function label(iso: string, byDay: boolean): string {
+    const d = new Date(iso);
+    return byDay
+      ? d.toLocaleDateString([], { day: 'numeric', month: 'short' })
+      : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
   // A few x-axis time labels, roughly every quarter of the window. The first
   // and last are anchored start/end so they don't get clipped at the edges.
   $: ticks =
@@ -30,10 +39,7 @@
           return {
             x: i * barW + barW / 2,
             anchor: idx === 0 ? 'start' : idx === arr.length - 1 ? 'end' : 'middle',
-            label: new Date(data[i].time).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
+            label: label(data[i].time, daily),
           };
         })
       : [];

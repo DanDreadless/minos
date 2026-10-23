@@ -65,9 +65,15 @@ export const copy = {
 
   stats: {
     judged: 'Queries',
-    judgedHint: 'lookups handled since Minos started',
     condemned: 'Blocked',
-    condemnedHint: 'lookups blocked since Minos started',
+    windowHint: (w: string) => `in the ${w} — click to see them in the Query Log`,
+    sinceRestart: (total: number, blocked: number, uptime: number) => {
+      const d = Math.floor(uptime / 86400);
+      const h = Math.floor((uptime % 86400) / 3600);
+      const m = Math.floor((uptime % 3600) / 60);
+      const up = d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+      return `Since Minos started ${up} ago: ${total.toLocaleString()} queries, ${blocked.toLocaleString()} blocked.`;
+    },
     blockRate: 'Block rate',
     blockRateHint: 'share of queries blocked',
     rules: 'Rules',
@@ -77,11 +83,17 @@ export const copy = {
   },
 
   dashboard: {
-    timelineTitle: 'Queries — last 24 hours',
+    windowLabel: 'Showing',
+    windows: [
+      { hours: 24, label: '24 h', long: 'last 24 hours', range: '24h' },
+      { hours: 168, label: '7 days', long: 'last 7 days', range: '7d' },
+      { hours: 720, label: '30 days', long: 'last 30 days', range: '30d' },
+      { hours: 2160, label: '90 days', long: 'last 90 days', range: '90d' },
+    ] as const,
+    timelineTitle: (w: string) => `Queries — ${w}`,
+    windowHint: (w: string) => w,
     topBlockedTitle: 'Most blocked domains',
-    topBlockedHint: 'most-blocked, last 24 hours',
     topClientsTitle: 'Busiest devices',
-    topClientsHint: 'by query count, last 24 hours',
     noData: 'No query data yet.',
   },
 
@@ -98,8 +110,8 @@ export const copy = {
     modeEnforceHint: 'answers that fail the check are refused',
     wouldBlock: (n: number) =>
       `${n.toLocaleString()} ${n === 1 ? 'answer' : 'answers'} would have been refused in enforce mode`,
-    wouldBlockHint: 'last 24 hours — each of these would become a failed lookup if you switch',
-    wouldBlockNone: 'Nothing failed the check in the last 24 hours.',
+    wouldBlockHint: 'in the window above — each of these would become a failed lookup if you switch',
+    wouldBlockNone: 'Nothing failed the check in this window.',
     wouldBlockNoneHint: 'Permissive mode is watching. Give it time before deciding on enforce.',
     seeDocket: 'Review them in the Query Log',
     enforceNote: 'Refused answers show as blocked in the Query Log, under the list "dnssec".',
@@ -253,6 +265,32 @@ export const copy = {
     action: 'Block',
     actionHint: 'always block this domain and its subdomains',
     done: (domain: string) => `${domain} is now always blocked.`,
+  },
+
+  attention: {
+    title: 'Needs attention',
+    noRules: 'Nothing is being blocked: no blocklist rules are loaded.',
+    list: (name: string, state: string) =>
+      ({
+        unavailable: `${name} has never downloaded, so it is not blocking anything.`,
+        retired: `${name} has been retired by its publisher — replace it with a current list.`,
+        unauthorized: `${name} now refuses downloads — it may need a key.`,
+      })[state] ?? `${name} needs attention.`,
+    listsFailing: (names: string[]) =>
+      `${names.length === 1 ? `${names[0]} is` : `${names.length} lists are`} not updating — still blocking with the last good copy.`,
+    dnsDown: 'No upstream resolver is answering — devices cannot look up websites.',
+    upstreamsFailing: (names: string[]) =>
+      `${names.length === 1 ? `Upstream resolver ${names[0]} is` : `${names.length} upstream resolvers are`} not answering; the others are covering.`,
+    noToken: 'No API token is set, so anyone on your network can change Minos.',
+    disk: 'The disk holding the query log is over 90% full.',
+    dnssecBlind:
+      'DNSSEC validation is on, but most answers cannot be checked — your upstream resolver is probably not returning DNSSEC records.',
+    logs: 'New warnings or errors in the application log.',
+    openLists: 'Open Blocklists',
+    openResolvers: 'Open resolver settings',
+    openAccess: 'Set a token',
+    openSystem: 'Open System settings',
+    openLogs: 'Open Logs',
   },
 
   header: {
