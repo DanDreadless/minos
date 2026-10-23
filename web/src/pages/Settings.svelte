@@ -44,6 +44,14 @@
   let digest: 'off' | 'daily' | 'weekly' = 'off';
   let digestTime = '09:00';
   let digestDay = 'monday';
+  let uiURL = '';
+  let uiURLDefault = '';
+  let quiet = false;
+  let quietFrom = '22:00';
+  let quietTo = '07:00';
+  let mute: string[] = [];
+  let testing = false;
+  let testResult = '';
   let ssdp = true;
   let dhcpListen = true;
 
@@ -81,6 +89,11 @@
     digest = c.notifications.digest;
     digestTime = c.notifications.digest_time;
     digestDay = c.notifications.digest_day;
+    uiURL = c.notifications.ui_url;
+    uiURLDefault = c.notifications.ui_url_default;
+    quiet = c.notifications.quiet_hours !== '';
+    if (quiet) [quietFrom, quietTo] = c.notifications.quiet_hours.split('-');
+    mute = [...c.notifications.mute];
     ssdp = c.discovery.ssdp;
     dhcpListen = c.discovery.dhcp_listen;
     routeRows = c.dns.routes.map((r) => ({
@@ -95,6 +108,29 @@
       initFrom(await api.getConfig());
     } catch (e) {
       notifyError(e);
+    }
+  }
+
+  // An event group is on unless all its types are muted. Both take the mute
+  // list as a parameter so the checkboxes re-render when it changes.
+  function eventOn(types: string[], muted: string[]): boolean {
+    return !types.every((t) => muted.includes(t));
+  }
+
+  function setEvent(muted: string[], types: string[], on: boolean): string[] {
+    const rest = muted.filter((t) => !types.includes(t));
+    return on ? rest : [...rest, ...types];
+  }
+
+  async function sendTest(): Promise<void> {
+    testing = true;
+    testResult = '';
+    try {
+      testResult = copy.settings.testResult(await api.testNotification());
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      testing = false;
     }
   }
 
@@ -590,6 +626,7 @@
 
   <section class="card">
     <h2>{copy.settings.notificationsTitle} <small>{copy.settings.notificationsHint}</small></h2>
+    <p class="note">{copy.settings.notificationsNote}</p>
     <label class="field wide">
       <span>{copy.settings.webhookURL} <small>{copy.settings.webhookHint}</small></span>
       <input placeholder="https://…" bind:value={webhookURL} />
@@ -607,7 +644,39 @@
         autocomplete="new-password"
       />
     </label>
-    <p class="note">{copy.settings.notificationsNote}</p>
+    <label class="field wide">
+      <span>{copy.settings.uiURL} <small>{copy.settings.uiURLHint}</small></span>
+      <input placeholder={uiURLDefault || 'http://…'} bind:value={uiURL} />
+    </label>
+    <p class="note">{copy.settings.uiURLNote(uiURLDefault)}</p>
+
+    <div class="digest">
+      <h3>{copy.settings.eventsTitle}</h3>
+      {#each copy.settings.events as ev (ev.label)}
+        <label class="radio">
+          <input
+            type="checkbox"
+            checked={eventOn(ev.types, mute)}
+            on:change={(e) => (mute = setEvent(mute, ev.types, e.currentTarget.checked))}
+          />
+          {ev.label} <small class="hint">{ev.hint}</small>
+        </label>
+      {/each}
+      <p class="note">{copy.settings.dnsDownNote}</p>
+    </div>
+
+    <div class="digest">
+      <h3>{copy.settings.quietTitle} <small>{copy.settings.quietHint}</small></h3>
+      <div class="digest-row">
+        <label class="radio">
+          <input type="checkbox" bind:checked={quiet} />
+          {copy.settings.quietFrom}
+        </label>
+        <input type="time" bind:value={quietFrom} disabled={!quiet} required />
+        <span>{copy.settings.quietTo}</span>
+        <input type="time" bind:value={quietTo} disabled={!quiet} required />
+      </div>
+    </div>
 
     <div class="digest">
       <h3>{copy.settings.digestTitle} <small>{copy.settings.digestHint}</small></h3>
@@ -649,6 +718,9 @@
               digest,
               digest_time: digestTime,
               digest_day: digestDay,
+              ui_url: uiURL.trim(),
+              quiet_hours: quiet ? `${quietFrom}-${quietTo}` : '',
+              mute,
               // Only send a typed token; an untouched field never clobbers
               // the stored one. Clearing ntfy_url makes any token inert.
               ...(ntfyToken.trim() ? { ntfy_token: ntfyToken.trim() } : {}),
@@ -657,6 +729,10 @@
       >
         {copy.settings.save}
       </button>
+      <button on:click={sendTest} disabled={testing} title={copy.settings.testSaveFirst}>
+        {testing ? copy.settings.testSending : copy.settings.testAction}
+      </button>
+      {#if testResult}<span class="test-result">{testResult}</span>{/if}
     </div>
   </section>
 
@@ -961,5 +1037,16 @@
     flex-wrap: wrap;
     gap: 1rem;
     align-items: flex-end;
+  }
+
+  .radio small.hint {
+    color: var(--text-dim);
+    margin-left: 0.3rem;
+  }
+
+  .test-result {
+    align-self: center;
+    font-size: 0.82rem;
+    color: var(--text-dim);
   }
 </style>

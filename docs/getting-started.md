@@ -856,19 +856,42 @@ notifications:              # optional; nothing is sent unless a URL is set
   digest: off               # off | daily | weekly: a traffic summary
   digest_time: "09:00"      # delivery time, 24h HH:MM, server time
   digest_day: monday        # delivery day (weekly only), lowercase
+  ui_url: ""                # where tapping a notification goes; blank = derived
+  quiet_hours: ""           # e.g. "22:00-07:00": deliver silently overnight
+  mute: []                  # event types never sent, e.g. [digest, device_new]
 ```
 
-Notifications cover three low-volume events: a **new device** makes its
-first DNS query (suppressed for the first five minutes after startup so a
-fresh install doesn't flood you), an **upstream resolver** trips the
-failure breaker or recovers, and — with the update check enabled — a
-**new release**. An opt-in **digest** adds a daily or weekly summary —
-totals, block rate, top blocked domains, busiest client, new devices —
-the self-hosted answer to the summary emails hosted DNS services send.
+Every notification says what happened, why it matters and what to do, and
+**tapping it opens the right page in Minos** — the new device's page, the
+Blocklists page, resolver settings. Links use `ui_url`, or when that is
+blank, the API's listen address (this machine's LAN address when Minos
+listens on every interface); Settings shows the address it will use. Set
+it if you reach Minos by another name.
+
+| Event | When | Priority |
+|---|---|---|
+| New device | a device makes its first DNS query — sent ~90 s later so it can be named, and a burst (a router reboot) arrives as one message; quiet for 5 minutes after Minos starts | default |
+| Blocklist problem | a list is retired (404/410) or refuses downloads (401/403) at once; never loaded or stale after three failed attempts | high (stale: default) |
+| Resolver not answering | an upstream trips the failure breaker while others still answer; a repeat within 30 minutes stays quiet, but is re-checked and reported if it stays down | default |
+| **DNS is down** | every upstream has stopped answering, so nothing resolves | urgent, ignores quiet hours |
+| Recovery | a list or resolver that was reported failing works again | low |
+| Minos update | a new release is out (update check on) | low |
+| Certificate problem | the DoT/DoH certificate cannot be renewed | high |
+| Digest | the opt-in daily or weekly summary: totals, block rate, top blocked, busiest device, new devices | low |
+
+Each can be switched off in Settings → Notifications (or with `mute`),
+except "DNS is down". **Quiet hours** deliver everything silently (ntfy
+priority 2) instead of dropping it. **Send test notification** delivers one
+straight away and reports, per destination, whether it arrived or why not.
+ntfy messages are published as JSON, so titles and bodies keep their
+punctuation, and carry the link as the tap action plus an "Open …" button.
 Webhook payloads look like:
 
 ```json
-{"type":"device_new","title":"New device on your network",
- "message":"192.168.1.77 (androids-phone.lan) [aa:bb:cc:dd:ee:ff] made its first DNS query through Minos.",
- "time":"2026-07-05T10:12:03Z"}
+{"type":"device_new","title":"New device: Kitchen speaker",
+ "message":"Kitchen speaker made its first DNS query through Minos (made by Sonos, address 192.168.1.77, MAC aa:bb:cc:dd:ee:ff). If you don't recognise it, open it in Minos to name it, put it in a group, or block it.",
+ "time":"2026-07-05T10:12:03Z",
+ "url":"http://192.168.1.2:8080/#/device/aa:bb:cc:dd:ee:ff",
+ "priority":3,
+ "actions":[{"label":"Open device","url":"http://192.168.1.2:8080/#/device/aa:bb:cc:dd:ee:ff"}]}
 ```

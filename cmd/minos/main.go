@@ -130,21 +130,24 @@ func serve(args []string) error {
 	reg := clients.NewRegistry()
 	reg.SetQNameSource(qlog.RecentQNames) // traffic hints read the ring
 	reg.ApplyConfig(cfg)
-	reg.OnNewDevice(func(ip, mac, hostname string) {
+	// New devices are announced after a short wait, by name where discovery
+	// found one, and grouped when several arrive together.
+	newDevices := notify.NewDeviceBatcher(90*time.Second, func(ips []string) []notify.DeviceInfo {
+		return deviceInfos(reg.Devices(store.Get()), ips)
+	}, notifier.Publish)
+	notifier.SetDeviceNamer(func(ip string) string {
+		if d := deviceInfos(reg.Devices(store.Get()), []string{ip}); len(d) == 1 {
+			return d[0].Name
+		}
+		return ""
+	})
+	reg.OnNewDevice(func(ip, _, _ string) {
 		// Grace period: on a first boot (or after history loss) every
 		// existing device looks new — don't flood the topic.
 		if time.Since(started) < 5*time.Minute {
 			return
 		}
-		detail := ip
-		if hostname != "" {
-			detail += " (" + hostname + ")"
-		}
-		if mac != "" {
-			detail += " [" + mac + "]"
-		}
-		notifier.Publish("device_new", "New device on your network",
-			detail+" made its first DNS query through Minos.")
+		newDevices.Add(ip)
 	})
 	proxy, err := dnsproxy.New(cfg, engine, qlog, reg)
 	if err != nil {
@@ -161,39 +164,17 @@ func serve(args []string) error {
 			return fmt.Errorf("acme: %w", err)
 		}
 		acmeMgr.OnFailure(func(err error) {
-			notifier.Publish("acme_renewal_failed", "Certificate issuance failing",
-				"ACME for "+a.Domain+" is failing and will keep retrying hourly: "+err.Error())
+			notifier.Publish(notify.ACMEEvent(a.Domain, err))
 		})
 		proxy.SetCertSource(acmeMgr.GetCertificate)
 	}
 
 	mgr.OnListEvent(func(name string, state lists.ListState, detail string) {
-		switch state {
-		case lists.ListOK:
-			notifier.Publish("list_recovered", "Blocklist updating again",
-				name+" downloaded successfully and is up to date.")
-		case lists.ListRetired:
-			notifier.Publish("list_failing", "Blocklist retired by its publisher",
-				name+" is no longer published ("+detail+"). Minos keeps blocking with the last copy; replace it from the catalog.")
-		case lists.ListUnauthorized:
-			notifier.Publish("list_failing", "Blocklist now needs credentials",
-				name+" refuses the download ("+detail+"). Minos keeps blocking with the last copy.")
-		case lists.ListUnavailable:
-			notifier.Publish("list_failing", "Blocklist not loaded",
-				name+" has never downloaded ("+detail+"), so it is not blocking anything yet. Minos keeps retrying.")
-		default:
-			notifier.Publish("list_failing", "Blocklist out of date",
-				name+" has failed to update for over two refresh intervals ("+detail+"). Minos keeps blocking with the last copy.")
-		}
+		notifier.Publish(notify.ListEvent(name, string(state), detail))
 	})
+	health := upstreamHealth{proxy: proxy, store: store}
 	proxy.OnUpstreamEvent(func(name string, sick bool) {
-		if sick {
-			notifier.Publish("upstream_sick", "Upstream resolver failing",
-				name+" stopped answering; queries are using the remaining upstreams.")
-			return
-		}
-		notifier.Publish("upstream_recovered", "Upstream resolver recovered",
-			name+" is answering again.")
+		notifier.UpstreamChanged(health, name, sick)
 	})
 	store.OnChange(func(c *config.Config) {
 		if err := proxy.ApplyConfig(c); err != nil {
@@ -215,8 +196,7 @@ func serve(args []string) error {
 
 	checker := updates.NewChecker(version, store)
 	checker.OnUpdate(func(v string) {
-		notifier.Publish("update_available", "Minos update available",
-			"v"+v+" is out — https://github.com/DanDreadless/minos/releases")
+		notifier.Publish(notify.UpdateEvent(version, v))
 	})
 	go checker.Run(ctx)
 	go notifier.Run(ctx)
@@ -244,6 +224,7 @@ func serve(args []string) error {
 	go hostStats.Run(ctx)
 
 	apiSrv := api.New(engine, qlog, store, mgr, reg, proxy, checker, hostStats, static, version, installMethod)
+	apiSrv.SetNotifier(notifier)
 	httpSrv := &http.Server{
 		Addr:              cfg.API.Listen,
 		Handler:           apiSrv.Router(),

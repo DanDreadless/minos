@@ -507,11 +507,32 @@ Configured via `notifications` in the config or Settings; each event is
 POSTed to your webhook as:
 
 ```json
-{"type": "device_new | upstream_sick | upstream_recovered | list_failing | list_recovered | update_available | digest",
- "title": "New device on your network",
- "message": "192.168.1.77 (phone.lan) [aa:bb:cc:dd:ee:ff] made its first DNS query through Minos.",
- "time": "2026-07-05T10:12:03Z"}
+{"type": "device_new | upstream_sick | upstream_recovered | dns_down | list_failing | list_recovered | update_available | acme_renewal_failed | digest | test",
+ "title": "New device: Kitchen speaker",
+ "message": "Kitchen speaker made its first DNS query through Minos (made by Sonos, address 192.168.1.77, MAC aa:bb:cc:dd:ee:ff). …",
+ "time": "2026-07-05T10:12:03Z",
+ "url": "http://192.168.1.2:8080/#/device/aa:bb:cc:dd:ee:ff",
+ "priority": 3,
+ "actions": [{"label": "Open device", "url": "http://192.168.1.2:8080/#/device/aa:bb:cc:dd:ee:ff"}]}
 ```
+
+`url` is where to act on the event in Minos (absent when Minos cannot work
+out its own address and `notifications.ui_url` is unset); `priority` is
+ntfy's 1–5 scale — `dns_down` is 5 and ignores quiet hours, which lower
+everything else to 2. ntfy topics receive the same event through ntfy's
+JSON publishing (title, message, tags, priority, `click`, view actions).
+
+### `POST /api/notifications/test`
+
+Sends a test event to every configured destination now (bypassing the
+queue and `mute`) and answers `{"webhook": "ok", "ntfy": "rejected: 403
+Forbidden"}` — one entry per destination. 400 when none is configured.
+
+`GET /api/config` reports `notifications.ui_url`, `ui_url_default` (the
+derived address links use when `ui_url` is blank), `quiet_hours`, `mute`,
+and `types` (every value `mute` accepts); `PUT /api/config` takes `ui_url`,
+`quiet_hours` (`"HH:MM-HH:MM"`, may wrap midnight, `""` to clear) and
+`mute`.
 
 `list_failing` fires once when a blocklist becomes retired (404/410) or
 unauthorized (401/403), or — after it has failed three attempts running, so

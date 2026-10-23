@@ -215,6 +215,11 @@ export interface ConfigView {
     digest: 'off' | 'daily' | 'weekly';
     digest_time: string; // 24h "HH:MM", server-local
     digest_day: string; // lowercase day name, weekly only
+    ui_url: string; // where notification links point; '' = ui_url_default
+    ui_url_default: string;
+    quiet_hours: string; // "22:00-07:00" or ''
+    mute: string[]; // event types never sent
+    types: string[];
   };
   discovery: { ssdp: boolean; dhcp_listen: boolean };
 }
@@ -247,6 +252,9 @@ export interface SettingsUpdate {
     digest?: string;
     digest_time?: string;
     digest_day?: string;
+    ui_url?: string;
+    quiet_hours?: string;
+    mute?: string[];
   };
   discovery?: { ssdp?: boolean; dhcp_listen?: boolean };
 }
@@ -510,6 +518,9 @@ export const api = {
 
   getConfig: () => request<ConfigView>('GET', '/api/config'),
   updateConfig: (upd: SettingsUpdate) => request<ConfigView>('PUT', '/api/config', upd),
+  // Sends a test notification now; the result maps each destination
+  // ("webhook", "ntfy") to "ok" or the reason it failed.
+  testNotification: () => request<Record<string, string>>('POST', '/api/notifications/test'),
 
   importPihole: (gravity: File, customList?: File) => {
     const form = new FormData();

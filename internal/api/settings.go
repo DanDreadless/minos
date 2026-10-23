@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"minos/internal/config"
+	"minos/internal/notify"
 	"minos/internal/querylog"
 )
 
@@ -58,6 +59,14 @@ type configView struct {
 		Digest       string `json:"digest"`
 		DigestTime   string `json:"digest_time"`
 		DigestDay    string `json:"digest_day"`
+		UIURL        string `json:"ui_url"`
+		// UIURLDefault is what links use when ui_url is empty — shown as
+		// the field's placeholder so the user can see whether it is right.
+		UIURLDefault string   `json:"ui_url_default"`
+		QuietHours   string   `json:"quiet_hours"`
+		Mute         []string `json:"mute"`
+		// Types is every event type mute accepts.
+		Types []string `json:"types"`
 	} `json:"notifications"`
 	Discovery config.DiscoveryConfig `json:"discovery"`
 }
@@ -113,6 +122,11 @@ func viewOf(c *config.Config) configView {
 	if v.Notifications.DigestDay == "" {
 		v.Notifications.DigestDay = "monday"
 	}
+	v.Notifications.UIURL = c.Notifications.UIURL
+	v.Notifications.UIURLDefault = notify.DefaultUIBase(c.API.Listen)
+	v.Notifications.QuietHours = c.Notifications.QuietHours
+	v.Notifications.Mute = append([]string{}, c.Notifications.Mute...)
+	v.Notifications.Types = config.NotificationTypes
 	v.Discovery = c.Discovery
 	return v
 }
@@ -159,12 +173,15 @@ type settingsUpdate struct {
 	} `json:"api"`
 	UpdateCheck   *bool `json:"update_check"`
 	Notifications *struct {
-		WebhookURL *string `json:"webhook_url"`
-		NtfyURL    *string `json:"ntfy_url"`
-		NtfyToken  *string `json:"ntfy_token"`
-		Digest     *string `json:"digest"`
-		DigestTime *string `json:"digest_time"`
-		DigestDay  *string `json:"digest_day"`
+		WebhookURL *string   `json:"webhook_url"`
+		NtfyURL    *string   `json:"ntfy_url"`
+		NtfyToken  *string   `json:"ntfy_token"`
+		Digest     *string   `json:"digest"`
+		DigestTime *string   `json:"digest_time"`
+		DigestDay  *string   `json:"digest_day"`
+		UIURL      *string   `json:"ui_url"`
+		QuietHours *string   `json:"quiet_hours"`
+		Mute       *[]string `json:"mute"`
 	} `json:"notifications"`
 	Discovery *struct {
 		SSDP       *bool `json:"ssdp"`
@@ -280,6 +297,15 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			if upd.Notifications.DigestDay != nil {
 				c.Notifications.DigestDay = *upd.Notifications.DigestDay
+			}
+			if upd.Notifications.UIURL != nil {
+				c.Notifications.UIURL = strings.TrimSpace(*upd.Notifications.UIURL)
+			}
+			if upd.Notifications.QuietHours != nil {
+				c.Notifications.QuietHours = strings.TrimSpace(*upd.Notifications.QuietHours)
+			}
+			if upd.Notifications.Mute != nil {
+				c.Notifications.Mute = append([]string(nil), (*upd.Notifications.Mute)...)
 			}
 		}
 		if upd.Discovery != nil {
@@ -502,4 +528,31 @@ func (s *Server) handleDeleteList(w http.ResponseWriter, r *http.Request) {
 	}
 	s.lists.Forget(name)
 	writeJSON(w, http.StatusOK, s.lists.Status())
+}
+
+// SetNotifier enables the Settings "send test notification" endpoint.
+func (s *Server) SetNotifier(n *notify.Notifier) { s.notifier = n }
+
+// handleNotificationTest sends a test notification to every configured
+// destination now and reports each one's outcome, so a wrong topic or a
+// rejected token is found while the user is looking at the form.
+func (s *Server) handleNotificationTest(w http.ResponseWriter, r *http.Request) {
+	if s.notifier == nil {
+		writeError(w, http.StatusServiceUnavailable, "notifications are not available")
+		return
+	}
+	res, err := s.notifier.SendTest(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	out := map[string]string{}
+	for sink, e := range res {
+		if e != nil {
+			out[sink] = e.Error()
+		} else {
+			out[sink] = "ok"
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
