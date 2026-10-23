@@ -88,7 +88,7 @@
   <div class="foot">
     {#if status}
       {#if status.paused}
-        <span class="pill paused" title={copy.recess.actionHint}>{copy.recess.headerPill}</span>
+        <span class="pill paused" title={copy.pause.actionHint}>{copy.pause.headerPill}</span>
       {:else}
         <span class="pill active-pill">blocking active</span>
       {/if}

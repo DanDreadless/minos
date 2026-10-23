@@ -1,7 +1,8 @@
-// All themed ("lore layer") copy lives here so it can be audited, localised,
-// or toned down in one place. Rules (see CLAUDE.md): restraint — one themed
-// word per screen; every themed label carries a plain explanation; error
-// messages are always plain and never themed.
+// All UI copy lives here so it can be audited or localised in one place.
+// Rules (see CLAUDE.md, "Product vocabulary"): labels, buttons and messages
+// use plain words — Blocked/Allowed, Allow/Block, Pause blocking, Upstream
+// resolvers. The judgment flavour survives only in the tagline and a few
+// empty states, where it can't be misread. Errors are always plain.
 export const copy = {
   appName: 'Minos',
   tagline: 'Every query gets judged.',
@@ -17,12 +18,12 @@ export const copy = {
   nav: {
     openMenu: 'Open menu',
     closeMenu: 'Close menu',
-    dashboard: { label: 'The Tribunal', hint: 'dashboard' },
-    querylog: { label: 'The Docket', hint: 'query log' },
-    devices: { label: 'Devices', hint: 'clients & groups' },
-    lists: { label: 'The Codex', hint: 'blocklists' },
-    domains: { label: 'Pardons & Sentences', hint: 'allow & deny domains' },
-    settings: { label: 'Settings', hint: 'server configuration' },
+    dashboard: { label: 'Dashboard', hint: 'what your network is doing' },
+    querylog: { label: 'Query Log', hint: 'every lookup, live and searchable' },
+    devices: { label: 'Devices', hint: 'devices, groups & schedules' },
+    lists: { label: 'Blocklists', hint: 'the lists that decide what is blocked' },
+    domains: { label: 'Allow & Block', hint: 'your own domains & services' },
+    settings: { label: 'Settings', hint: 'resolvers, filtering, notifications…' },
     logs: { label: 'Logs', hint: "Minos's own activity" },
     logsAlert: 'new warnings or errors',
   },
@@ -62,23 +63,23 @@ export const copy = {
   },
 
   stats: {
-    judged: 'Judged',
-    judgedHint: 'total queries handled',
-    condemned: 'Condemned',
-    condemnedHint: 'blocked queries',
+    judged: 'Queries',
+    judgedHint: 'lookups handled since Minos started',
+    condemned: 'Blocked',
+    condemnedHint: 'lookups blocked since Minos started',
     blockRate: 'Block rate',
     blockRateHint: 'share of queries blocked',
     rules: 'Rules',
-    rulesHint: 'compiled block rules',
+    rulesHint: 'blocking rules loaded from your lists and settings',
     cacheRate: 'Cache hits',
     cacheRateHint: 'answers served from memory, no upstream trip',
   },
 
   dashboard: {
     timelineTitle: 'Queries — last 24 hours',
-    topBlockedTitle: 'Most condemned domains',
+    topBlockedTitle: 'Most blocked domains',
     topBlockedHint: 'most-blocked, last 24 hours',
-    topClientsTitle: 'Busiest clients',
+    topClientsTitle: 'Busiest devices',
     topClientsHint: 'by query count, last 24 hours',
     noData: 'No query data yet.',
   },
@@ -99,10 +100,10 @@ export const copy = {
     wouldBlockHint: 'last 24 hours — each of these would become a failed lookup if you switch',
     wouldBlockNone: 'Nothing failed the check in the last 24 hours.',
     wouldBlockNoneHint: 'Permissive mode is watching. Give it time before deciding on enforce.',
-    seeDocket: 'Review them in the Docket',
-    enforceNote: 'Refused answers are condemned in the Docket under the dnssec list.',
+    seeDocket: 'Review them in the Query Log',
+    enforceNote: 'Refused answers show as blocked in the Query Log, under the list "dnssec".',
     countersTitle: 'Since restart',
-    countersHint: 'click a number to see those queries — the Docket covers the retained log, so the totals will differ',
+    countersHint: 'click a number to see those queries — the Query Log covers all kept history, so its totals will differ',
     secure: 'Verified',
     secureHint: 'signed, and the signature checked out',
     insecure: 'Unsigned',
@@ -144,26 +145,26 @@ export const copy = {
     tokenAction: 'Settings',
   },
 
-  docket: {
-    title: 'The Docket',
-    subtitle: 'live query log',
-    empty: 'No queries yet. Point a device at this resolver and its fate appears here.',
-    verdictBlocked: 'condemned', // API value: "blocked"
-    verdictAllowed: 'passed', //    API value: "allowed"
+  querylog: {
+    title: 'Query Log',
+    subtitle: 'every DNS lookup, live and searchable',
+    empty: 'No queries yet. Point a device at Minos and every lookup it makes is judged here.',
+    verdictBlocked: 'blocked',
+    verdictAllowed: 'allowed',
     searchPlaceholder: 'Filter by domain or client…',
     searchScopeHint:
       'The search box matches domain and client names. To filter by blocklist, use the list dropdown instead — it is much faster too.',
-    filterAll: 'All verdicts',
-    filterBlocked: 'Condemned only',
-    filterAllowed: 'Passed only',
-    filterWouldBlock: 'Would block only',
+    filterAll: 'All',
+    filterBlocked: 'Blocked',
+    filterAllowed: 'Allowed',
+    filterWouldBlock: 'Would block',
     filterListAll: 'All lists',
     filterListTitle: 'show only queries this list matched',
     wouldBlockBadge: 'would block',
     wouldBlockTitle: (list: string, rule: string) =>
       list === 'dnssec'
         ? `This answer failed its DNSSEC check: "${rule}". Enforce mode would have refused it; permissive mode let it through.`
-        : `An audit-mode list would have condemned this: "${rule}" in ${list}. Not enforced.`,
+        : `A list in audit mode would have blocked this: "${rule}" in ${list}. Audit lists only record, so it was allowed.`,
     dnssecScope: 'DNSSEC', // prefixes the drilled-in validation-outcome chip
     dnssecName: (s: string) =>
       ({
@@ -223,7 +224,7 @@ export const copy = {
     copyHint: 'copy the domain',
     copied: (d: string) => `Copied ${d}`,
     checkAction: 'Check',
-    checkHint: 'how would this domain be judged now, with the current lists?',
+    checkHint: 'would this domain be blocked now, with the current lists?',
     checkResult: (d: string, blocked: boolean, list: string, rule: string) =>
       blocked ? `${d} would be blocked now by ${list} ("${rule}").` : `${d} would be allowed now.`,
     syntaxTitle: 'Search syntax',
@@ -241,30 +242,30 @@ export const copy = {
     syntaxKeys: 'Press / to search from anywhere on the page, Enter to apply, Esc to clear.',
   },
 
-  pardon: {
-    action: 'Pardon',
-    actionHint: 'always allow this domain',
-    done: (domain: string) => `${domain} pardoned — always allowed from now on.`,
+  allow: {
+    action: 'Allow',
+    actionHint: 'always allow this domain and its subdomains',
+    done: (domain: string) => `${domain} is now always allowed.`,
   },
 
-  sentence: {
-    action: 'Sentence',
-    actionHint: 'always block this domain',
-    done: (domain: string) => `${domain} sentenced — always blocked from now on.`,
+  block: {
+    action: 'Block',
+    actionHint: 'always block this domain and its subdomains',
+    done: (domain: string) => `${domain} is now always blocked.`,
   },
 
-  recess: {
-    action: 'Recess',
-    actionHint: 'pause blocking',
+  pause: {
+    action: 'Pause blocking',
+    actionHint: 'every lookup is allowed until it resumes',
     resume: 'Resume blocking',
     active: (until: string) => `Blocking paused until ${until}.`,
     activeIndefinite: 'Blocking paused.',
-    headerPill: 'In recess',
+    headerPill: 'Blocking paused',
   },
 
   setup: {
     // The one lore touch on this card; everything below it is plain.
-    title: "Every query gets judged. Let's arraign your first.",
+    title: "Every query gets judged. Let's set up your first.",
     hint: 'three minutes from empty to blocking',
     dismiss: 'Dismiss',
     dismissTitle: "Hide this checklist for good — it won't come back.",
@@ -272,40 +273,40 @@ export const copy = {
       `Point a device at Minos: set its DNS server to this machine${addr ? ` (listening on ${addr})` : ''}, or set your router's DHCP DNS option so every device follows.`,
     step1Link: 'setup guide',
     step2: 'Choose your blocklists — the catalog has curated, verified picks with one-click subscribe.',
-    step2Link: 'open the Codex',
-    step3: 'Check your upstreams — the default, Cloudflare over encrypted DNS, is already a good choice.',
+    step2Link: 'open Blocklists',
+    step3: 'Check your upstream resolvers — the default, Cloudflare over encrypted DNS, is already a good choice.',
     step3Link: 'Settings',
     step4: 'Optional: turn on the update check and notifications.',
     step4Link: 'Settings',
   },
 
   lists: {
-    title: 'The Codex',
-    subtitle: 'subscribed blocklists',
+    title: 'Blocklists',
+    subtitle: 'the lists Minos blocks from, kept up to date automatically',
     empty: 'No blocklists configured. Add one below.',
     refreshAll: 'Refresh all lists',
     refreshing: 'Refreshing…',
     addTitle: 'Add a list',
     allowBadge: 'allowlist',
     allowBadgeTitle:
-      'Every entry on this list is always allowed, beating every blocklist — a subscribed pardon.',
+      'Every entry on this list is always allowed, even if a blocklist has it.',
     actionBlock: 'blocklist — entries are blocked',
     actionAllow: 'allowlist — entries are always allowed',
     confirmDelete: (name: string) =>
       `Remove the list "${name}"? Its rules stop applying immediately.`,
     auditHeader: 'Audit',
     auditTitle:
-      "Audit mode: this list's rules are logged as 'would block' in the Docket but never enforced — try a strict list safely, then untick to enforce it.",
+      "Audit mode: this list's matches are recorded as 'would block' in the Query Log but not blocked — try a strict list safely, then untick to enforce it.",
     auditBadge: 'audit',
-    auditBadgeTitle: 'Logged as "would block", never enforced.',
+    auditBadgeTitle: 'Recorded as "would block", not blocked.',
     blocksHeader: 'Blocked (7d)',
-    blocksLinkTitle: 'view these queries in the Docket',
+    blocksLinkTitle: 'see these queries in the Query Log',
     noBlocks: 'no blocks this week',
     noBlocksTitle:
       'No queries matched this list in the last 7 days. It may still be a quiet safety net — security lists often are.',
-    allowStatTitle: 'An allowlist pardons; it never blocks.',
+    allowStatTitle: 'An allowlist only allows; it never blocks.',
     builtinStatsTitle: 'Blocked by your own rules this week:',
-    statDenylist: 'sentences (always-blocked domains)',
+    statDenylist: 'your blocked domains',
     statClients: 'device blocks',
     statService: (label: string) => `service ${label}`,
     statGroup: (name: string) => `group ${name}`,
@@ -357,7 +358,7 @@ export const copy = {
     catalogAdded: 'Added ✓',
     tiers: {
       balanced: { label: 'Balanced', hint: 'recommended — blocks ads & tracking with very low breakage' },
-      strict: { label: 'Strict', hint: 'wider nets; keep an eye on the Docket and pardon what breaks' },
+      strict: { label: 'Strict', hint: 'wider nets; keep an eye on the Query Log and allow what breaks' },
       security: { label: 'Security', hint: 'malware & phishing feeds — protection, not ad blocking' },
       family: { label: 'Family', hint: 'content you choose to keep off the network, not threats' },
     },
@@ -369,7 +370,7 @@ export const copy = {
     customBadge: 'yours',
     customBadgeTitle: 'A custom service you defined — manage it under "Your custom services".',
     customManage: 'Your custom services',
-    customManageHint: 'define your own bundle of domains, then sentence or pardon it like any service',
+    customManageHint: 'define your own bundle of domains, then block or allow it like any service',
     customAdd: 'Add a custom service',
     customLabelLabel: 'Name',
     customLabelPlaceholder: 'e.g. School portal',
@@ -377,7 +378,7 @@ export const copy = {
     customNamePlaceholder: 'derived from the name',
     customDomainsLabel: 'Domains — one per line or comma-separated',
     customDomainsPlaceholder: 'mygame.example\ncdn.mygame.example',
-    customAllowExtraLabel: 'Extra hosts allowed only while pardoned (optional)',
+    customAllowExtraLabel: 'Extra hosts allowed only while the service is allowed (optional)',
     customAllowExtraPlaceholder: 'sign-in or CDN hosts the service needs to work',
     customCreate: 'Create service',
     customSave: 'Save changes',
@@ -385,40 +386,40 @@ export const copy = {
     customEdit: 'Edit',
     customEditing: (label: string) => `Editing "${label}"`,
     customSharedNote:
-      'Custom services are shared: the same bundle can be sentenced or pardoned above, and assigned to any group.',
+      'Custom services are shared: the same bundle can be blocked or allowed above, and used by any group.',
     customConfirmDelete: (label: string) =>
-      `Remove the custom service "${label}"? Any blocks or pardons using it — above or in any group — stop applying immediately.`,
+      `Remove the custom service "${label}"? Anything blocking or allowing it — above or in any group — stops applying immediately.`,
   },
 
   domains: {
-    checkTitle: 'Judge a domain',
-    checkHint: 'see which rule decides its fate',
+    checkTitle: 'Check a domain',
+    checkHint: 'see whether it is blocked, and which rule decides',
     checkPlaceholder: 'example.com',
-    checkButton: 'Judge',
-    checkBlocked: (list: string, rule: string) => `Condemned — matched "${rule}" in ${list}.`,
-    checkAllowedByRule: (rule: string) => `Passed — pardoned by "${rule}".`,
-    checkAllowed: 'Passed — no rule matches; it would be forwarded upstream.',
-    pardonsTitle: 'Pardons',
-    pardonsHint: 'domains always allowed (and their subdomains)',
-    pardonsEmpty: 'No pardons granted.',
+    checkButton: 'Check',
+    checkBlocked: (list: string, rule: string) => `Blocked — matched "${rule}" in ${list}.`,
+    checkAllowedByRule: (rule: string) => `Allowed — by "${rule}".`,
+    checkAllowed: 'Allowed — no rule matches; it is looked up upstream as normal.',
+    pardonsTitle: 'Allowed domains',
+    pardonsHint: 'always allowed, with their subdomains, whatever the blocklists say',
+    pardonsEmpty: 'No allowed domains yet.',
     servicesTitle: 'Services',
-    servicesHint: 'block or pardon a whole service in one move',
+    servicesHint: 'block or allow a whole service — every domain it uses — in one move',
     servicesScopeLabel: 'Services for',
     servicesScopeGlobal: 'Everyone (global)',
     servicesScopeNote:
       'Choose a group to set services for just those devices — a group can also carry a schedule, on the',
     servicesScopeNoteLink: 'Devices page.',
-    sentencedServicesTitle: 'Sentenced services',
-    sentencedServicesHint: 'blocked at the selected scope',
-    sentencedServicesActive: 'Sentenced',
-    sentencedServicesEmpty: 'No services sentenced. Add one from the left.',
-    pardonedServicesTitle: 'Pardoned services',
-    pardonedServicesHint: 'always allowed at the selected scope',
-    pardonedServicesActive: 'Pardoned',
-    pardonedServicesEmpty: 'No services pardoned. Add one from the left.',
-    sentencesTitle: 'Sentences',
-    sentencesHint: 'domains always blocked (and their subdomains)',
-    sentencesEmpty: 'No standing sentences.',
+    sentencedServicesTitle: 'Blocked services',
+    sentencedServicesHint: 'blocked for the devices selected above',
+    sentencedServicesActive: 'Blocked',
+    sentencedServicesEmpty: 'No services blocked. Add one from the left.',
+    pardonedServicesTitle: 'Allowed services',
+    pardonedServicesHint: 'always allowed for the devices selected above',
+    pardonedServicesActive: 'Allowed',
+    pardonedServicesEmpty: 'No services allowed. Add one from the left.',
+    sentencesTitle: 'Blocked domains',
+    sentencesHint: 'always blocked, with their subdomains',
+    sentencesEmpty: 'No blocked domains yet.',
     addPlaceholder: 'domain to add…',
     localTitle: 'Local DNS',
     localHint: 'names answered here — never blocked, never sent upstream',
@@ -468,11 +469,11 @@ export const copy = {
     modeBypass: 'bypass — no filtering at all',
     modeBlock: 'block — refuse all DNS',
     addTitle: 'Create a group',
-    extraAllow: 'Extra pardons (always allow)',
-    extraDeny: 'Extra sentences (always block)',
+    extraAllow: 'Extra allowed domains',
+    extraDeny: 'Extra blocked domains',
     groupServicesSummary: (blocked: number, allowed: number) =>
-      `Services — ${blocked} blocked, ${allowed} pardoned.`,
-    groupServicesManage: 'Manage on Pardons & Sentences',
+      `Services — ${blocked} blocked, ${allowed} allowed.`,
+    groupServicesManage: 'Manage on Allow & Block',
     groupSafeSearch: 'Enforce Safe Search for this group',
     scheduleSummary: 'Schedule',
     scheduleOn: (start: string, end: string) => `active ${start}–${end}`,
@@ -485,7 +486,7 @@ export const copy = {
       `Delete the group "${name}"? Its devices fall back to the default rules.`,
     forget: 'Forget',
     forgetHint: 'remove the saved label/group for this device',
-    viewInDocket: 'View this device’s queries in the Docket',
+    viewInDocket: 'See this device’s queries in the Query Log',
     activityHint: 'show what this device queried',
     activityTotals: (total: number, blocked: number) =>
       `${total.toLocaleString()} queries, ${blocked.toLocaleString()} blocked`,
@@ -532,8 +533,8 @@ export const copy = {
     title: 'Settings',
     save: 'Save changes',
     saved: 'Settings saved and applied — no restart needed.',
-    upstreamsTitle: 'The Ferrymen',
-    upstreamsHint: 'upstream resolvers, tried in order — the first is primary',
+    upstreamsTitle: 'Upstream resolvers',
+    upstreamsHint: 'where Minos looks up allowed names, tried in order — the first is the primary',
     upstreamPreset: 'Known resolver…',
     upstreamCustom: 'Custom',
     upstreamHealthy: (requests: number, failures: number, avgMs: number) =>
@@ -550,12 +551,12 @@ export const copy = {
     dnssecPermissive: 'Permissive — validate and count, never block',
     dnssecEnforce: 'Enforce — refuse answers that fail validation',
     dnssecNote:
-      'Minos checks signed answers against the DNS root of trust itself, instead of taking the upstream’s word for it. Start with permissive and watch the counters; enforce answers "server failure" for forged responses. Answers that cannot be judged either way still pass, so a resolver without DNSSEC support degrades visibility, never resolution.',
+      'Minos checks signed answers against the DNS root of trust itself, instead of taking the upstream’s word for it. Start with permissive and watch the counters; enforce answers "server failure" for forged responses. Answers that cannot be checked either way still pass, so a resolver without DNSSEC support degrades visibility, never resolution.',
     blockingTitle: 'Blocking',
     blockingModeZeroIp: 'Answer with 0.0.0.0 (recommended: fails fast, quiet)',
     blockingModeNxdomain: 'Answer NXDOMAIN (domain does not exist)',
-    blockTTL: 'Response TTL (seconds)',
-    blockTTLHint: 'how long clients cache a blocked answer',
+    blockTTL: 'Remember blocks for (seconds)',
+    blockTTLHint: 'how long a device caches a blocked answer before asking again (the TTL)',
     safeSearch: 'Enforce Safe Search for everyone',
     safeSearchHint:
       'Google, Bing, DuckDuckGo, and YouTube (moderate) answer with their enforced-safe variants. Devices in bypass groups are exempt.',
@@ -564,7 +565,7 @@ export const copy = {
       "Answers Firefox's use-application-dns.net check with NXDOMAIN — Mozilla's documented signal that this network filters DNS — so Firefox keeps using Minos instead of switching itself to its built-in DNS over HTTPS. Untick to let Firefox decide.",
     privateRelay: 'Block iCloud Private Relay',
     privateRelayHint:
-      'Denies the mask.icloud.com hostnames Apple documents for exactly this. Apple devices show "Private Relay is unavailable on this network" and use normal DNS, so Minos can judge their queries. A real privacy trade — off by default.',
+      'Denies the mask.icloud.com hostnames Apple documents for exactly this. Apple devices show "Private Relay is unavailable on this network" and use normal DNS, so Minos can filter their queries. A real privacy trade — off by default.',
     cacheTitle: 'Response cache',
     cacheHint: 'answers repeat queries from memory instead of asking upstream',
     cacheEnabled: 'Enable the response cache',
@@ -589,7 +590,7 @@ export const copy = {
     refreshIntervalHint: 'e.g. 24h, 12h, 6h — minimum 5m',
     querylogTitle: 'Query log',
     retention: 'Keep history (days)',
-    ringSize: 'Live buffer size (entries)',
+    ringSize: 'Recent queries kept in memory',
     memoryMB: 'Query log memory limit (MB)',
     memoryMBHint:
       'The most RAM the query log database keeps for caching and for working out searches and statistics. Work that needs more spills to a temporary file on disk — slower, but it never takes more memory. History itself always lives on disk. Applies immediately.',

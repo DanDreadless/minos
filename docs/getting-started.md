@@ -328,21 +328,21 @@ sudo ufw allow from 192.168.1.0/24 to any port 8443 proto tcp
 
 Open `http://<host>:8080`. Six pages, one per concern:
 
-- **The Tribunal** (dashboard) — query counters, cache hit rate, a
+- **Dashboard** — query counters, cache hit rate, a
   24-hour volume chart, the most-blocked domains, the busiest clients,
-  and **Recess** controls to pause blocking (5/30 minutes, a custom
+  and **Pause blocking** controls (5/30 minutes, a custom
   duration, or until resumed).
-- **The Docket** (query log) — the newest queries, streaming live, and a
+- **Query Log** — the newest queries, streaming live, and a
   search across the whole retained history. Every blocked entry shows
-  *which list and rule* condemned it and has a one-click **Pardon** button;
-  allowed entries can be **Sentenced** (blocked) just as fast, and **Check**
+  *which list and rule* blocked it and has a one-click **Allow** button;
+  allowed entries can be **Blocked** just as fast, and **Check**
   says how a domain would be judged now, with the current lists.
   - With no filter the page is **Live**: rows arrive as they happen, and
     **Pause** holds them still while you read (new ones wait, counted, until
     you resume). Any filter switches to **Results**: matches from the full
     history, newest first, with **Load older** and new matches joining at
     the top.
-  - Filter with the result buttons (all / condemned / passed / would
+  - Filter with the result buttons (all / blocked / allowed / would
     block), the list dropdown, and a time range (last hour to 90 days, or
     all history). **Click any device, domain, type, list or resolver in a
     row** to filter by it. Each filter shows as a chip in the search box;
@@ -357,7 +357,7 @@ Open `http://<host>:8080`. Six pages, one per concern:
   - **Export CSV / JSON** downloads every match of the current filter (up
     to 100,000 rows) as one file.
   - The address bar keeps the filter, so a search can be bookmarked or
-    shared. Drill-downs from the Tribunal and device pages open on the same
+    shared. Drill-downs from the Dashboard and device pages open on the same
     exact name and time window as the count you clicked.
 - **Devices** — every client that queries the resolver, identified by IP,
   MAC address (from the ARP table), vendor (derived from the MAC), and
@@ -366,7 +366,7 @@ Open `http://<host>:8080`. Six pages, one per concern:
   label
   a device, block its DNS entirely, or assign it to a **group**:
   - `filter` groups get the default rules *plus* the group's own extra
-    allow/deny domains and blocked services (a group pardon beats a
+    allow/deny domains and blocked services (a group's allowed domain beats a
     global block),
   - `bypass` groups skip filtering entirely,
   - `block` groups get no DNS service at all.
@@ -382,7 +382,7 @@ Open `http://<host>:8080`. Six pages, one per concern:
   results are enforced by the provider itself and can't be switched off
   in the page settings. Only exact search hostnames are rewritten —
   Gmail, Maps, and other subdomains are untouched.
-- **The Codex** (blocklists) — add, enable/disable, or remove list
+- **Blocklists** — add, enable/disable, or remove list
   subscriptions and refresh them on demand, with per-list rule counts and
   fetch errors. The **Choose your blocklists** catalog offers curated,
   verified lists (Hagezi, OISD, StevenBlack, threat feeds) in four plain
@@ -392,7 +392,7 @@ Open `http://<host>:8080`. Six pages, one per concern:
   add-by-URL form below it takes any list the catalog doesn't carry
   (see the YAML example in the configuration reference). A list can run
   in **audit mode**: its rules are logged as amber "would block" entries
-  in the Docket but never enforced — subscribe to a strict list, watch a
+  in the Query Log but never enforced — subscribe to a strict list, watch a
   week of would-be blocks break nothing, then untick Audit to enforce it.
   The one dry-run mode Pi-hole users have asked for for years. The
   **Blocked services** card blocks a whole service
@@ -400,14 +400,14 @@ Open `http://<host>:8080`. Six pages, one per concern:
   a service only for some devices, or only at certain times, set it on a
   **group** on the Devices page instead — a group's blocked services apply
   to its members and obey the group's schedule.
-- **Pardons & Sentences** (allow/deny domains) — manage both lists, plus a
+- **Allow & Block** (your own allowed and blocked domains) — manage both lists, plus a
   "judge a domain" tool that shows exactly which rule decides any name's
-  fate before you ever query it. The **Service pardons** card fixes a
-  streaming app a blocklist broke with one checkbox: pardoning Netflix,
+  fate before you ever query it. The **Allowed services** card fixes a
+  streaming app a blocklist broke with one checkbox: allowing Netflix,
   Disney+, Prime Video (or any catalog service) always allows every domain
   it needs — including the playback and sign-in hosts on shared CDNs that
-  the blocked-services bundles deliberately leave out. A pardon beats any
-  sentence or blocklist; to pardon a service only for certain devices, set
+  the blocked-services bundles deliberately leave out. An allowed domain beats any
+  blocked domain or blocklist; to allow a service only for certain devices, set
   it on a group on the Devices page. The **Local DNS** card lives here too:
   A/AAAA/CNAME records (wildcards like `*.home.lab` included) that Minos
   answers itself — they beat the blocklists, never leave your network, and
@@ -449,7 +449,7 @@ entirely.
 | Tier | What it is | Pick it when |
 |---|---|---|
 | **Balanced** | Ads, tracking and telemetry, tuned to avoid breakage | You want it to work and never think about it. Start here. |
-| **Strict** | Wider nets, occasional collateral damage | You are willing to pardon the odd thing in exchange for more blocking. |
+| **Strict** | Wider nets, occasional collateral damage | You are willing to allow the odd thing in exchange for more blocking. |
 | **Security** | Malware, phishing, and resolver-bypass protection | Always — these are cheap and orthogonal to ad blocking. |
 | **Family** | Content you have chosen to keep off the network | You want it. Nothing here is a threat; it is a policy choice. |
 
@@ -466,7 +466,7 @@ Every card shows its size so you can add up before subscribing. The one
 catalog entry large enough to notice on its own is OISD NSFW at ~480k.
 
 **Try a strict list safely with audit mode.** Subscribe, tick Audit, and
-its rules are recorded in the Docket as amber "would block" entries
+its rules are recorded in the Query Log as amber "would block" entries
 without ever being enforced. Watch a week; if nothing you care about
 appears, untick Audit and it starts blocking for real. This is the same
 mechanism permissive DNSSEC uses, and it is the honest way to answer
@@ -476,7 +476,7 @@ mechanism permissive DNSSEC uses, and it is the honest way to answer
 VPN and proxy endpoints, which is what keeps a device from stepping
 around Minos entirely and quietly ignoring every other list you run. It
 also blocks commercial VPN providers, because that is the same set of
-hostnames — so if someone in the house uses a VPN deliberately, pardon it
+hostnames — so if someone in the house uses a VPN deliberately, allow it
 and expect that to be a conscious exception.
 
 The catalog is checked weekly in CI by compiling every list through the
@@ -498,7 +498,7 @@ mode promises no disk writes.
 **A failing list never takes its rules away.** If an update fails — the
 network is down, the host errors, a captive portal answers with a web page,
 or the publisher retires the list — Minos keeps blocking with the last good
-copy and says so on the Codex: *Update failing · still blocking with the
+copy and says so on the Blocklists page: *Update failing · still blocking with the
 copy from 3 hours ago*. Network trouble is retried within minutes (backing
 off to hourly), not at the next daily refresh. A download that suddenly has
 less than half the rules it had is refused, because that is far more often
@@ -510,7 +510,7 @@ Codeberg, StevenBlack to jsDelivr, URLhaus to its GitHub Pages copy — each
 verified weekly to serve the same rules as the original. A mirror is only
 used when the original is gone, refuses the download, or the copy Minos
 holds has gone stale; a short outage keeps the fresher copy you already
-have, because mirrors can lag behind. The Codex marks a list served by a
+have, because mirrors can lag behind. The Blocklists page marks a list served by a
 mirror, with the reason on hover. Add `mirrors:` under any list in
 `minos.yaml` to give your own lists fallbacks.
 
@@ -519,7 +519,7 @@ mirror, with the reason on hover. Add `mirrors:` under any list in
 A sinkhole that devices can quietly sidestep is theatre. Modern browsers
 and operating systems ship their own encrypted DNS, and a hardcoded
 `dns.google` in an app ignores your DHCP settings entirely. Minos closes
-the side doors in three layers, each visible and pardonable in the query
+the side doors in three layers, each visible and allowable in the query
 log like any other rule:
 
 - **Firefox stays put (on by default).** Before enabling its built-in
@@ -539,7 +539,7 @@ log like any other rule:
 - **Hardcoded DoH/DoT apps (blockable service).** The services catalog
   carries an **Encrypted DNS bypass** entry: the public DoH/DoT provider
   hostnames (Cloudflare, Google, Quad9, AdGuard, NextDNS, …) that apps and
-  smart TVs hardcode. Block it network-wide from the Codex, or — the sharp
+  smart TVs hardcode. Block it network-wide from Allow & Block, or — the sharp
   use — only for a kids' group, on that group's schedule, like any other
   service. Devices that can't resolve `dns.google` fall back to the DNS
   you handed them: Minos.
@@ -564,7 +564,7 @@ a signed domain:
 
 - **permissive** — validate every forwarded answer, record the outcomes,
   never block. The right first step: run it for a while and read the
-  DNSSEC card on the Tribunal (below).
+  DNSSEC card on the Dashboard (below).
 - **enforce** — additionally refuse answers that *fail* validation
   (bogus: a forged record, a stripped signature, a broken chain) with
   SERVFAIL. The refusal shows in the query log attributed to `dnssec`,
@@ -583,11 +583,11 @@ everyone else gets clean, stripped answers.
 ### Reading permissive mode before you enforce
 
 Permissive mode exists to answer one question: *what would break if I
-turned on enforce?* The DNSSEC card on the Tribunal answers it directly.
+turned on enforce?* The DNSSEC card on the Dashboard answers it directly.
 
 **"N answers would have been refused in enforce mode"** is the headline,
 over the last 24 hours, and it links to those exact queries in the
-Docket. Each listed domain is one that enforce would have turned into a
+Query Log. Each listed domain is one that enforce would have turned into a
 failed lookup. Work through them before switching:
 
 - A domain you do not recognise, or clearly do not need, is a free win —
@@ -611,10 +611,10 @@ Beneath the headline sit four counters, **since the last restart**
 | **Failed** | Signed, but the signature did not verify. These are the would-be refusals. |
 | **Not checkable** | No DNSSEC records came back at all. These always pass, in either mode. |
 
-**Each counter is a link.** Clicking one opens the Docket filtered to the
+**Each counter is a link.** Clicking one opens the Query Log filtered to the
 queries with that outcome, so "286 unsigned" becomes a list of which
 domains those actually were. Two things to expect: the counters are
-process-lifetime while the Docket covers the retained log, so the totals
+process-lifetime while the Query Log covers the retained log, so the totals
 will not tally; and because validation runs on resolution, a name answered
 from the cache adds to neither.
 
@@ -628,12 +628,12 @@ supports DNSSEC (the defaults do) and the counters should start moving.
 One honest caveat about the numbers: **the headline counts resolutions,
 not lookups.** Validation runs when an answer is actually fetched from
 upstream, so a domain answered from the response cache is not
-re-validated and does not add a row. The Docket therefore shows fewer
+re-validated and does not add a row. The Query Log therefore shows fewer
 would-block rows than the "Failed" counter, sometimes far fewer on a busy
 network. Both are correct; they measure different things.
 ## Host health
 
-The Tribunal carries a **Host** card describing the machine Minos runs
+The Dashboard carries a **Host** card describing the machine Minos runs
 on: CPU, load, memory, disk, temperature, uptime, and how much memory
 Minos itself is using. It refreshes every 15 seconds.
 
@@ -751,7 +751,7 @@ exceptions; those are file-only). Key sections:
 ```yaml
 dns:
   listen: ":53"
-  upstreams:                # tried in order — "the ferrymen"
+  upstreams:                # tried in order; the first is the primary
     - address: https://1.1.1.1/dns-query   # IP-literal URL, not a hostname:
       protocol: doh         # a resolver shouldn't have to resolve its own
                             # resolver first. Cloudflare's cert lists 1.1.1.1
@@ -772,7 +772,7 @@ dns:
                             # SERVFAIL. Answers that cannot be judged either
                             # way always pass, so an upstream without DNSSEC
                             # support degrades visibility, never resolution.
-                            # Run permissive first and read the Tribunal's
+                            # Run permissive first and read the Dashboard's
                             # DNSSEC card: it names what enforce would refuse.
   local_ttl: 300            # TTL on locally answered records
   local_records:            # names answered here, never sent upstream
@@ -798,26 +798,26 @@ dns:
     doh_listen: ":8443"     # DNS-over-HTTPS at /dns-query; empty = off
 blocking:
   mode: zero_ip             # or nxdomain
-  allowlist: []             # pardons: always allowed
-  denylist: []              # sentences: always blocked
+  allowlist: []             # always allowed (with subdomains)
+  denylist: []              # always blocked (with subdomains)
   services: [onlyfans]      # curated service bundles, blocked for everyone
-  allowed_services: [netflix]  # service bundles pardoned for everyone (allow beats deny)
+  allowed_services: [netflix]  # service bundles allowed for everyone (allow beats deny)
   custom_services:          # your own service bundles (see below)
     - name: my-game         # lowercase slug; must not shadow a catalog name
       label: My Game
       domains: [mygame.example]
-      allow_extra: [login.mygame.example]  # pardoned only when allowed
+      allow_extra: [login.mygame.example]  # allowed only while the service is allowed
       blocked: true         # global block toggle (lives here, not in services:)
-      allowed: false        # global pardon toggle
+      allowed: false        # global allow toggle
   safe_search: false        # rewrite search engines to enforced-safe variants
 groups:                     # device policies (all optional)
   - name: kids
     mode: filter            # filter | bypass | block
     denylist: [tiktok.com]  # extra blocks for members only
     services: [snapchat]    # service bundles for members only
-    allowed_services: []    # service bundles pardoned for members only
+    allowed_services: []    # service bundles allowed for members only
     custom_services: []     # custom bundles blocked for members only
-    allowed_custom_services: []  # custom bundles pardoned for members only
+    allowed_custom_services: []  # custom bundles allowed for members only
     safe_search: true       # enforce safe search for members only
     schedule:               # optional: group active only in this window
       days: [sun, mon, tue, wed, thu]   # empty/omitted = every day
@@ -846,7 +846,7 @@ lists:
       headers:              # sent to this URL only — never to mirrors, never
         Auth-Key: "your-key" # across a redirect to another host, never via the API
   allow_sources:            # subscribed allowlists: every entry is always
-    - name: unbreak         # allowed, beating any blocklist — a pardon you
+    - name: unbreak         # allowed, beating any blocklist — an allowlist you
       url: https://example.com/commonly-white.txt   # subscribe to
       format: plain
       enabled: true

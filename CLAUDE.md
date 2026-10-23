@@ -32,37 +32,38 @@ matcher memory.)
 The feature roadmap and competitive positioning live in `docs/roadmap.md`
 — keep them there, not in this file.
 
-## Product vocabulary (the lore layer)
+## Product vocabulary (plain words, light flavour)
 
-The judgment metaphor is the product identity. Use it consistently in the
-UI, docs, and API *labels* — but keep the underlying code and API *fields*
-boring and literal so the codebase stays legible to contributors.
+**Maintainer decision, October 2026:** the UI speaks plain, conventional
+DNS-filter language. The themed names (Tribunal, Docket, Codex, Pardon,
+Sentence, Recess, Ferrymen, Condemned/Passed) made the app harder to
+understand and are retired from labels, buttons and messages. Minos keeps
+its name, logo, banner, tagline ("Every query gets judged.") and visual
+identity; the judgment flavour survives only in the tagline and an empty
+state or two, where it can't be misread.
 
-| Concept            | UI / docs term      | Code & API term          |
-|--------------------|---------------------|--------------------------|
-| Blocked query      | Condemned           | `blocked`                |
-| Allowed query      | Passed              | `allowed`                |
-| Whitelist entry    | Pardon              | `allowlist`              |
-| Blacklist entry    | Sentence            | `denylist`               |
-| Live query log     | The Docket          | `querylog`               |
-| Blocklists         | The Codex           | `lists`                  |
-| Pause blocking     | Recess              | `pause`                  |
-| Dashboard          | The Tribunal        | `dashboard`              |
-| Upstream resolvers | The Ferrymen        | `upstreams`              |
+| Concept            | UI / docs term        | Code & API term          |
+|--------------------|-----------------------|--------------------------|
+| Blocked query      | Blocked               | `blocked`                |
+| Allowed query      | Allowed               | `allowed`                |
+| Always-allow entry | Allow (allowed domain)| `allowlist`              |
+| Always-block entry | Block (blocked domain)| `denylist`               |
+| Query log          | Query Log             | `querylog`               |
+| Blocklists         | Blocklists            | `lists`                  |
+| Your own rules     | Allow & Block         | `domains` (route)        |
+| Pause blocking     | Pause blocking        | `pause`                  |
+| Dashboard          | Dashboard             | `dashboard`              |
+| Upstream resolvers | Upstream resolvers    | `upstreams`              |
 
-Rules for the theme:
-- JSON field names, config keys, log output, and Go identifiers use the
-  literal terms. `{"verdict": "blocked"}`, never `{"fate": "condemned"}`.
-- The lore lives in UI copy, headings, empty states, and docs flavour
-  text. It must never obscure meaning: every themed label gets a plain
-  explanation on first use or hover ("Pardons — domains always allowed").
-- Restraint is the design principle. One themed word per screen beats
-  ten. If a user could be confused about what a button does, the theme
-  loses. Error messages are always plain and literal.
-- Visual direction: Greek underworld, understated — dark slate/charcoal
-  base, a single accent (oxblood red or laurel gold), classical numerals
-  or a subtle key/meander motif at most. No cartoon Hades. Think
-  courtroom gravitas, not fantasy game.
+Rules:
+- JSON field names, config keys, log output, and Go identifiers stay
+  literal, as before: `{"verdict": "blocked"}`.
+- All UI copy lives in `web/src/lib/copy.ts`. Ask of every string: could
+  someone who isn't a DNS expert misread this? Name things the same way on
+  every page, and say what a setting *does*, not what it is called.
+- Error messages are always plain and literal.
+- Visual direction is unchanged: dark slate/charcoal base, a single accent,
+  a subtle meander motif at most — understated, not a fantasy game.
 
 ## Target hardware & performance budgets
 
@@ -126,8 +127,7 @@ make docker       # multi-arch image build (linux/amd64, linux/arm64)
 Local testing without binding :53 (needs root): the dev config binds
 :5353 — test with `dig @127.0.0.1 -p 5353 doubleclick.net`.
 
-CLI verbs mirror the plain API terms (`minos pause 5m`, `minos status`),
-not the lore terms.
+CLI verbs mirror the plain API terms (`minos pause 5m`, `minos status`).
 
 ## Coding conventions
 
@@ -143,9 +143,9 @@ not the lore terms.
 - Config changes via the API are validated, applied atomically, and
   persisted; the process must never need a restart for a settings change.
 - Frontend: Svelte, TypeScript strict, talk to the backend only through
-  the documented REST/WS API — no reaching into internals. Themed copy
-  lives in a single strings module (`web/src/lib/copy.ts`) so the lore
-  layer can be audited, localised, or toned down in one place.
+  the documented REST/WS API — no reaching into internals. UI copy
+  lives in a single strings module (`web/src/lib/copy.ts`) so it can be
+  audited or localised in one place.
 
 ## The filter engine (performance-critical)
 
@@ -226,8 +226,8 @@ This is security software; hold it to that standard.
   budgets, pause and ask instead of proceeding.
 - When touching the query hot path (dnsproxy receive → filter match →
   respond/forward), run the filter benchmarks and report the delta.
-- When writing UI copy, follow the product vocabulary table and its
-  restraint rules. Code identifiers and API fields stay literal.
+- When writing UI copy, follow the product vocabulary table: plain words.
+  Code identifiers and API fields stay literal.
 - Never hand-edit `web/dist/` or generated files; regenerate them.
 - If you learn something durable about the codebase (a gotcha, a fixed
   decision), add it to this file in the same change.

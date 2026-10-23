@@ -1,4 +1,4 @@
-// Curated catalog of known-good upstream resolvers for the Ferrymen picker.
+// Curated catalog of known-good upstream resolvers for the upstream resolver picker.
 //
 // Every entry is DoH over an IP literal, never a hostname: a DNS server must
 // not have to resolve its own resolver's name before it can forward anything

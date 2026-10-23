@@ -183,7 +183,7 @@ mode), so entries not yet flushed (up to 30 s) are missing.
 
 Blocks attributed to each list, busiest first — which lists earn their
 keep. `hours` is 1–2160 (default 168, a 7-day week). Names are whatever the
-docket's `list` field carries: subscribed list names plus the built-in
+query log's `list` field carries: subscribed list names plus the built-in
 pseudo-lists (`denylist`, `service:<name>`, `group:<name>`, `clients`).
 
 ```json
@@ -263,8 +263,8 @@ drill-down), distinct from the `q` substring; `verdict` is
 `blocked`/`allowed`/`all`; `would_block=true` narrows to entries an
 audit-mode list flagged; `list` is an **exact** list-name filter matching
 either the enforcing attribution (`list`) or the audit one (`audit_list`) —
-so it finds what a list condemned, pardoned, or would have blocked;
-`dnssec` narrows to one validation outcome (the Tribunal's counter
+so it finds what a list blocked, allowed, or would have blocked;
+`dnssec` narrows to one validation outcome (the dashboard's counter
 drill-down) and rejects anything outside the four with a 400, so a typo
 reads as an error rather than as "no matches";
 `before` is a unix-millis cursor for "load older"
@@ -302,7 +302,7 @@ Ephemeral mode exports nothing (header only, or `[]`).
 ### `GET /api/querylog/lists?hours=168`
 
 The distinct list names attributed in the window (enforcing and audit),
-sorted — the options behind the Docket's list filter. `hours` 1–2160.
+sorted — the options behind the Query Log's list filter. `hours` 1–2160.
 Ring-backed in ephemeral mode.
 
 ```json
@@ -322,7 +322,7 @@ curl -X POST -d '{"duration": "30m"}' http://minos:8080/api/pause
 ```
 
 Empty duration pauses until resumed. Response: `{"paused": true,
-"paused_until": "..."}`. Note: recess does not lift device-level DNS
+"paused_until": "..."}`. Note: pausing does not lift device-level DNS
 blocks — those are access control.
 
 ### `DELETE /api/pause`
@@ -393,7 +393,7 @@ always beats deny.
 
 - `GET /api/services` — `{"catalog": [{name, label, domains}],
   "blocked": [...], "allowed": [...]}`. `blocked` services are denied for
-  everyone; `allowed` services are pardoned for everyone — every domain the
+  everyone; `allowed` services are allowed for everyone — every domain the
   service needs, including playback/sign-in hosts the deny bundle doesn't
   carry. Allow beats deny, so a service that is both ends up allowed.
 - `PUT /api/services` — partial update; each present field replaces its
@@ -405,7 +405,7 @@ always beats deny.
 User-defined bundles that behave like catalog services everywhere —
 `GET /api/services` returns them as `"custom": [{name, label, domains,
 allow_extra, blocked, allowed}]`. Unlike catalog services, a custom's
-**global** block/pardon toggles live on the definition itself (`blocked`/
+**global** block/allow toggles live on the definition itself (`blocked`/
 `allowed`), never inside the `blocked`/`allowed` arrays above — those are
 validated against the compiled-in catalog, and keeping custom names out of
 them is what lets an older binary still boot this config (it drops the
@@ -414,7 +414,7 @@ unknown `custom_services` keys whole).
 - `POST /api/services/custom` — `{"label", "domains": [...], "name"?,
   "allow_extra"?, "blocked"?, "allowed"?}`. `name` (a lowercase slug, max
   40 chars) is derived from the label when omitted; a clash with a
-  catalog service name is rejected. `allow_extra` lists hosts pardoned
+  catalog service name is rejected. `allow_extra` lists hosts allowed
   only when the service is allowed (sign-in/CDN hosts), like the
   catalog's curated extras.
 - `PUT /api/services/custom/{name}` — partial update of any of `label`,
@@ -433,7 +433,7 @@ services.
   name, notes, group, blocked, seen, queries, queries_blocked, first_seen,
   last_seen}`. A device is identified by its MAC when known, so all the IPs
   it has held across DHCP leases fold into one entry — `ip` is the primary
-  (most recently active) address and `ips` lists them all (used by the Docket
+  (most recently active) address and `ips` lists them all (used by the Query Log
   drill-down); counts are summed across them. `vendor` is derived from the
   MAC via the full IEEE registry (MA-L/MA-M/MA-S/IAB, longest prefix wins);
   `private_mac: true` marks a randomized locally-administered MAC that no
@@ -458,7 +458,7 @@ services.
 - `GET /api/groups` / `POST /api/groups` — groups are `{name, mode:
   "filter|bypass|block", allowlist, denylist, services, allowed_services,
   custom_services, allowed_custom_services, safe_search, schedule}`;
-  `services` are blocked and `allowed_services` pardoned for members only;
+  `services` are blocked and `allowed_services` allowed for members only;
   `custom_services`/`allowed_custom_services` do the same for user-defined
   custom services (separate fields on purpose — custom names never enter
   the catalog-validated keys); `schedule` is `{days: ["mon", ...], start:

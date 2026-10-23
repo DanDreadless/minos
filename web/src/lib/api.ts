@@ -475,7 +475,7 @@ export const api = {
       verdict?: string;
       would_block?: boolean;
       list?: string; // exact list name (enforcing or audit attribution)
-      dnssec?: string; // one validation outcome, for the Tribunal drill-down
+      dnssec?: string; // one validation outcome, for the dashboard drill-down
       before?: number;
       limit?: number;
     },
@@ -515,7 +515,7 @@ export const api = {
     const filename = /filename="([^"]+)"/.exec(cd)?.[1] ?? 'minos-querylog';
     return { blob: await resp.blob(), filename };
   },
-  // Distinct list names attributed in the window, for the Docket's filter.
+  // Distinct list names attributed in the window, for the Query Log's filter.
   querylogLists: (hours = 168) => request<string[]>('GET', `/api/querylog/lists?hours=${hours}`),
 
   host: () => request<Host>('GET', '/api/host'),

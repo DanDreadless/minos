@@ -11,8 +11,8 @@
 Minos is a modern, user-friendly DNS sinkhole (a Pi-hole alternative) written
 in Go — a single static binary with an embedded web UI, light enough for a
 Raspberry Pi. Named for the judge of the underworld: every DNS query that
-arrives is judged against your blocklists and sentenced — no exceptions,
-no appeals (well, except pardons).
+arrives is judged against your blocklists — and anything you choose to
+allow or block yourself.
 
 ## What it does
 
@@ -22,8 +22,8 @@ no appeals (well, except pardons).
   compiled blocklists (hosts, plain, and AdBlock formats)
 - Blocked queries get `0.0.0.0`/`::` or `NXDOMAIN` (your choice); allowed
   queries are forwarded upstream over DoH or DoT (plaintext optional)
-- Every blocked query shows *which list and rule* condemned it, with a
-  one-click pardon from the live log — never more than two clicks from
+- Every blocked query shows *which list and rule* blocked it, with a
+  one-click Allow from the live log — never more than two clicks from
   seeing a block to allowing it
 - Repeat queries answered from a built-in response cache — no upstream trip;
   concurrent identical queries collapse into one, and stale answers are
@@ -162,7 +162,7 @@ metrics, notifications, and the release pipeline. Two follow-up rounds
 from real-world use have shipped since: a bootstrap-free default upstream
 and curated resolver picker, clickable dashboard drill-downs and a
 full-width UI, rollback-safe config loading, device **vendor** labels and
-**mDNS** hostname resolution, a full-history Docket, and in-app upgrade
+**mDNS** hostname resolution, a full-history Query Log, and in-app upgrade
 guidance. In-process **DNSSEC validation** shipped in August 2026 —
 something neither Pi-hole nor AdGuard Home does. Still planned: further
 device-identity layers (DHCP-lease ingestion) — details in
