@@ -27,6 +27,7 @@
   let safeSearch = false;
   let firefoxCanary = true;
   let rebindProtect = false;
+  let cnameInspect = true;
   let blockPrivateRelay = false;
   let retentionDays = 90;
   let ringSize = 10000;
@@ -89,6 +90,7 @@
     safeSearch = c.blocking.safe_search;
     firefoxCanary = !c.dns.allow_firefox_doh;
     rebindProtect = c.dns.rebind_protection;
+    cnameInspect = c.blocking.cname_inspection;
     blockPrivateRelay = c.blocking.block_icloud_private_relay;
     blockTTL = c.dns.block_ttl;
     retentionDays = c.querylog.retention_days;
@@ -182,7 +184,12 @@
         };
       case 'filtering':
         return {
-          blocking: { mode, safe_search: safeSearch, block_icloud_private_relay: blockPrivateRelay },
+          blocking: {
+            mode,
+            safe_search: safeSearch,
+            block_icloud_private_relay: blockPrivateRelay,
+            cname_inspection: cnameInspect,
+          },
           dns: { block_ttl: blockTTL, allow_firefox_doh: !firefoxCanary, rebind_protection: rebindProtect },
         };
       case 'notifications':
@@ -221,7 +228,7 @@
   // Every draft is named here so the comparison re-runs when any changes
   // (Svelte tracks only what a reactive statement names).
   $: draftKey = JSON.stringify([
-    upstreams, dnssec, mode, blockTTL, safeSearch, firefoxCanary, rebindProtect, blockPrivateRelay, retentionDays,
+    upstreams, dnssec, mode, blockTTL, safeSearch, firefoxCanary, rebindProtect, cnameInspect, blockPrivateRelay, retentionDays,
     ringSize, memoryMB, cacheEnabled, cacheMaxEntries, cacheMinTTL, cacheMaxTTL, cacheServeStale,
     updateCheck, webhookURL, ntfyURL, ntfyToken, digest, digestTime, digestDay, uiURL, quiet,
     quietFrom, quietTo, mute, ssdp, dhcpListen, logLevel,
@@ -609,6 +616,11 @@
       {copy.settings.firefoxCanary}
     </label>
     <p class="note">{copy.settings.firefoxCanaryHint}</p>
+    <label class="radio safe-search">
+      <input type="checkbox" bind:checked={cnameInspect} />
+      {copy.settings.cname}
+    </label>
+    <p class="note">{copy.settings.cnameHint}</p>
     <label class="radio safe-search">
       <input type="checkbox" bind:checked={rebindProtect} />
       {copy.settings.rebind}

@@ -44,3 +44,33 @@ func BenchmarkHandleBlocked(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkHandleCacheHit is an allowed name answered from the cache, the
+// most common path of all — with CNAME inspection on (a CNAME in the
+// answer is judged) and off.
+func BenchmarkHandleCacheHit(b *testing.B) {
+	for _, inspect := range []bool{false, true} {
+		srv, _ := cloakProxy(b, inspect)
+		w := &discardWriter{remote: &net.UDPAddr{IP: net.IPv4(192, 168, 1, 50), Port: 40000}}
+		for _, name := range []string{"www.shop.example.", "metrics.shop.example."} {
+			req := new(dns.Msg)
+			req.SetQuestion(name, dns.TypeA)
+			srv.handle(w, req) // warm the cache
+			label := "plain"
+			if name == "metrics.shop.example." {
+				label = "cname"
+			}
+			if inspect {
+				label += "/inspect"
+			} else {
+				label += "/off"
+			}
+			b.Run(label, func(b *testing.B) {
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					srv.handle(w, req)
+				}
+			})
+		}
+	}
+}
