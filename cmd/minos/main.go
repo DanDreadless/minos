@@ -166,6 +166,25 @@ func serve(args []string) error {
 		proxy.SetCertSource(acmeMgr.GetCertificate)
 	}
 
+	mgr.OnListEvent(func(name string, state lists.ListState, detail string) {
+		switch state {
+		case lists.ListOK:
+			notifier.Publish("list_recovered", "Blocklist updating again",
+				name+" downloaded successfully and is up to date.")
+		case lists.ListRetired:
+			notifier.Publish("list_failing", "Blocklist retired by its publisher",
+				name+" is no longer published ("+detail+"). Minos keeps blocking with the last copy; replace it from the catalog.")
+		case lists.ListUnauthorized:
+			notifier.Publish("list_failing", "Blocklist now needs credentials",
+				name+" refuses the download ("+detail+"). Minos keeps blocking with the last copy.")
+		case lists.ListUnavailable:
+			notifier.Publish("list_failing", "Blocklist not loaded",
+				name+" has never downloaded ("+detail+"), so it is not blocking anything yet. Minos keeps retrying.")
+		default:
+			notifier.Publish("list_failing", "Blocklist out of date",
+				name+" has failed to update for over two refresh intervals ("+detail+"). Minos keeps blocking with the last copy.")
+		}
+	})
 	proxy.OnUpstreamEvent(func(name string, sick bool) {
 		if sick {
 			notifier.Publish("upstream_sick", "Upstream resolver failing",

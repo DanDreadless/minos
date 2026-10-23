@@ -500,11 +500,19 @@ export const api = {
     action?: string;
     audit?: boolean;
     enabled: boolean;
+    mirrors?: string[];
   }) =>
     request<ListStatus[]>('POST', '/api/lists', l),
   updateList: (
     name: string,
-    upd: { url?: string; format?: string; action?: string; audit?: boolean; enabled?: boolean },
+    upd: {
+      url?: string;
+      format?: string;
+      action?: string;
+      audit?: boolean;
+      enabled?: boolean;
+      mirrors?: string[];
+    },
   ) =>
     request<ListStatus[]>('PUT', `/api/lists/${encodeURIComponent(name)}`, upd),
   deleteList: (name: string) =>

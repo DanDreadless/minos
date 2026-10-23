@@ -39,6 +39,9 @@ export interface BlocklistPreset {
   size: string;
   tier: BlocklistTier;
   list: { name: string; url: string; format: 'hosts' | 'plain' | 'adblock'; mirrors?: string[] };
+  // replaces: URLs of retired lists this entry supersedes. A subscription to
+  // one of them is offered a one-click swap to this entry in the Codex.
+  replaces?: string[];
 }
 
 export const blocklistTiers: BlocklistTier[] = ['balanced', 'strict', 'security', 'family'];
@@ -139,6 +142,7 @@ export const blocklistPresets: BlocklistPreset[] = [
     // the same URLhaus data republished twice daily by malware-filter
     // (CC0/MIT), with popular domains filtered out against the Tranco list.
     id: 'urlhaus-filter',
+    replaces: ['https://urlhaus.abuse.ch/downloads/hostfile/'],
     label: 'URLhaus Malicious Hosts',
     note: 'malware-distribution hosts reported to abuse.ch URLhaus, republished by malware-filter — small and sharp',
     size: '≈1.8k domains',

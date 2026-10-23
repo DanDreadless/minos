@@ -93,6 +93,10 @@ type Manager struct {
 	disk    *diskCache           // nil = memory only (ephemeral mode, or not configured)
 
 	refreshNow chan struct{}
+
+	// onEvent, when set (before Run), hears a list going bad or recovering.
+	onEvent  func(name string, state ListState, detail string)
+	notified map[string]ListState // last bad state reported per list
 }
 
 func NewManager(engine *filter.Engine, store *config.Store) *Manager {
@@ -106,12 +110,64 @@ func NewManager(engine *filter.Engine, store *config.Store) *Manager {
 		meta:        make(map[string]cacheMeta),
 		status:      make(map[string]*SourceStatus),
 		rejects:     make(map[string]rejection),
+		notified:    make(map[string]ListState),
 		refreshNow:  make(chan struct{}, 1),
 	}
 	// Config changes (new pardons/sentences, list edits) rebuild from cache
 	// immediately — no refetch needed, no restart ever.
 	store.OnChange(func(*config.Config) { m.TriggerRebuild() })
 	return m
+}
+
+// OnListEvent registers a callback for a list entering a state that needs
+// a person (stale, unavailable, retired, unauthorized) and for its recovery
+// to ok. Call before Run. The callback runs on the refresh goroutine.
+func (m *Manager) OnListEvent(fn func(name string, state ListState, detail string)) {
+	m.onEvent = fn
+}
+
+// notifyAfterFailures holds back transient-derived alerts until a failure has
+// survived several retries (~3 minutes on the schedule): a Pi that boots
+// before its network must not page anyone, then "recover" a minute later.
+const notifyAfterFailures = 3
+
+// checkTransitions reports lists that newly went bad or recovered since the
+// last check. Each bad state is reported once per transition, not per retry.
+func (m *Manager) checkTransitions() {
+	if m.onEvent == nil {
+		return
+	}
+	type event struct {
+		name   string
+		state  ListState
+		detail string
+	}
+	var events []event
+	for _, st := range m.Status() {
+		bad := false
+		switch st.State {
+		case ListRetired, ListUnauthorized:
+			bad = true
+		case ListStale, ListUnavailable:
+			bad = st.ConsecutiveFailures >= notifyAfterFailures
+		}
+		m.mu.Lock()
+		prev, wasBad := m.notified[st.Name]
+		switch {
+		case bad && prev != st.State:
+			m.notified[st.Name] = st.State
+			events = append(events, event{st.Name, st.State, st.LastError})
+		case wasBad && st.State == ListOK:
+			delete(m.notified, st.Name)
+			events = append(events, event{st.Name, ListOK, ""})
+		case !st.Enabled:
+			delete(m.notified, st.Name)
+		}
+		m.mu.Unlock()
+	}
+	for _, e := range events {
+		m.onEvent(e.name, e.state, e.detail)
+	}
 }
 
 // SetVersion stamps the running version into the fetch User-Agent. Call
@@ -404,6 +460,7 @@ func (m *Manager) refreshAll(ctx context.Context, srcs []annotated) {
 		}()
 	}
 	wg.Wait()
+	m.checkTransitions()
 }
 
 // retryFailing refetches only the sources whose last attempt failed

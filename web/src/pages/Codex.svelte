@@ -130,6 +130,49 @@
   // like the resolver picker matches presets by exact fields.
   $: subscribedURLs = new Set(lists.map((l) => l.url));
 
+  // A subscription to a URL a catalog entry supersedes (a retired list).
+  function replacementFor(l: ListStatus): BlocklistPreset | undefined {
+    return blocklistPresets.find((p) => p.replaces?.includes(l.url));
+  }
+
+  // Catalog mirrors a subscription is missing — lists subscribed before the
+  // catalog carried mirrors, or added by hand with a catalog URL.
+  function missingMirrors(l: ListStatus): string[] {
+    const p = blocklistPresets.find((p) => p.list.url === l.url);
+    if (!p?.list.mirrors?.length || l.mirrors?.length) return [];
+    return p.list.mirrors;
+  }
+
+  // replaceWith subscribes the replacement first, then removes the retired
+  // list, so there is never a moment with neither. The old list's on/off and
+  // audit settings carry over.
+  async function replaceWith(l: ListStatus, p: BlocklistPreset): Promise<void> {
+    busy = true;
+    try {
+      if (!lists.some((x) => x.name === p.list.name)) {
+        await api.addList({ ...p.list, enabled: l.enabled, audit: l.audit });
+      }
+      lists = await api.deleteList(l.name);
+      notify(copy.lists.replaced(l.name, p.list.name));
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function addMirrors(l: ListStatus, mirrors: string[]): Promise<void> {
+    busy = true;
+    try {
+      lists = await api.updateList(l.name, { mirrors });
+      notify(copy.lists.mirrorsAdded(l.name, mirrors.length));
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      busy = false;
+    }
+  }
+
   async function addPreset(p: BlocklistPreset): Promise<void> {
     busy = true;
     try {
@@ -253,7 +296,26 @@
                 >
               {/if}
             </td>
-            <td>
+            <td class="row-actions">
+              {#if replacementFor(l)}
+                {@const p = replacementFor(l)}
+                {#if p}
+                  <button
+                    class="row-action primary"
+                    disabled={busy}
+                    title={copy.lists.replaceHint(p.label)}
+                    on:click={() => replaceWith(l, p)}>{copy.lists.replace(p.label)}</button
+                  >
+                {/if}
+              {/if}
+              {#if missingMirrors(l).length}
+                <button
+                  class="row-action"
+                  disabled={busy}
+                  title={copy.lists.addMirrorsHint(missingMirrors(l))}
+                  on:click={() => addMirrors(l, missingMirrors(l))}>{copy.lists.addMirrors}</button
+                >
+              {/if}
               <button class="row-action danger" on:click={() => remove(l)}>Remove</button>
             </td>
           </tr>
@@ -359,6 +421,14 @@
   .state {
     font-size: 0.82rem;
     cursor: help;
+  }
+
+  .row-actions {
+    white-space: nowrap;
+  }
+
+  .row-actions .row-action + .row-action {
+    margin-left: 0.35rem;
   }
 
   .mirror-badge,

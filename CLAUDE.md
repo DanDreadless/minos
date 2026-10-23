@@ -868,3 +868,14 @@ This is security software; hold it to that standard.
   Gitea cannot edit a mirror's password in place: rotate by creating a new
   push mirror (API `POST /push_mirrors`), confirming it syncs, then deleting
   the old one. Rotate the PAT in `.env` **and** Gitea together.
+- **Retired lists & list events** (fixed decisions, October 2026): a
+  catalog entry's `replaces: [urls]` names the retired URLs it supersedes;
+  the Codex offers "Replace with …" on a matching subscription, which adds
+  the replacement **before** deleting the old list (blocking never lapses)
+  and carries over enabled/audit. A subscription whose URL is a catalog
+  entry's but lacks its mirrors is offered "Add mirrors". `OnListEvent`
+  feeds `list_failing` / `list_recovered` notifications, once per
+  transition: retired/unauthorized at once, unavailable/stale only after
+  `notifyAfterFailures` (3) consecutive failures so a Pi booting before its
+  network never pages anyone, and no recovery event for a failure nobody
+  was told about.
