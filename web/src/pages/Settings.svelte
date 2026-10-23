@@ -27,6 +27,8 @@
   let safeSearch = false;
   let firefoxCanary = true;
   let rebindProtect = false;
+  let allowedNetworks = '';
+  let rateLimit = 1000;
   let cnameInspect = true;
   let blockPrivateRelay = false;
   let retentionDays = 90;
@@ -90,6 +92,8 @@
     safeSearch = c.blocking.safe_search;
     firefoxCanary = !c.dns.allow_firefox_doh;
     rebindProtect = c.dns.rebind_protection;
+    allowedNetworks = c.dns.allowed_networks.join('\n');
+    rateLimit = c.dns.rate_limit;
     cnameInspect = c.blocking.cname_inspection;
     blockPrivateRelay = c.blocking.block_icloud_private_relay;
     blockTTL = c.dns.block_ttl;
@@ -210,6 +214,16 @@
         };
       case 'discovery':
         return { discovery: { ssdp, dhcp_listen: dhcpListen } };
+      case 'access':
+        return {
+          dns: {
+            allowed_networks: allowedNetworks
+              .split(/[\s,]+/)
+              .map((s) => s.trim())
+              .filter(Boolean),
+            rate_limit: Number(rateLimit) || 0,
+          },
+        };
       case 'system':
         return {
           querylog: { retention_days: retentionDays, ring_size: ringSize, memory_mb: memoryMB },
@@ -228,7 +242,7 @@
   // Every draft is named here so the comparison re-runs when any changes
   // (Svelte tracks only what a reactive statement names).
   $: draftKey = JSON.stringify([
-    upstreams, dnssec, mode, blockTTL, safeSearch, firefoxCanary, rebindProtect, cnameInspect, blockPrivateRelay, retentionDays,
+    upstreams, dnssec, mode, blockTTL, safeSearch, firefoxCanary, rebindProtect, cnameInspect, allowedNetworks, rateLimit, blockPrivateRelay, retentionDays,
     ringSize, memoryMB, cacheEnabled, cacheMaxEntries, cacheMinTTL, cacheMaxTTL, cacheServeStale,
     updateCheck, webhookURL, ntfyURL, ntfyToken, digest, digestTime, digestDay, uiURL, quiet,
     quietFrom, quietTo, mute, ssdp, dhcpListen, logLevel,
@@ -754,6 +768,19 @@
   {/if}
 
   {#if tab === 'access'}
+  <section class="card">
+    <h2>{copy.settings.accessTitle} <small>{copy.settings.accessHint}</small></h2>
+    <label class="field wide">
+      <span>{copy.settings.allowedNetworks} <small>{copy.settings.allowedNetworksHint}</small></span>
+      <textarea rows="3" placeholder={copy.settings.allowedNetworksPlaceholder} bind:value={allowedNetworks}
+      ></textarea>
+    </label>
+    <label class="field">
+      <span>{copy.settings.rateLimit} <small>{copy.settings.rateLimitHint}</small></span>
+      <input type="number" min="0" max="1000000" bind:value={rateLimit} />
+    </label>
+  </section>
+
   <section class="card">
     <h2>{copy.settings.apiTitle}</h2>
     <p class="note">{cfg.api.token_set ? copy.settings.tokenSet : copy.settings.tokenUnset}</p>

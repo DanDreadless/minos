@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/miekg/dns"
+
+	"minos/internal/config"
 )
 
 // discardWriter is a dns.ResponseWriter that keeps nothing: the benchmark
@@ -25,7 +27,9 @@ func (w *discardWriter) Hijack()                     {}
 // BenchmarkHandleBlocked is the blocked-query hot path end to end through
 // handle(): policy lookup, match, the synthesized answer, the log record.
 func BenchmarkHandleBlocked(b *testing.B) {
-	srv, _ := startProxyCfg(b, "zero_ip", nil, "ads.example.com")
+	// The limiter stays on (its cost is part of the path) but high enough
+	// never to refuse: a benchmark asks far more than 1000 times a minute.
+	srv, _ := startProxyCfg(b, "zero_ip", func(c *config.Config) { c.DNS.RateLimit = 1000000 }, "ads.example.com")
 	w := &discardWriter{remote: &net.UDPAddr{IP: net.IPv4(192, 168, 1, 50), Port: 40000}}
 	for _, tc := range []struct {
 		name string

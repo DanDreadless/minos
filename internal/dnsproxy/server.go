@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"sort"
 	"strings"
 	"sync"
@@ -93,6 +94,14 @@ type Server struct {
 	// cnameInspect judges CNAME targets in forwarded answers
 	// (blocking.cname_inspection, on by default). See cname.go.
 	cnameInspect atomic.Bool
+	// access and limiter are who may query and how fast (access.go).
+	// limiter is nil when rate limiting is off.
+	access  atomic.Pointer[accessList]
+	limiter atomic.Pointer[rateLimiter]
+	// outsideRefused counts queries refused from outside the allowed
+	// networks; outsideLogged is the minute it was last logged.
+	outsideRefused atomic.Uint64
+	outsideLogged  atomic.Int64
 	// forwardPrivateArpa opts out of answering RFC 6303 private reverse
 	// zones locally (dns.forward_private_reverse).
 	forwardPrivateArpa atomic.Bool
@@ -431,6 +440,12 @@ func (s *Server) ApplyConfig(cfg *config.Config) error {
 	s.allowFirefoxDoH.Store(cfg.DNS.AllowFirefoxDoH)
 	s.rebindProtect.Store(cfg.DNS.RebindProtection)
 	s.cnameInspect.Store(cfg.Blocking.CNAMEInspection)
+	s.access.Store(buildAccessList(cfg.DNS.AllowedNetworks, time.Now()))
+	// Keep the running counts when the limit is unchanged; any other
+	// settings change must not hand every device a fresh minute.
+	if cur := s.limiter.Load(); cur == nil || cur.perMinute != int64(cfg.DNS.RateLimit) {
+		s.limiter.Store(newRateLimiter(cfg.DNS.RateLimit))
+	}
 	s.forwardPrivateArpa.Store(cfg.DNS.ForwardPrivateReverse)
 	s.applyDNSSEC(cfg.DNS.DNSSEC)
 	// A fresh cache on every config change doubles as the flush that keeps
@@ -549,6 +564,18 @@ func (s *Server) SetAuditEngine(e *filter.Engine) { s.auditEngine.Store(e) }
 // handle is the hot path: judge, then answer or forward.
 func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 	start := time.Now()
+	// Who may ask, and how fast: before any other work.
+	ip := remoteAddr(w.RemoteAddr())
+	if acl := s.access.Load(); !acl.allows(ip) && !s.accessRefreshed(acl, ip, start) {
+		s.refuseOutside(w, req, ip, start)
+		return
+	}
+	if l := s.limiter.Load(); l != nil {
+		if ok, first := l.allow(ip); !ok {
+			s.refuseRateLimited(w, req, first, start)
+			return
+		}
+	}
 	// Refuse anything malformed or multi-question outright; validation is
 	// not optional in a resolver exposed to a LAN.
 	if len(req.Question) != 1 || req.Response {
@@ -790,6 +817,57 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 	entry.Verdict = querylog.VerdictAllowed
 	entry.Upstream = upstreamName
 	s.record(entry, start)
+}
+
+// accessRefreshed handles a miss against the default access list, which
+// follows this machine's own subnets: an IPv6 prefix can change under a
+// running server, so the subnets are re-read (at most once a minute) and
+// ip is checked again.
+func (s *Server) accessRefreshed(acl *accessList, ip netip.Addr, now time.Time) bool {
+	if !acl.auto || acl.built == now.Unix()/60 {
+		return false
+	}
+	fresh := buildAccessList(nil, now)
+	s.access.CompareAndSwap(acl, fresh)
+	return fresh.allows(ip)
+}
+
+// refuseOutside answers a client outside the allowed networks with
+// REFUSED. Not query-logged — an internet-facing port can see thousands of
+// these a minute — but counted and summarised in the application log once
+// a minute, so an exposed port does not go unnoticed.
+func (s *Server) refuseOutside(w dns.ResponseWriter, req *dns.Msg, ip netip.Addr, start time.Time) {
+	reply := new(dns.Msg)
+	reply.SetRcode(req, dns.RcodeRefused)
+	withEDE(req, reply, dns.ExtendedErrorCodeProhibited, "Minos answers only its allowed networks", "")
+	_ = w.WriteMsg(reply)
+	n := s.outsideRefused.Add(1)
+	minute := start.Unix() / 60
+	if last := s.outsideLogged.Load(); last != minute && s.outsideLogged.CompareAndSwap(last, minute) {
+		slog.Warn("refused DNS queries from outside the allowed networks — is port 53 reachable from the internet?",
+			"client", ip.String(), "refused_total", n)
+	}
+}
+
+// refuseRateLimited answers a client over its per-minute budget with
+// REFUSED, query-logging only the first refusal of each minute.
+func (s *Server) refuseRateLimited(w dns.ResponseWriter, req *dns.Msg, first bool, start time.Time) {
+	reply := new(dns.Msg)
+	reply.SetRcode(req, dns.RcodeRefused)
+	withEDE(req, reply, dns.ExtendedErrorCodeProhibited, "Rate limit exceeded", "")
+	_ = w.WriteMsg(reply)
+	if !first || len(req.Question) != 1 {
+		return
+	}
+	s.record(querylog.Entry{
+		Time:    start,
+		Client:  clientIP(w.RemoteAddr()),
+		QName:   filter.NormalizeDomain(req.Question[0].Name),
+		QType:   dns.TypeToString[req.Question[0].Qtype],
+		Verdict: querylog.VerdictBlocked,
+		List:    ListRateLimit,
+		Rule:    "over the per-minute limit; further queries this minute are refused without logging",
+	}, start)
 }
 
 // refuseCloaked answers a name whose CNAME leads to a blocked target as a

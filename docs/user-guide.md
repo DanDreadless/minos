@@ -238,6 +238,8 @@ Who can use this interface and the API.
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
 | API token<br><small>Settings → Access & security</small> | `api.token` | none | When set, the UI, the CLI and every API call must present it. Without one, anyone on your network can change Minos. | at once |
+| Networks Minos answers<br><small>Settings → Access & security</small> | `dns.allowed_networks` | Private and local networks | Which devices may use Minos, as networks (192.168.1.0/24) or single addresses. Blank answers private networks (192.168.x.x, 10.x.x.x, 172.16–31.x.x, 100.64.x.x, fd00::/8, link-local, loopback) and the networks this machine is connected to — enough for any home network, IPv6 included — and refuses everyone else, so an accidentally exposed port never makes Minos an "open resolver" for the internet. Refusals are counted in the Logs, not the Query Log. | at once |
+| Queries a minute per device<br><small>Settings → Access & security</small> | `dns.rate_limit` | 1000 | The most lookups one device may make in a minute; beyond that it is refused until the minute is up. Stops a runaway app or an infected device from swamping Minos. The first refusal each minute appears in the Query Log under "rate-limit". 0 turns the limit off. | at once |
 | Interface listen address<br><small>minos.yaml</small> | `api.listen` | 0.0.0.0:8080 | Where this web interface and the API listen. | after restart (minos.yaml) |
 
 <a id="settings-system"></a>

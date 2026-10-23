@@ -584,6 +584,24 @@ export const docs: Section[] = [
         where: 'Settings → Access & security',
       },
       {
+        label: 'Networks Minos answers',
+        key: 'dns.allowed_networks',
+        default: 'Private and local networks',
+        effect:
+          'Which devices may use Minos, as networks (192.168.1.0/24) or single addresses. Blank answers private networks (192.168.x.x, 10.x.x.x, 172.16–31.x.x, 100.64.x.x, fd00::/8, link-local, loopback) and the networks this machine is connected to — enough for any home network, IPv6 included — and refuses everyone else, so an accidentally exposed port never makes Minos an "open resolver" for the internet. Refusals are counted in the Logs, not the Query Log.',
+        applies: 'live',
+        where: 'Settings → Access & security',
+      },
+      {
+        label: 'Queries a minute per device',
+        key: 'dns.rate_limit',
+        default: '1000',
+        effect:
+          'The most lookups one device may make in a minute; beyond that it is refused until the minute is up. Stops a runaway app or an infected device from swamping Minos. The first refusal each minute appears in the Query Log under "rate-limit". 0 turns the limit off.',
+        applies: 'live',
+        where: 'Settings → Access & security',
+      },
+      {
         label: 'Interface listen address',
         key: 'api.listen',
         default: '0.0.0.0:8080',
