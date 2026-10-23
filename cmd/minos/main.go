@@ -115,6 +115,13 @@ func serve(args []string) error {
 	engine := filter.NewEngine()
 	mgr := lists.NewManager(engine, store)
 	mgr.SetVersion(version)
+	// Last good list bodies live beside the config (the systemd StateDirectory
+	// or the Docker volume), so a restart during a list-host outage still
+	// starts fully blocking. Ephemeral mode promises no disk writes, so it
+	// keeps the cache in memory only.
+	if !cfg.QueryLog.Ephemeral {
+		mgr.SetCacheDir(filepath.Join(filepath.Dir(*cfgPath), "lists-cache"))
+	}
 
 	notifier := notify.New(store)
 	started := time.Now()

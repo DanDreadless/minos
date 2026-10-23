@@ -57,8 +57,10 @@ type Manager struct {
 	ua          string
 
 	mu     sync.Mutex
-	cached map[string][]byte // source name → last good raw body
+	cached map[string][]byte    // source name → last good raw body
+	meta   map[string]cacheMeta // source name → validators for conditional GET
 	status map[string]*SourceStatus
+	disk   *diskCache // nil = memory only (ephemeral mode, or not configured)
 
 	refreshNow chan struct{}
 }
@@ -71,6 +73,7 @@ func NewManager(engine *filter.Engine, store *config.Store) *Manager {
 		client:      &http.Client{Timeout: fetchTimeout},
 		ua:          userAgent,
 		cached:      make(map[string][]byte),
+		meta:        make(map[string]cacheMeta),
 		status:      make(map[string]*SourceStatus),
 		refreshNow:  make(chan struct{}, 1),
 	}
@@ -86,12 +89,64 @@ func (m *Manager) SetVersion(v string) {
 	m.ua = "Minos/" + v + " (+https://github.com/DanDreadless/minos)"
 }
 
+// SetCacheDir enables the on-disk list cache in dir. Call before Run. A
+// failure to create the directory leaves the cache memory-only (logged):
+// Minos still works, it just can't survive a restart during an outage.
+func (m *Manager) SetCacheDir(dir string) {
+	d, err := newDiskCache(dir)
+	if err != nil {
+		slog.Warn("list cache disabled", "dir", dir, "err", err)
+		return
+	}
+	m.disk = d
+}
+
+// loadFromDisk fills the in-memory cache from disk for every enabled source
+// that has no body yet, and reports whether anything was loaded.
+func (m *Manager) loadFromDisk() bool {
+	if m.disk == nil {
+		return false
+	}
+	loaded := 0
+	for _, src := range allSources(m.store.Get()) {
+		if !src.Enabled {
+			continue
+		}
+		m.mu.Lock()
+		_, have := m.cached[src.Name]
+		m.mu.Unlock()
+		if have {
+			continue
+		}
+		body, meta, ok := m.disk.load(src.URL)
+		if !ok {
+			continue
+		}
+		m.mu.Lock()
+		m.cached[src.Name] = body
+		m.meta[src.Name] = meta
+		st := m.ensureStatus(src)
+		st.LastRefresh = meta.FetchedAt
+		m.mu.Unlock()
+		loaded++
+	}
+	if loaded > 0 {
+		slog.Info("lists loaded from disk cache", "lists", loaded)
+	}
+	return loaded > 0
+}
+
 // AuditEngine exposes the audit matcher for the DNS server's "would block"
 // attribution. Never nil; empty until an audit:true source compiles.
 func (m *Manager) AuditEngine() *filter.Engine { return m.auditEngine }
 
 // Run blocks: initial refresh, then periodic refreshes until ctx ends.
 func (m *Manager) Run(ctx context.Context) {
+	// Compile what's on disk first: blocking is live from the first second,
+	// before (and regardless of) the network.
+	if m.loadFromDisk() {
+		m.rebuild(ctx, false)
+	}
 	m.Refresh(ctx)
 	for {
 		interval := m.store.Get().Lists.RefreshInterval.Std()
@@ -157,16 +212,7 @@ func (m *Manager) EnsureFetched(ctx context.Context) {
 		if have {
 			continue
 		}
-		body, err := m.fetch(ctx, src.URL)
-		m.mu.Lock()
-		if err != nil {
-			slog.Warn("list fetch failed", "list", src.Name, "url", src.URL, "err", err)
-			m.setStatusError(src, err)
-		} else {
-			m.cached[src.Name] = body
-			m.setStatusFetched(src)
-		}
-		m.mu.Unlock()
+		m.refreshSource(ctx, src)
 	}
 	m.rebuild(ctx, false)
 }
@@ -176,6 +222,7 @@ func (m *Manager) EnsureFetched(ctx context.Context) {
 func (m *Manager) Forget(name string) {
 	m.mu.Lock()
 	delete(m.cached, name)
+	delete(m.meta, name)
 	delete(m.status, name)
 	m.mu.Unlock()
 }
@@ -185,20 +232,16 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 	start := time.Now()
 
 	if refetch {
+		keep := make(map[string]bool)
 		for _, src := range allSources(cfg) {
+			keep[src.URL] = true // a disabled list keeps its cache for re-enable
 			if !src.Enabled {
 				continue
 			}
-			body, err := m.fetch(ctx, src.URL)
-			m.mu.Lock()
-			if err != nil {
-				slog.Warn("list fetch failed", "list", src.Name, "url", src.URL, "err", err)
-				m.setStatusError(src, err)
-			} else {
-				m.cached[src.Name] = body
-				m.setStatusFetched(src)
-			}
-			m.mu.Unlock()
+			m.refreshSource(ctx, src)
+		}
+		if m.disk != nil {
+			m.disk.prune(keep)
 		}
 	}
 
@@ -353,29 +396,97 @@ func (m *Manager) Status() []SourceStatus {
 	return out
 }
 
-// fetch downloads one list with a hard size cap and timeout.
-func (m *Manager) fetch(ctx context.Context, url string) ([]byte, error) {
+// refreshSource fetches one source (conditionally, when a body is already
+// held) and records the outcome. A failure keeps the last good body.
+func (m *Manager) refreshSource(ctx context.Context, src annotated) {
+	m.mu.Lock()
+	_, have := m.cached[src.Name]
+	prev := m.meta[src.Name]
+	m.mu.Unlock()
+	if !have {
+		prev = cacheMeta{} // no body to fall back on: must download it
+	}
+	res, err := m.fetch(ctx, src.URL, prev)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err != nil {
+		slog.Warn("list fetch failed", "list", src.Name, "url", src.URL, "err", err)
+		m.setStatusError(src, err)
+		return
+	}
+	meta := cacheMeta{ETag: res.etag, LastModified: res.lastModified, FetchedAt: time.Now()}
+	if res.notModified {
+		if meta.ETag == "" {
+			meta.ETag = prev.ETag
+		}
+		if meta.LastModified == "" {
+			meta.LastModified = prev.LastModified
+		}
+		meta.SHA256 = prev.SHA256
+		if m.disk != nil {
+			if err := m.disk.touch(src.URL, meta); err != nil {
+				slog.Debug("list cache touch", "list", src.Name, "err", err)
+			}
+		}
+	} else {
+		m.cached[src.Name] = res.body
+		meta.SHA256 = bodyHash(res.body)
+		if m.disk != nil {
+			if err := m.disk.store(src.URL, res.body, meta); err != nil {
+				slog.Warn("list cache write failed", "list", src.Name, "err", err)
+			}
+		}
+	}
+	m.meta[src.Name] = meta
+	m.setStatusFetched(src)
+}
+
+// fetchResult is one download. notModified means a 304 answered a
+// conditional request: the held body is current and body is nil.
+type fetchResult struct {
+	body         []byte
+	notModified  bool
+	etag         string
+	lastModified string
+}
+
+// fetch downloads one list with a hard size cap and timeout. With validators
+// in prev it asks conditionally, so an unchanged list costs a 304 instead of
+// the whole download — most refreshes, for most lists.
+func (m *Manager) fetch(ctx context.Context, url string, prev cacheMeta) (fetchResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return fetchResult{}, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("User-Agent", m.ua)
+	if prev.ETag != "" {
+		req.Header.Set("If-None-Match", prev.ETag)
+	}
+	if prev.LastModified != "" {
+		req.Header.Set("If-Modified-Since", prev.LastModified)
+	}
 	resp, err := m.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch: %w", err)
+		return fetchResult{}, fmt.Errorf("fetch: %w", err)
 	}
 	defer resp.Body.Close()
+	res := fetchResult{etag: resp.Header.Get("ETag"), lastModified: resp.Header.Get("Last-Modified")}
+	if resp.StatusCode == http.StatusNotModified && (prev.ETag != "" || prev.LastModified != "") {
+		res.notModified = true
+		return res, nil
+	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch: unexpected status %s", resp.Status)
+		return fetchResult{}, fmt.Errorf("fetch: unexpected status %s", resp.Status)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxListBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("read body: %w", err)
+		return fetchResult{}, fmt.Errorf("read body: %w", err)
 	}
 	if len(body) > maxListBytes {
-		return nil, fmt.Errorf("list exceeds %d byte cap", maxListBytes)
+		return fetchResult{}, fmt.Errorf("list exceeds %d byte cap", maxListBytes)
 	}
-	return body, nil
+	res.body = body
+	return res, nil
 }

@@ -728,6 +728,19 @@ This is security software; hold it to that standard.
   into it. Deliberately not carried: annoyances, per-vendor telemetry,
   gambling — a long catalog is harder to choose from than a short one,
   and overlapping lists cost full memory for marginal extra blocking.
+- **List bodies persist to disk** (fixed decision, October 2026):
+  `lists-cache/` beside the config (StateDirectory / Docker volume), keyed
+  by URL, body + JSON sidecar carrying SHA-256 and the HTTP validators.
+  `Run` compiles the disk copies **before** the first fetch, so a reboot
+  during a list-host outage (or before the network is up) still blocks —
+  previously that list came back with zero rules. Refreshes are
+  conditional (If-None-Match / If-Modified-Since) whenever a body is held;
+  a 304 writes only the sidecar, and an identical 200 never rewrites the
+  body (SD discipline). A body that fails its sidecar hash is ignored, not
+  compiled. `prune` drops entries for unconfigured URLs and interrupted
+  `.tmp-*` writes; disabled lists keep theirs. Ephemeral mode stays
+  memory-only. Known gap fixed next: a source that fails was not retried
+  until the next refresh interval (24 h by default).
 - **Hosts preamble is not a skipped rule**: every hosts file opens with
   boilerplate mapping ignorable names to non-sinkhole addresses
   (`255.255.255.255 broadcasthost`, `ff02::1 ip6-allnodes`). The target
