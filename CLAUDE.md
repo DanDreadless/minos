@@ -613,6 +613,33 @@ This is security software; hold it to that standard.
   reads as a hang and ends in SIGKILL. `TestRingStaysLiveWhileWriterIsBlocked`
   holds the writer connection and asserts the ring still fills; restore the
   inline flush and it hangs to the test timeout, which is the point.
+- **Search runs on a domain dictionary** (fixed decisions, October 2026):
+  `qnames(name, hits, blocked, last_ts)` holds one row per distinct name,
+  so `planSearch` substring-matches thousands of rows, not millions:
+  nothing matches (or nothing with the requested verdict) → `planEmpty`,
+  instant; a match with ≤ 50k relevant rows → `planNames`, the exact rows
+  via `INDEXED BY idx_querylog_qname_verdict_ts`; capped (> 2000 names),
+  client-address matches, device/list drill-downs, and the period before
+  the backfill finishes → the old newest-first LIKE scan, which is fast for
+  exactly those (common) cases. verdict sits *before* ts in the index
+  because "netflix, blocked" through `(qname, ts)` visited every netflix
+  row for 36 results (2.5 s). Measured on the field Pi, 13.4M rows: absent
+  term 15 s timeout → 51 ms; apple.com 2.48 s → 91 ms; absent+blocked
+  timeout → 43 ms. Cost: +551 MB (+22%) on a 2.4 GB log, and a one-time
+  ~6 min background upgrade (index 2m46s, backfill 1m17s for 13.4M rows).
+  Raw `TopBlockedDomains` is pinned to `idx_querylog_ts`, because the new
+  index tempted the planner into walking the whole log to avoid a sort.
+  Index migrations now ANALYZE only the indexes just built — a whole
+  ANALYZE took 2m18s there.
+- **Derived tables are exactly-once** (fixed decisions, October 2026,
+  `derived.go`): live batches update them in the insert's own transaction
+  and advance `live_upto`; rows they never saw (first upgrade, or an older
+  Minos writing after a downgrade — detected as MAX(id) > live_upto) become
+  pending id ranges, consumed by a chunked background backfill whose
+  upserts and range update commit together, so a crash neither skips nor
+  repeats. Bump `derivedVersion` whenever a derived table changes: a
+  mismatch drops them and rebuilds from the log. Readers must check
+  `derivedReady` and fall back to the raw paths until it is set.
 - **Query-log memory cap** (fixed decision, October 2026):
   `querylog.memory_mb` (default 32, 8–4096, live) is enforced through
   per-connection `cache_size` — the cap split over the writer + 4 readers —

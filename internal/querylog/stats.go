@@ -111,8 +111,16 @@ func (l *Log) TopBlockedDomains(ctx context.Context, since time.Time, n int) ([]
 		n = 10
 	}
 	if l.reader() != nil {
+		// Pinned to the time index: with idx_querylog_qname_verdict_ts present
+		// the planner prefers walking it to avoid the GROUP BY sort — the
+		// whole log instead of the window (24 h went 0.28 s → 1.17 s on the
+		// field Pi). Conditional, as naming an unbuilt index is an error.
+		from := "querylog"
+		if l.indexed.Load() {
+			from = "querylog INDEXED BY idx_querylog_ts"
+		}
 		rows, err := l.reader().QueryContext(ctx, `SELECT qname, COUNT(*) AS c
-			FROM querylog WHERE ts >= ? AND verdict = ?
+			FROM `+from+` WHERE ts >= ? AND verdict = ?
 			GROUP BY qname ORDER BY c DESC, qname LIMIT ?`,
 			since.UnixMilli(), VerdictBlocked, n)
 		if err != nil {
