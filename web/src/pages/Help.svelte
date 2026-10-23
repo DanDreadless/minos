@@ -71,7 +71,7 @@
         {#if s.settings?.length}
           <h3>{copy.help.settings}</h3>
           <div class="table-wrap">
-            <table>
+            <table class="stack">
               <thead>
                 <tr>
                   <th>{copy.help.colSetting}</th>
@@ -83,13 +83,13 @@
               <tbody>
                 {#each s.settings as st (st.key)}
                   <tr>
-                    <td>
+                    <td class="primary">
                       <strong>{st.label}</strong>
                       <code>{st.key}</code>
                       <span class="where">{st.where}</span>
                     </td>
-                    <td>{st.default ?? '—'}</td>
-                    <td>
+                    <td data-label={copy.help.colDefault}>{st.default ?? '—'}</td>
+                    <td class="full">
                       {st.effect}
                       {#if st.fields?.length}
                         <dl>

@@ -60,10 +60,15 @@
     </g>
   {/each}
   <line x1="0" y1={H - PAD_BOTTOM} x2={W} y2={H - PAD_BOTTOM} class="axis" />
-  {#each ticks as t (t.x)}
-    <text x={t.x} y={H - 4} text-anchor={t.anchor} class="tick">{t.label}</text>
-  {/each}
 </svg>
+<!-- Time labels are HTML under the chart, not SVG text: the chart stretches
+     to any width (preserveAspectRatio none), which squashed SVG text to an
+     unreadable sliver on a phone. -->
+<div class="ticks" aria-hidden="true">
+  {#each ticks as t (t.x)}
+    <span class={t.anchor} style="left: {(t.x / W) * 100}%">{t.label}</span>
+  {/each}
+</div>
 
 <style>
   svg {
@@ -85,9 +90,27 @@
     stroke-width: 1;
   }
 
-  text.tick {
-    fill: var(--text-dim);
-    font-size: 10px;
-    font-family: inherit;
+  .ticks {
+    position: relative;
+    height: 1.1rem;
+    margin-top: -16px;
+    font-size: 0.7rem;
+    color: var(--text-dim);
   }
+
+  .ticks span {
+    position: absolute;
+    top: 0;
+    white-space: nowrap;
+    transform: translateX(-50%);
+  }
+
+  .ticks span.start {
+    transform: none;
+  }
+
+  .ticks span.end {
+    transform: translateX(-100%);
+  }
+
 </style>

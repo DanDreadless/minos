@@ -61,4 +61,18 @@
     color: var(--text-dim);
     font-size: 0.76rem;
   }
+
+  @media (max-width: 640px) {
+    .stat {
+      padding: 0.75rem 0.85rem;
+    }
+
+    .stat-value {
+      font-size: 1.45rem;
+    }
+
+    .stat-hint {
+      font-size: 0.7rem;
+    }
+  }
 </style>

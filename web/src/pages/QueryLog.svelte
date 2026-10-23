@@ -489,7 +489,7 @@
   </p>
 {:else}
   <div class="table-wrap">
-    <table>
+    <table class="stack">
       <thead>
         <tr>
           <th>Time</th>
@@ -515,7 +515,7 @@
                 >{e.client}</button
               >
             </td>
-            <td class="domain" title={e.qname}>
+            <td class="domain primary" title={e.qname}>
               <button class="cell" title={copy.querylog.filterHint} on:click={() => narrow({ domain: e.qname })}
                 >{e.qname}</button
               >
@@ -556,7 +556,7 @@
                 {/if}
               </td>
             {/if}
-            <td class="actions">
+            <td class="actions end">
               {#if e.verdict === 'blocked'}
                 <button class="row-action" title={copy.allow.actionHint} on:click={() => pardon(e.rule ?? e.qname)}
                   >{copy.allow.action}</button

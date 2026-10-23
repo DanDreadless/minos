@@ -919,9 +919,17 @@ This is security software; hold it to that standard.
   `.claude/skills/verify/SKILL.md` — build/launch/drive recipe for this
   Windows box, including the excluded-port range, the async matcher
   rebuild race, and the SQLite flush delay. Read it before hand-rolling a
-  local test run. It also records that **no browser-automation harness
-  exists here**: UI checking beyond grepping the served `assets/index-*.js`
-  for new copy strings is manual.
+  local test run. It also has the screenshot recipe (puppeteer-core
+  driving the installed Chrome with phone emulation) — use it to look at
+  any UI change, at phone width too, rather than shipping it unseen.
+- **Phone layout** (October 2026): the shell grid is `minmax(0, 1fr)` —
+  a plain `1fr` cannot shrink below its widest content, so one wide table
+  stretched every page past a phone screen. Wide data tables carry
+  `class="stack"` (app.css): under 640px each row reflows into a block —
+  `.primary` cell first, `data-label` cells as short labelled items,
+  `.full` on its own line, `.end` pushed right. Give any new table those
+  classes instead of letting columns hide off-screen, and beware desktop
+  `width: 1%` cells, which collapse when stacked.
 - **DNSSEC outcome column** (fixed decision, August 2026): the querylog
   carries `dnssec` (secure|insecure|bogus|indeterminate, empty when nothing
   was judged) so the Tribunal's four counters drill into the Docket. It is
