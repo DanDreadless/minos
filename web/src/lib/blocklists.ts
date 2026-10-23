@@ -17,7 +17,7 @@
 // skips nothing, and lands near the recorded size.
 //
 // Sizes are compiled rule counts, not the publisher's marketing figure,
-// and were re-measured 2026-08-27.
+// and were re-measured 2026-08-27 (URLhaus replacement: 2026-10-23).
 //
 // To add or change an entry: add it here, then run
 //   go test -tags catalog -timeout 20m -v ./internal/lists
@@ -122,14 +122,18 @@ export const blocklistPresets: BlocklistPreset[] = [
     },
   },
   {
-    id: 'urlhaus',
-    label: 'URLhaus',
-    note: 'active malware-distribution hosts from abuse.ch — small and sharp',
-    size: '<1k domains',
+    // abuse.ch ended anonymous URLhaus downloads on 2026-10-21 (410 Gone;
+    // exports now need a personal Auth-Key, not-for-profit terms). This is
+    // the same URLhaus data republished twice daily by malware-filter
+    // (CC0/MIT), with popular domains filtered out against the Tranco list.
+    id: 'urlhaus-filter',
+    label: 'URLhaus Malicious Hosts',
+    note: 'malware-distribution hosts reported to abuse.ch URLhaus, republished by malware-filter — small and sharp',
+    size: '≈1.8k domains',
     tier: 'security',
     list: {
-      name: 'URLhaus',
-      url: 'https://urlhaus.abuse.ch/downloads/hostfile/',
+      name: 'URLhaus (malware-filter)',
+      url: 'https://malware-filter.gitlab.io/urlhaus-filter/urlhaus-filter-hosts.txt',
       format: 'hosts',
     },
   },
