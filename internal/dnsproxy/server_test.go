@@ -17,7 +17,7 @@ import (
 
 // startStubUpstream runs a real DNS server that answers every A query with
 // 93.184.216.34 and returns its address.
-func startStubUpstream(t *testing.T) string {
+func startStubUpstream(t testing.TB) string {
 	t.Helper()
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
@@ -53,7 +53,7 @@ func startProxy(t *testing.T, mode string, denied ...string) (*Server, *querylog
 }
 
 // startProxyCfg is startProxy with a config mutator, for group/client tests.
-func startProxyCfg(t *testing.T, mode string, mutate func(*config.Config), denied ...string) (*Server, *querylog.Log) {
+func startProxyCfg(t testing.TB, mode string, mutate func(*config.Config), denied ...string) (*Server, *querylog.Log) {
 	t.Helper()
 	upstream := startStubUpstream(t)
 

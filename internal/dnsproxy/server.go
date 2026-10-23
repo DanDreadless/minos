@@ -572,6 +572,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		// access control, not content filtering.
 		reply := new(dns.Msg)
 		reply.SetRcode(req, dns.RcodeRefused)
+		withEDE(req, reply, dns.ExtendedErrorCodeProhibited, "Blocked by Minos: this device's DNS access is blocked", "")
 		_ = w.WriteMsg(reply)
 		entry.Verdict = querylog.VerdictBlocked
 		entry.List = "clients"
@@ -651,6 +652,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 
 	if verdict.Blocked {
 		reply := s.blockedResponse(req, q)
+		withEDE(req, reply, dns.ExtendedErrorCodeBlocked, "Blocked by Minos: ", verdict.List)
 		_ = w.WriteMsg(reply)
 		entry.Verdict = querylog.VerdictBlocked
 		entry.List = verdict.List
@@ -707,6 +709,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 				// RFC 8767: serve the expired answer now, refresh behind it.
 				s.refreshStale(key, qname, q.Qtype)
 				entry.Upstream = "stale"
+				withEDE(req, resp, dns.ExtendedErrorCodeStaleAnswer, "Upstream unavailable or slow; served from cache", "")
 			} else {
 				entry.Upstream = "cache"
 			}
@@ -726,8 +729,14 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 	if err != nil {
 		reply := new(dns.Msg)
 		reply.SetRcode(req, dns.RcodeServerFailure)
+		bogus, isBogus := errors.AsType[*bogusAnswerError](err)
+		if isBogus {
+			withEDE(req, reply, dns.ExtendedErrorCodeDNSBogus, "DNSSEC validation failed: ", bogus.reason)
+		} else {
+			withEDE(req, reply, dns.ExtendedErrorCodeNetworkError, "No upstream resolver answered", "")
+		}
 		_ = w.WriteMsg(reply)
-		if bogus, ok := errors.AsType[*bogusAnswerError](err); ok {
+		if isBogus {
 			// A refused bogus answer is a judgment, not an upstream
 			// failure: condemned in the docket with its reason.
 			entry.Verdict = querylog.VerdictBlocked

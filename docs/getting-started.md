@@ -348,6 +348,12 @@ not-blocking state also shows in the top bar.
   rules loaded, a list retired or failing, a resolver not answering (or all
   of them), no API token, the disk nearly full, DNSSEC unable to check
   answers, or new warnings in the Logs — each with a link to the fix.
+- Answers also carry the reason for tools that can read it (RFC 8914
+  Extended DNS Errors, sent only to clients that use EDNS0): `dig` shows
+  `EDE: 15 (Blocked): (Blocked by Minos: StevenBlack)` on a blocked name,
+  Prohibited for a device whose DNS is blocked, DNSSEC Bogus with the
+  reason, Stale Answer when served from cache during an outage, and
+  Network Error when no upstream answered.
 - **Query Log** — the newest queries, streaming live, and a
   search across the whole retained history. Every blocked entry shows
   *which list and rule* blocked it and has a one-click **Allow** button;
