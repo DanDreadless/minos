@@ -15,6 +15,7 @@
   import { fmtBytes, fmtLogTime } from '../lib/format';
   import { resolverPresets, matchPreset } from '../lib/resolvers';
   import { currentParams, setLeaveGuard } from '../lib/router';
+  import { encodeQR, qrPath } from '../lib/qr';
   import { notify, notifyError } from '../lib/toast';
 
   let cfg: ConfigView | null = null;
@@ -37,6 +38,15 @@
   // Minos's own resident memory, so the cap can be judged against reality.
   let procRSS: number | undefined;
   let newToken = '';
+  // Sign-in card: the password fields, and the authenticator setup in
+  // progress (secret + otpauth link, before a code confirms it).
+  let pwCurrent = '';
+  let pwNew = '';
+  let pwConfirm = '';
+  let pwBusy = false;
+  let totpSetup: { secret: string; uri: string } | null = null;
+  let totpCode = '';
+  $: totpQR = totpSetup ? encodeQR(totpSetup.uri) : null;
   let cacheEnabled = true;
   let cacheMaxEntries = 10000;
   let cacheMinTTL = 10;
@@ -358,6 +368,99 @@
       setToken('');
       cfg = updated;
       notify(copy.settings.saved);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  // AfterAuthChange reloads the settings so the sign-in card reflects what
+  // the server now holds, keeping other tabs' drafts like saveToken does.
+  async function afterAuthChange(message: string): Promise<void> {
+    pwCurrent = pwNew = pwConfirm = '';
+    cfg = await api.getConfig();
+    notify(message);
+  }
+
+  async function savePassword(): Promise<void> {
+    if (pwNew !== pwConfirm) {
+      notifyError(new Error(copy.settings.passwordMismatch));
+      return;
+    }
+    pwBusy = true;
+    try {
+      const had = cfg?.api.password_set;
+      await api.setPassword(pwCurrent, pwNew);
+      await afterAuthChange(had ? copy.settings.passwordChanged : copy.settings.passwordSaved);
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      pwBusy = false;
+    }
+  }
+
+  async function removePassword(): Promise<void> {
+    if (!pwCurrent) {
+      notifyError(new Error(copy.settings.passwordNeedCurrent));
+      return;
+    }
+    const warn = cfg?.api.token_set ? copy.settings.passwordConfirmRemoveToken : copy.settings.passwordConfirmRemove;
+    if (!(await confirmDialog({ message: warn, confirm: copy.settings.passwordRemove, danger: true }))) return;
+    try {
+      await api.removePassword(pwCurrent);
+      totpSetup = null;
+      await afterAuthChange(copy.settings.passwordRemoved);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function signOutEverywhere(): Promise<void> {
+    if (!(await confirmDialog({ message: copy.settings.signOutAllConfirm, confirm: copy.settings.signOutAll }))) return;
+    try {
+      await api.signOutEverywhere();
+      notify(copy.settings.signedOutAll);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function signOut(): Promise<void> {
+    try {
+      await api.logout();
+      location.reload();
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function startTOTP(): Promise<void> {
+    try {
+      totpSetup = await api.totpSetup();
+      totpCode = '';
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function confirmTOTP(): Promise<void> {
+    try {
+      await api.totpEnable(totpCode.replace(/\s/g, ''));
+      totpSetup = null;
+      totpCode = '';
+      await afterAuthChange(copy.settings.totpOn);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function disableTOTP(): Promise<void> {
+    if (!pwCurrent) {
+      notifyError(new Error(copy.settings.passwordNeedCurrent));
+      return;
+    }
+    try {
+      await api.totpDisable(pwCurrent);
+      await afterAuthChange(copy.settings.totpOff);
     } catch (e) {
       notifyError(e);
     }
@@ -784,7 +887,95 @@
   </section>
 
   <section class="card">
-    <h2>{copy.settings.apiTitle}</h2>
+    <h2>{copy.settings.signInTitle} <small>{copy.settings.signInHint}</small></h2>
+    <p class="note">{cfg.api.password_set ? copy.settings.passwordIsSet : copy.settings.passwordUnset}</p>
+    <form class="pw-grid" on:submit|preventDefault={savePassword}>
+      <!-- A username field keeps password managers from guessing one. -->
+      <input class="visually-hidden" type="text" autocomplete="username" value="admin" readonly tabindex="-1" aria-hidden="true" />
+      {#if cfg.api.password_set}
+        <label class="field">
+          <span>{copy.settings.passwordCurrent}</span>
+          <input type="password" autocomplete="current-password" bind:value={pwCurrent} />
+        </label>
+      {/if}
+      <label class="field">
+        <span>{cfg.api.password_set ? copy.settings.passwordNew : copy.settings.password}
+          <small>{copy.settings.passwordHint}</small></span>
+        <input type="password" autocomplete="new-password" minlength="8" bind:value={pwNew} />
+      </label>
+      <label class="field">
+        <span>{copy.settings.passwordConfirm}</span>
+        <input type="password" autocomplete="new-password" bind:value={pwConfirm} />
+      </label>
+      <div class="pw-actions">
+        <button
+          type="submit"
+          class="primary"
+          disabled={pwBusy || pwNew.length < 8 || !pwConfirm || (cfg.api.password_set && !pwCurrent)}
+        >
+          {cfg.api.password_set ? copy.settings.passwordChange : copy.settings.passwordSet}
+        </button>
+        {#if cfg.api.password_set}
+          <button type="button" class="danger" on:click={removePassword}>{copy.settings.passwordRemove}</button>
+        {/if}
+      </div>
+    </form>
+
+    {#if cfg.api.password_set}
+      <div class="sub">
+        <h3>{copy.settings.totpTitle}</h3>
+        {#if cfg.api.totp_enabled}
+          <p class="note">{copy.settings.totpEnabled}</p>
+          <button class="danger" on:click={disableTOTP}>{copy.settings.totpDisable}</button>
+        {:else if totpSetup}
+          <p class="note">{copy.settings.totpScan}</p>
+          <div class="totp-setup">
+            {#if totpQR}
+              <a href={totpSetup.uri} class="qr" aria-label={copy.settings.totpOpenApp}>
+                <svg viewBox="0 0 {totpQR.length + 8} {totpQR.length + 8}" shape-rendering="crispEdges">
+                  <rect width="100%" height="100%" fill="#fff" />
+                  <path d={qrPath(totpQR)} fill="#000" />
+                </svg>
+              </a>
+            {/if}
+            <div class="totp-side">
+              <span class="note">{copy.settings.totpManual}</span>
+              <code class="secret">{totpSetup.secret.replace(/(.{4})/g, '$1 ').trim()}</code>
+              <form class="token-row" on:submit|preventDefault={confirmTOTP}>
+                <input
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  maxlength="7"
+                  placeholder="123456"
+                  aria-label={copy.settings.totpCode}
+                  bind:value={totpCode}
+                />
+                <button type="submit" class="primary" disabled={totpCode.replace(/\s/g, '').length !== 6}>
+                  {copy.settings.totpConfirm}
+                </button>
+              </form>
+              <button class="link" on:click={() => (totpSetup = null)}>{copy.settings.totpCancel}</button>
+            </div>
+          </div>
+        {:else}
+          <p class="note">{copy.settings.totpExplain}</p>
+          <button on:click={startTOTP}>{copy.settings.totpStart}</button>
+        {/if}
+      </div>
+
+      <div class="sub">
+        <h3>{copy.settings.sessionsTitle}</h3>
+        <p class="note">{copy.settings.sessionsHint}</p>
+        <div class="pw-actions">
+          <button on:click={signOut}>{copy.settings.signOut}</button>
+          <button on:click={signOutEverywhere}>{copy.settings.signOutAll}</button>
+        </div>
+      </div>
+    {/if}
+  </section>
+
+  <section class="card">
+    <h2>{copy.settings.apiTitle} <small>{copy.settings.apiHint}</small></h2>
     <p class="note">{cfg.api.token_set ? copy.settings.tokenSet : copy.settings.tokenUnset}</p>
     <div class="token-row">
       <input
@@ -1133,6 +1324,85 @@
   .token-row input {
     max-width: 18rem;
     flex: 1;
+    min-width: 0;
+  }
+
+  .pw-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 0.6rem 1rem;
+    align-items: end;
+  }
+
+  .pw-actions {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    grid-column: 1 / -1;
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .sub {
+    margin-top: 1.1rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--border, rgba(127, 127, 127, 0.3));
+  }
+
+  .sub h3 {
+    margin: 0 0 0.4rem;
+    font-size: 0.95rem;
+  }
+
+  .totp-setup {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .qr {
+    display: block;
+    width: 11rem;
+    height: 11rem;
+    flex: none;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .qr svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .totp-side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    min-width: min(100%, 15rem);
+    flex: 1;
+  }
+
+  .secret {
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+    word-break: break-all;
+  }
+
+  .link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--accent);
+    cursor: pointer;
+    align-self: flex-start;
   }
 
   .digest {

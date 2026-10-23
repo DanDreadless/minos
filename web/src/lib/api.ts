@@ -213,7 +213,7 @@ export interface ConfigView {
     retention_days: number;
     memory_mb: number;
   };
-  api: { listen: string; token_set: boolean };
+  api: { listen: string; token_set: boolean; password_set: boolean; totp_enabled: boolean };
   update_check: boolean;
   notifications: {
     webhook_url: string;
@@ -386,9 +386,24 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    // NeedCode is set when a sign-in also needs an authenticator code.
+    public needCode = false,
   ) {
-    super(message);
+    super(sentence(message));
   }
+}
+
+// Server messages are lowercase Go errors; every message the UI shows
+// starts with a capital.
+function sentence(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+export interface AuthStatus {
+  password_set: boolean;
+  totp_enabled: boolean;
+  token_set: boolean;
+  authenticated: boolean;
 }
 
 async function request<T>(
@@ -409,11 +424,9 @@ async function request<T>(
   });
   const data: unknown = await resp.json().catch(() => ({}));
   if (!resp.ok) {
-    const msg =
-      typeof data === 'object' && data !== null && 'error' in data
-        ? String((data as { error: unknown }).error)
-        : resp.statusText;
-    throw new ApiError(resp.status, msg);
+    const obj = typeof data === 'object' && data !== null ? (data as { error?: unknown; need_code?: unknown }) : {};
+    const msg = obj.error !== undefined ? String(obj.error) : resp.statusText;
+    throw new ApiError(resp.status, msg, obj.need_code === true);
   }
   return data as T;
 }
@@ -463,6 +476,16 @@ async function uploadRaw<T>(path: string, body: Blob): Promise<T> {
 
 export const api = {
   status: () => request<Status>('GET', '/api/status'),
+  // Sign-in. The session is an HttpOnly cookie the browser sends by itself.
+  authStatus: () => request<AuthStatus>('GET', '/api/auth'),
+  login: (password: string, code = '') => request<unknown>('POST', '/api/auth/login', { password, code }),
+  logout: () => request<unknown>('POST', '/api/auth/logout'),
+  setPassword: (current: string, next: string) => request<unknown>('PUT', '/api/auth/password', { current, new: next }),
+  removePassword: (current: string) => request<unknown>('DELETE', '/api/auth/password', { current }),
+  signOutEverywhere: () => request<unknown>('POST', '/api/auth/signout-all'),
+  totpSetup: () => request<{ secret: string; uri: string }>('POST', '/api/auth/totp/setup'),
+  totpEnable: (code: string) => request<unknown>('POST', '/api/auth/totp/enable', { code }),
+  totpDisable: (current: string) => request<unknown>('DELETE', '/api/auth/totp', { current }),
   upstreams: () => request<UpstreamHealth[]>('GET', '/api/upstreams'),
   update: () => request<UpdateInfo>('GET', '/api/update'),
   stats: (hours = 24) => request<Stats>('GET', `/api/stats?hours=${hours}`),

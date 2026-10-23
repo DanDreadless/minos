@@ -61,7 +61,7 @@
         out.push({ severity: 'bad', text: a.dnsDown, href: '#/settings?tab=dns', action: a.openResolvers });
       else if (failing.length)
         out.push({ severity: 'warn', text: a.upstreamsFailing(failing.map((u) => u.address)), href: '#/settings?tab=dns', action: a.openResolvers });
-      if (!c.api.token_set)
+      if (!c.api.token_set && !c.api.password_set)
         out.push({ severity: 'info', text: a.noToken, href: '#/settings?tab=access', action: a.openAccess });
     }
     if (disk) out.push({ severity: 'bad', text: a.disk, href: '#/settings?tab=system', action: a.openSystem });

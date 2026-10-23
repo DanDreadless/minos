@@ -585,10 +585,36 @@ export const docs: Section[] = [
     summary: 'Who can use this interface and the API.',
     settings: [
       {
+        label: 'Password',
+        key: 'api.password_hash',
+        default: 'none',
+        effect:
+          'When set, opening the interface asks for it, and a sign-in lasts 30 days on that browser. Five wrong tries from one address wait a minute. Stored only as a one-way hash (argon2id) — set or change it in Settings, never in the file. Forgot it? Delete password_hash from minos.yaml and restart.',
+        applies: 'live',
+        where: 'Settings → Access & security',
+      },
+      {
+        label: 'Session signing key',
+        key: 'api.session_key',
+        default: 'Made with the first password',
+        effect: 'Signs sign-ins. "Sign out everywhere" replaces it, which ends every session at once. The minos command on the same machine uses it too, so it keeps working with only a password set.',
+        applies: 'live',
+        where: 'Settings → Access & security',
+      },
+      {
+        label: 'Two-step sign-in (authenticator app)',
+        key: 'api.totp_secret',
+        default: 'off',
+        effect: 'After the password, ask for the 6-digit code from an authenticator app (Google Authenticator, 1Password, Aegis …). Turned on by scanning the code shown in Settings and typing one code back.',
+        applies: 'live',
+        where: 'Settings → Access & security',
+      },
+      {
         label: 'API token',
         key: 'api.token',
         default: 'none',
-        effect: 'When set, the UI, the CLI and every API call must present it. Without one, anyone on your network can change Minos.',
+        effect:
+          'For scripts and automation (Home Assistant, curl): sent as X-Api-Token or Authorization: Bearer. With a password set too, either works. With neither, anyone on your network can change Minos.',
         applies: 'live',
         where: 'Settings → Access & security',
       },

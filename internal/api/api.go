@@ -4,7 +4,6 @@
 package api
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -73,7 +72,8 @@ type Server struct {
 	installMethod string
 	started       time.Time
 	notifier      *notify.Notifier // may be nil
-	appLog        *applog.Ring     // may be nil: no Logs endpoints
+	login         *loginGuard
+	appLog        *applog.Ring // may be nil: no Logs endpoints
 	logLevel      *slog.LevelVar
 }
 
@@ -94,6 +94,7 @@ func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
 		version:       version,
 		installMethod: installMethod,
 		started:       time.Now(),
+		login:         newLoginGuard(),
 	}
 }
 
@@ -103,8 +104,18 @@ func (s *Server) Router() http.Handler {
 	// Prometheus convention puts /metrics at the root; it shares the API
 	// auth (Prometheus scrape configs send Authorization: Bearer).
 	r.With(s.auth).Get("/metrics", s.handleMetrics)
+	// Login itself is reachable without logging in.
+	r.Get("/api/auth", s.handleAuthStatus)
+	r.Post("/api/auth/login", s.handleLogin)
+	r.Post("/api/auth/logout", s.handleLogout)
 	r.Route("/api", func(r chi.Router) {
 		r.Use(s.auth)
+		r.Put("/auth/password", s.handleSetPassword)
+		r.Delete("/auth/password", s.handleRemovePassword)
+		r.Post("/auth/signout-all", s.handleSignOutEverywhere)
+		r.Post("/auth/totp/setup", s.handleTOTPSetup)
+		r.Post("/auth/totp/enable", s.handleTOTPEnable)
+		r.Delete("/auth/totp", s.handleTOTPDisable)
 		r.Get("/status", s.handleStatus)
 		r.Get("/host", s.handleHost)
 		r.Get("/upstreams", s.handleUpstreams)
@@ -164,34 +175,6 @@ func (s *Server) Router() http.Handler {
 
 // auth enforces the API token when one is configured. Comparison is
 // constant-time; weakening or widening this needs maintainer sign-off.
-func (s *Server) auth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := s.store.Get().API.Token
-		if token == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		got := r.Header.Get("X-Api-Token")
-		if got == "" {
-			if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
-				got = strings.TrimPrefix(h, "Bearer ")
-			}
-		}
-		if got == "" {
-			// WebSocket clients can't set headers from a browser; allow the
-			// token as a query parameter for the stream endpoint only.
-			if strings.HasSuffix(r.URL.Path, "/querylog/stream") {
-				got = r.URL.Query().Get("token")
-			}
-		}
-		if subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
-			writeError(w, http.StatusUnauthorized, "missing or invalid API token")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 type statusResponse struct {
 	Version        string     `json:"version"`
 	UptimeSeconds  int64      `json:"uptime_seconds"`

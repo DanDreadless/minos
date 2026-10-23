@@ -112,7 +112,7 @@
     void api
       .getConfig()
       .then((cfg) => {
-        tokenSet = cfg.api.token_set;
+        tokenSet = cfg.api.token_set || cfg.api.password_set;
       })
       .catch(() => {});
     // The host sampler ticks every 10s server-side; polling it on the

@@ -113,8 +113,8 @@ Rules:
   blessed set: `miekg/dns`, `go-chi/chi`, `modernc.org/sqlite`,
   `gopkg.in/yaml.v3`, `github.com/coder/websocket` (the maintained home
   of nhooyr.io/websocket — migrated July 2026), `golang.org/x/crypto`
-  (the acme package only — Go-team maintained; chosen over lego's
-  ~100-module tree), `golang.org/x/sys` (host metrics on darwin/windows;
+  (the acme package, and argon2 for the web login in `internal/auth` —
+  Go-team maintained; chosen over lego's ~100-module tree), `golang.org/x/sys` (host metrics on darwin/windows;
   approved August 2026 — it was already an indirect dependency, so making
   it direct added no modules, and the alternative was gopsutil's tree),
   `github.com/quic-go/quic-go` (DNS over QUIC and HTTP/3, client and
@@ -600,6 +600,25 @@ This is security software; hold it to that standard.
   copies only `web/`, and failing there broke every image build from
   v0.27.0 to v0.28.0 unnoticed — release.sh now waits for the whole GitHub
   Release workflow (Docker job included) and stops if any job failed.
+- **Web sign-in** (fixed decisions, October 2026, `internal/auth` leaf +
+  `internal/api/login.go`): an argon2id password (`api.password_hash`,
+  m=32 MiB t=2 p=2) and **stateless** HMAC-signed session cookies
+  (`minos_session`, HttpOnly, SameSite=Strict, Secure under TLS, 30 days)
+  keyed by `api.session_key` — no server-side session table, so sessions
+  survive restarts and replacing the key (password change, "sign out
+  everywhere") ends them all. Optional TOTP (`api.totp_secret`, RFC 6238,
+  ±1 step) is enabled only after a code confirms the setup secret. The API
+  token stays a parallel credential for automation; with both set either is
+  accepted. Cookie-authenticated requests must also be same-origin
+  (Sec-Fetch-Site/Origin) — the CSRF guard; token requests are exempt. Five
+  failures per address per minute → 429. Secrets are never served:
+  Settings exposes only `password_set`/`totp_enabled`. The local CLI mints
+  its own session from the config's key when there is no token (whoever
+  reads the config holds every secret anyway). Recovery is deleting
+  `password_hash` from the file. The TOTP QR code is drawn by
+  `web/src/lib/qr.ts` (a small level-M encoder, versions 1–10) rather
+  than a dependency; it was verified against jsQR. 401s raise no toast —
+  the sign-in screen takes over.
 - **Extended DNS Errors** (fixed decisions, October 2026, `ede.go`): answers
   say why (RFC 8914) — 15 Blocked naming the list, 18 Prohibited for a
   device-level block, 6 DNSSEC Bogus with the reason, 3 Stale Answer, 23
