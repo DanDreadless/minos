@@ -793,4 +793,13 @@ This is security software; hold it to that standard.
   probe query; sick upstreams are still tried as a last resort (a breaker
   must never refuse to try everything); routes are exempt (authoritative,
   no alternative). Health lives on the same name-keyed counters as
-  /metrics so it survives config swaps.
+  /metrics so it survives config swaps.- **`net.SplitHostPort` validates almost nothing** (field bug, v0.21.2): it
+  splits on the last colon, so `https://8.8.8.8/dns-query` "parses" as host
+  `https`, port `//8.8.8.8/dns-query`. A DoH URL saved under protocol `dot`
+  passed validation and then failed 100% of exchanges for 49 days, unnoticed.
+  `validateHostPort` now also requires a numeric port and a host without
+  URL characters; upstreams additionally refuse `://`, empty hosts and port
+  0. The tolerant on-disk load **heals** rather than refuses
+  (`healUpstreams`: dot+https URL → doh, other invalid entries dropped,
+  defaults if none survive) so an upgrade never bricks a config the old
+  binary booted on.
