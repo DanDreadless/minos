@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-// Aggregates for the dashboard. When SQLite is enabled these run against the
-// database (off the hot path; the single connection serializes with the
-// writer). In ephemeral mode they scan the ring buffer, so the window is
+// Aggregates for the dashboard. When SQLite is enabled these are answered
+// from the rollups once the backfill is complete (rollups.go — exact, and
+// independent of window length), and from the raw log before that. In ephemeral mode they scan the ring buffer, so the window is
 // bounded by ring size. Entries buffered but not yet flushed (≤30s worth)
 // are not counted — an acceptable skew for charts.
 
@@ -61,7 +61,16 @@ func (l *Log) Timeline(ctx context.Context, since time.Time, bucket time.Duratio
 		b.Blocked += blocked
 	}
 
-	if l.reader() != nil {
+	rolled := false
+	if l.useRollups() {
+		var err error
+		if rolled, err = l.timelineRolled(ctx, since, bucketMs, add); err != nil {
+			return nil, err
+		}
+	}
+	if rolled {
+		// answered from the rollups; fill below
+	} else if l.reader() != nil {
 		rows, err := l.reader().QueryContext(ctx, `SELECT ts/? * ? AS bucket,
 			COUNT(*), SUM(verdict = ?) FROM querylog
 			WHERE ts >= ? GROUP BY bucket`,
@@ -109,6 +118,9 @@ func (l *Log) Timeline(ctx context.Context, since time.Time, bucket time.Duratio
 func (l *Log) TopBlockedDomains(ctx context.Context, since time.Time, n int) ([]TopDomain, error) {
 	if n <= 0 || n > 100 {
 		n = 10
+	}
+	if l.useRollups() {
+		return l.topBlockedRolled(ctx, since, n)
 	}
 	if l.reader() != nil {
 		// Pinned to the time index: with idx_querylog_qname_verdict_ts present
@@ -269,6 +281,9 @@ func (l *Log) AuditedTotal(ctx context.Context, since time.Time, list string) (i
 // defensive cap.
 func (l *Log) BlocksByList(ctx context.Context, since time.Time) ([]ListStat, error) {
 	const maxLists = 200
+	if l.useRollups() {
+		return l.blocksByListRolled(ctx, since, maxLists)
+	}
 	if l.reader() != nil {
 		rows, err := l.reader().QueryContext(ctx, `SELECT list, COUNT(*) AS c
 			FROM querylog WHERE ts >= ? AND verdict = ? AND list != ''
@@ -401,6 +416,9 @@ func (l *Log) TopClients(ctx context.Context, since time.Time, n int) ([]ClientS
 	if n <= 0 || n > 100 {
 		n = 10
 	}
+	if l.useRollups() {
+		return l.topClientsRolled(ctx, since, n)
+	}
 	if l.reader() != nil {
 		rows, err := l.reader().QueryContext(ctx, `SELECT client, COUNT(*) AS c,
 			SUM(verdict = ?) FROM querylog WHERE ts >= ?
@@ -452,10 +470,14 @@ func (l *Log) TopClients(ctx context.Context, since time.Time, n int) ([]ClientS
 // totals plus its most-queried allowed and blocked names. A physical device
 // can span several IPs (MAC-merged leases), so it takes the full set.
 type ClientOverview struct {
-	Total      int         `json:"total"`
-	Blocked    int         `json:"blocked"`
-	TopAllowed []TopDomain `json:"top_allowed"`
-	TopBlocked []TopDomain `json:"top_blocked"`
+	// WindowStart is where the counted window actually begins: the
+	// requested start, or — for windows of 48 h and more answered from the
+	// daily rollups — the start of that UTC day.
+	WindowStart time.Time   `json:"window_start"`
+	Total       int         `json:"total"`
+	Blocked     int         `json:"blocked"`
+	TopAllowed  []TopDomain `json:"top_allowed"`
+	TopBlocked  []TopDomain `json:"top_blocked"`
 }
 
 // ClientOverview reports what the given client addresses resolved since the
@@ -464,9 +486,12 @@ func (l *Log) ClientOverview(ctx context.Context, clients []string, since time.T
 	if n <= 0 || n > 100 {
 		n = 10
 	}
-	out := ClientOverview{TopAllowed: []TopDomain{}, TopBlocked: []TopDomain{}}
+	out := ClientOverview{WindowStart: since, TopAllowed: []TopDomain{}, TopBlocked: []TopDomain{}}
 	if len(clients) == 0 {
 		return out, nil
+	}
+	if l.useRollups() && time.Since(since) >= clientDaysFrom {
+		return l.clientOverviewRolled(ctx, clients, since, n)
 	}
 
 	if l.reader() != nil {
@@ -608,6 +633,9 @@ func (l *Log) ClientsSummary(ctx context.Context, before time.Time) ([]ClientSum
 
 // Totals counts queries and blocks since the given time.
 func (l *Log) Totals(ctx context.Context, since time.Time) (total, blocked int, err error) {
+	if l.useRollups() {
+		return l.totalsRolled(ctx, since)
+	}
 	if l.reader() != nil {
 		err = l.reader().QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(verdict = ?), 0)
 			FROM querylog WHERE ts >= ?`, VerdictBlocked, since.UnixMilli()).
