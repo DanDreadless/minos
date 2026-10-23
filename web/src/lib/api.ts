@@ -196,7 +196,13 @@ export interface ConfigView {
     block_icloud_private_relay: boolean;
   };
   lists: { refresh_interval: string };
-  querylog: { ephemeral: boolean; db_path: string; ring_size: number; retention_days: number };
+  querylog: {
+    ephemeral: boolean;
+    db_path: string;
+    ring_size: number;
+    retention_days: number;
+    memory_mb: number;
+  };
   api: { listen: string; token_set: boolean };
   update_check: boolean;
   notifications: {
@@ -228,7 +234,7 @@ export interface SettingsUpdate {
     block_icloud_private_relay?: boolean;
   };
   lists?: { refresh_interval?: string };
-  querylog?: { ring_size?: number; retention_days?: number };
+  querylog?: { ring_size?: number; retention_days?: number; memory_mb?: number };
   api?: { token?: string };
   update_check?: boolean;
   notifications?: {

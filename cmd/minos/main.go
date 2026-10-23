@@ -107,6 +107,7 @@ func serve(args []string) error {
 		DBPath:        cfg.QueryLog.DBPath,
 		Ephemeral:     cfg.QueryLog.Ephemeral,
 		RetentionDays: cfg.QueryLog.RetentionDays,
+		MemoryMB:      cfg.QueryLog.MemoryMB,
 	})
 	if err != nil {
 		return err
@@ -200,6 +201,7 @@ func serve(args []string) error {
 		}
 		qlog.SetRetentionDays(c.QueryLog.RetentionDays)
 		qlog.Resize(c.QueryLog.RingSize)
+		qlog.SetMemoryMB(c.QueryLog.MemoryMB)
 		reg.ApplyConfig(c)
 	})
 	if err := proxy.Start(); err != nil {

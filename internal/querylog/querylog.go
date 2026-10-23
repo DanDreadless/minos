@@ -92,7 +92,14 @@ type Options struct {
 	Ephemeral bool
 	// RetentionDays bounds how long rows live in SQLite.
 	RetentionDays int
+	// MemoryMB caps the memory SQLite may use for the query log (page
+	// caches, sorts, aggregates). 0 = DefaultMemoryMB.
+	MemoryMB int
 }
+
+// DefaultMemoryMB is the query log's memory cap when none is configured:
+// ample for a household log, and a small slice of even a 1 GB Pi.
+const DefaultMemoryMB = 32
 
 // Log is safe for concurrent use. Record never blocks the caller.
 type Log struct {
@@ -115,7 +122,11 @@ type Log struct {
 	// walks the whole window can no longer stall the flush, the websocket,
 	// or every other API call behind it. Both are nil in ephemeral mode.
 	db        *sql.DB
-	rdb       *sql.DB
+	rdb       atomic.Pointer[sql.DB] // swapped when the memory cap changes
+	dbPath    string
+	memoryMB  atomic.Int64
+	retiredMu sync.Mutex
+	retired   []*sql.DB    // replaced reader pools awaiting their grace period
 	retention atomic.Int64 // nanoseconds; settable at runtime
 
 	// flushCh carries completed batches from run() to flushLoop, which is
@@ -153,21 +164,26 @@ func Open(opts Options) (*Log, error) {
 		ready: make(chan struct{}),
 	}
 	l.retention.Store(int64(time.Duration(opts.RetentionDays) * 24 * time.Hour))
+	if opts.MemoryMB <= 0 {
+		opts.MemoryMB = DefaultMemoryMB
+	}
+	l.memoryMB.Store(int64(opts.MemoryMB))
 	if opts.Ephemeral {
 		close(l.ready)
 		go l.run()
 		return l, nil
 	}
-	db, err := openDB(opts.DBPath)
+	db, err := openDB(opts.DBPath, opts.MemoryMB)
 	if err != nil {
 		return nil, err
 	}
-	rdb, err := openReader(opts.DBPath)
+	rdb, err := openReader(opts.DBPath, opts.MemoryMB)
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
-	l.db, l.rdb = db, rdb
+	l.db, l.dbPath = db, opts.DBPath
+	l.rdb.Store(rdb)
 	l.flushCh = make(chan []Entry, flushQueue)
 	l.flushDead = make(chan struct{})
 	// Indexes are built off the startup path: on a log of any size the
@@ -206,16 +222,80 @@ func (l *Log) Ready() <-chan struct{} { return l.ready }
 // failing outright.
 const dsnPragmas = "?_pragma=busy_timeout(10000)&_pragma=synchronous(NORMAL)"
 
+// readerConns + the writer share the memory cap's page-cache budget.
+const readerConns = 4
+
+// cacheKiB splits the memory cap evenly over every connection Minos holds
+// open (1 writer + readerConns), so the page caches together stay inside it.
+func cacheKiB(memoryMB int) int { return max(memoryMB*1024/(readerConns+1), 256) }
+
+// dsn builds the per-connection settings that bound the query log's memory.
+//
+// cache_size is the lever that is actually enforced: a hard cap on each
+// connection's page cache, which SQLite's sorter and the temporary b-trees
+// behind GROUP BY also work within. temp_store=FILE makes anything larger
+// spill to a temporary file instead of RAM — slower, never hungrier — and
+// mmap_size=0 keeps the file out of the address space. What we deliberately
+// do not rely on: soft/hard_heap_limit. The pure-Go driver is compiled with
+// SQLITE_DEFAULT_MEMSTATUS=0, under which SQLite stores those limits and
+// silently never enforces them (verified: a 1 MB hard limit refused nothing).
+func dsn(path string, memoryMB int) string {
+	return path + dsnPragmas + fmt.Sprintf(
+		"&_pragma=cache_size(-%d)&_pragma=temp_store(FILE)&_pragma=mmap_size(0)", cacheKiB(memoryMB))
+}
+
+// reader returns the current read pool (nil in ephemeral mode).
+func (l *Log) reader() *sql.DB { return l.rdb.Load() }
+
+// SetMemoryMB changes the memory cap live: the writer's page cache is
+// resized in place, and the reader pool is replaced by one opened at the new
+// size. The old pool is closed a minute later — longer than any read's
+// deadline — so a query that picked it up just before the swap always
+// finishes (and Close closes it sooner on shutdown).
+func (l *Log) SetMemoryMB(mb int) {
+	if mb <= 0 {
+		mb = DefaultMemoryMB
+	}
+	if l.db == nil || int64(mb) == l.memoryMB.Swap(int64(mb)) {
+		return
+	}
+	if _, err := l.db.Exec(fmt.Sprintf("PRAGMA cache_size=-%d", cacheKiB(mb))); err != nil {
+		slog.Warn("query log writer cache resize failed", "err", err)
+	}
+	fresh, err := openReader(l.dbPath, mb)
+	if err != nil {
+		slog.Warn("query log reader pool not resized", "err", err)
+		return
+	}
+	old := l.rdb.Swap(fresh)
+	l.retiredMu.Lock()
+	l.retired = append(l.retired, old)
+	l.retiredMu.Unlock()
+	go func() {
+		time.Sleep(time.Minute)
+		l.retiredMu.Lock()
+		defer l.retiredMu.Unlock()
+		for i, p := range l.retired {
+			if p == old {
+				l.retired = append(l.retired[:i], l.retired[i+1:]...)
+				_ = old.Close()
+				return
+			}
+		}
+	}()
+	slog.Info("query log memory limit changed", "mb", mb)
+}
+
 // openReader opens the read-only-by-convention pool. It shares the file
 // with the writer; WAL keeps the two out of each other's way. The pool is
 // small on purpose — these are Raspberry Pis, and four concurrent
 // full-window scans would thrash the SD card rather than finish sooner.
-func openReader(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path+dsnPragmas)
+func openReader(path string, memoryMB int) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", dsn(path, memoryMB))
 	if err != nil {
 		return nil, fmt.Errorf("open query log db (reader): %w", err)
 	}
-	db.SetMaxOpenConns(4)
+	db.SetMaxOpenConns(readerConns)
 	db.SetMaxIdleConns(2)
 	db.SetConnMaxIdleTime(5 * time.Minute)
 	if err := db.Ping(); err != nil {
@@ -225,8 +305,8 @@ func openReader(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-func openDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path+dsnPragmas)
+func openDB(path string, memoryMB int) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", dsn(path, memoryMB))
 	if err != nil {
 		return nil, fmt.Errorf("open query log db: %w", err)
 	}
@@ -485,9 +565,15 @@ func (l *Log) Close() error {
 	// Readers first: the writer holds the file's WAL, and an in-flight
 	// aggregate should be let go of before it is closed under it.
 	var err error
-	if l.rdb != nil {
-		err = l.rdb.Close()
+	if r := l.reader(); r != nil {
+		err = r.Close()
 	}
+	l.retiredMu.Lock()
+	for _, p := range l.retired {
+		_ = p.Close()
+	}
+	l.retired = nil
+	l.retiredMu.Unlock()
 	if l.db != nil {
 		if dbErr := l.db.Close(); err == nil {
 			err = dbErr
@@ -710,7 +796,7 @@ type HistoryFilter struct {
 // already feeds both the Docket and the dashboard so the frontend's live
 // filtering stays consistent. Off the hot path.
 func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, before time.Time) ([]Entry, error) {
-	if l.rdb == nil {
+	if l.reader() == nil {
 		return nil, nil
 	}
 	if limit <= 0 || limit > 1000 {
@@ -800,7 +886,7 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 		defer cancel()
 	}
 
-	rows, err := l.rdb.QueryContext(ctx, query, args...)
+	rows, err := l.reader().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, historyErr(ctx, err)
 	}

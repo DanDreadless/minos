@@ -613,6 +613,17 @@ This is security software; hold it to that standard.
   reads as a hang and ends in SIGKILL. `TestRingStaysLiveWhileWriterIsBlocked`
   holds the writer connection and asserts the ring still fills; restore the
   inline flush and it hangs to the test timeout, which is the point.
+- **Query-log memory cap** (fixed decision, October 2026):
+  `querylog.memory_mb` (default 32, 8–4096, live) is enforced through
+  per-connection `cache_size` — the cap split over the writer + 4 readers —
+  plus explicit `temp_store=FILE` and `mmap_size=0`, so work larger than the
+  cache spills to a temp file instead of RAM. **Do not "upgrade" this to
+  soft/hard_heap_limit**: modernc is compiled `SQLITE_DEFAULT_MEMSTATUS=0`,
+  under which SQLite stores those limits and never enforces them (verified:
+  a 1 MB hard limit refused nothing). A change swaps in a fresh reader pool
+  (`rdb` is an atomic pointer — read through `reader()`), resizes the writer
+  in place, and retires the old pool after a minute; `Close` closes retired
+  pools too. The OS page cache ("buff/cache") is the kernel's, not Minos's.
 - **Reads and writes have separate SQLite pools** (fixed decision): `Log.db`
   is the writer (`MaxOpenConns(1)` — inserts, prunes and migrations
   serialise), `Log.rdb` is a 4-connection reader pool. Every read path uses

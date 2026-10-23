@@ -818,6 +818,7 @@ querylog:
   db_path: minos.db
   ring_size: 10000
   retention_days: 90
+  memory_mb: 32             # RAM cap for the query log database (8–4096)
 api:
   listen: 0.0.0.0:8080
   token: ""                 # set one if the LAN isn't fully trusted
