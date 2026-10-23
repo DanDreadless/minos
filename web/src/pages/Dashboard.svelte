@@ -17,7 +17,6 @@
   import { notifyError } from '../lib/toast';
 
   export let status: Status | null;
-  export let onStatusChange: () => Promise<void>;
 
   let stats: Stats | null = null;
   let host: Host | null = null;
@@ -25,7 +24,6 @@
   // nudge on the host card, which is the first thing here to expose the
   // machine's identity rather than just DNS activity.
   let tokenSet = true;
-  let customPause = '';
   let timer: ReturnType<typeof setInterval> | null = null;
   let hostTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -76,31 +74,6 @@
   // recording rather than merely inconveniencing the host.
   $: diskLow = diskUsedPct !== undefined && diskUsedPct >= 90;
 
-  async function recess(duration: string): Promise<void> {
-    try {
-      await api.pause(duration);
-      await onStatusChange();
-    } catch (e) {
-      notifyError(e);
-    }
-  }
-
-  async function recessCustom(): Promise<void> {
-    const d = customPause.trim();
-    if (!d) return;
-    await recess(d);
-    customPause = '';
-  }
-
-  async function resume(): Promise<void> {
-    try {
-      await api.resume();
-      await onStatusChange();
-    } catch (e) {
-      notifyError(e);
-    }
-  }
-
   onMount(() => {
     void loadStats();
     void loadHost();
@@ -131,28 +104,6 @@
 {/if}
 
 {#if status}
-  <section class="controls card">
-    {#if status.paused}
-      <span class="paused-banner">
-        {status.paused_until
-          ? copy.pause.active(new Date(status.paused_until).toLocaleTimeString())
-          : copy.pause.activeIndefinite}
-      </span>
-      <button class="primary" on:click={resume}>{copy.pause.resume}</button>
-    {:else}
-      <span class="control-label">
-        {copy.pause.action} <small>({copy.pause.actionHint})</small>
-      </span>
-      <button on:click={() => recess('5m')}>5 min</button>
-      <button on:click={() => recess('30m')}>30 min</button>
-      <button on:click={() => recess('')}>Until resumed</button>
-      <form class="custom" on:submit|preventDefault={recessCustom}>
-        <input placeholder="2h, 45m…" bind:value={customPause} size="6" />
-        <button type="submit" disabled={!customPause.trim()}>Go</button>
-      </form>
-    {/if}
-  </section>
-
   <section class="stats">
     <StatTile
       value={status.queries_total.toLocaleString()}
@@ -382,28 +333,6 @@
 {/if}
 
 <style>
-  .controls {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.6rem;
-    margin-bottom: 1.25rem;
-  }
-
-  .control-label small {
-    color: var(--text-dim);
-  }
-
-  .custom {
-    display: flex;
-    gap: 0.4rem;
-    align-items: center;
-  }
-
-  .paused-banner {
-    color: var(--accent);
-  }
-
   .stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));

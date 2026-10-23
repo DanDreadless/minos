@@ -88,11 +88,6 @@
   </ul>
   <div class="foot">
     {#if status}
-      {#if status.paused}
-        <span class="pill paused" title={copy.pause.actionHint}>{copy.pause.headerPill}</span>
-      {:else}
-        <span class="pill active-pill">blocking active</span>
-      {/if}
       <span class="version">
         v{status.version}
         {#if status.update_available && status.latest_version}
@@ -213,18 +208,6 @@
     align-items: center;
     gap: 0.6rem;
     font-size: 0.75rem;
-  }
-
-  .pill {
-    padding: 0.1rem 0.55rem;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-  }
-
-  .pill.paused {
-    border-color: var(--accent);
-    color: var(--accent);
   }
 
   .version {
