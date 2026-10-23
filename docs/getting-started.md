@@ -331,10 +331,33 @@ Open `http://<host>:8080`. Six pages, one per concern:
   24-hour volume chart, the most-blocked domains, the busiest clients,
   and **Recess** controls to pause blocking (5/30 minutes, a custom
   duration, or until resumed).
-- **The Docket** (query log) — live-streaming log with search and verdict
-  filters. Every blocked entry shows *which list and rule* condemned it and
-  has a one-click **Pardon** button; allowed entries can be **Sentenced**
-  (blocked) just as fast.
+- **The Docket** (query log) — the newest queries, streaming live, and a
+  search across the whole retained history. Every blocked entry shows
+  *which list and rule* condemned it and has a one-click **Pardon** button;
+  allowed entries can be **Sentenced** (blocked) just as fast, and **Check**
+  says how a domain would be judged now, with the current lists.
+  - With no filter the page is **Live**: rows arrive as they happen, and
+    **Pause** holds them still while you read (new ones wait, counted, until
+    you resume). Any filter switches to **Results**: matches from the full
+    history, newest first, with **Load older** and new matches joining at
+    the top.
+  - Filter with the result buttons (all / condemned / passed / would
+    block), the list dropdown, and a time range (last hour to 90 days, or
+    all history). **Click any device, domain, type, list or resolver in a
+    row** to filter by it. Each filter shows as a chip in the search box;
+    × or Backspace removes it.
+  - The search box takes a small syntax — `blocked`, `allowed`,
+    `would-block`, `client:192.168.1.5`, `domain:example.com` (that exact
+    name, not its subdomains), `type:AAAA`, `list:StevenBlack` (quote names
+    with spaces: `list:"My list"`), `upstream:1.1.1.1:853`, `dnssec:bogus`,
+    and `-cdn` to leave out names containing "cdn". Anything else matches
+    domains and device addresses containing it. Press `/` to jump to the
+    search, Enter to apply, Esc to clear.
+  - **Export CSV / JSON** downloads every match of the current filter (up
+    to 100,000 rows) as one file.
+  - The address bar keeps the filter, so a search can be bookmarked or
+    shared. Drill-downs from the Tribunal and device pages open on the same
+    exact name and time window as the count you clicked.
 - **Devices** — every client that queries the resolver, identified by IP,
   MAC address (from the ARP table), vendor (derived from the MAC), and
   hostname (reverse DNS aimed at the gateway, with an mDNS `.local` fallback)

@@ -107,6 +107,12 @@
     { hours: 2160, label: '90d' },
   ];
 
+  // The Query Log range matching a stats window, so a drill-down's rows add
+  // up to the count that was clicked.
+  function rangeFor(hours: number): string {
+    return hours >= 2160 ? '90d' : hours >= 720 ? '30d' : hours >= 168 ? '7d' : '24h';
+  }
+
   async function loadStats(hours = statsHours): Promise<void> {
     if (!device) return;
     statsHours = hours;
@@ -310,6 +316,9 @@
     {#if overview}
       <p class="activity-totals">
         {copy.devices.activityTotals(overview.total, overview.blocked)}
+        {#if overview.window_start && statsHours >= 48}
+          <span class="window-start">{copy.device.windowStart(overview.window_start)}</span>
+        {/if}
       </p>
       <div class="activity-grid">
         <div>
@@ -319,7 +328,12 @@
             items={overview.top_allowed.map((x) => ({
               label: x.qname,
               count: x.count,
-              href: docketHref({ clients: device ? deviceIPs(device) : [], qname: x.qname }),
+              href: docketHref({
+                clients: device ? deviceIPs(device) : [],
+                domain: x.qname,
+                verdict: 'allowed',
+                range: rangeFor(statsHours),
+              }),
             }))}
           />
         </div>
@@ -331,7 +345,12 @@
             items={overview.top_blocked.map((x) => ({
               label: x.qname,
               count: x.count,
-              href: docketHref({ clients: device ? deviceIPs(device) : [], qname: x.qname }),
+              href: docketHref({
+                clients: device ? deviceIPs(device) : [],
+                domain: x.qname,
+                verdict: 'blocked',
+                range: rangeFor(statsHours),
+              }),
             }))}
           />
         </div>

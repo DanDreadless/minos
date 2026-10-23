@@ -5,153 +5,251 @@
   import { fmtLogTime, fmtLogTimeFull } from '../lib/format';
   import { currentParams } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
+  import {
+    RANGES,
+    chips,
+    emptyFilter,
+    fromParams,
+    hasFilter,
+    matches,
+    parseInput,
+    removeChip,
+    sinceMs,
+    toParams,
+    type QueryFilter,
+    type RangeKey,
+    type Verdict,
+  } from '../lib/querysyntax';
 
   const MAX_ROWS = 500;
   const HISTORY_PAGE = 200;
 
-  // live: the ring buffer + WebSocket stream (the live tail). history: the
-  // persisted, server-filtered results shown while searching or drilled in —
-  // so a drill-down spans the full retained log, not just the ring.
+  // The page has two modes. Live: no filter at all — the ring buffer plus
+  // the WebSocket stream, newest first. Results: any filter (including a
+  // time range) — server-side history across the whole retained log, "load
+  // older" pages, and new matching queries joining at the top.
+  let filter: QueryFilter = emptyFilter();
+  let text = ''; // the search box: free text, plus any key:value still being typed
+  let searchEl: HTMLInputElement;
+
   let live: LogEntry[] = [];
-  let history: LogEntry[] = [];
-  let historyLoading = false;
-  let historyDone = false;
-  // historyStatus says what `displayed` actually is, so a partial view is
-  // never presented as a complete one. 'failed' (timeout or error) shows the
-  // ring's matches with the reason, instead of a toast over results that
-  // silently looked complete.
-  let historyStatus: 'idle' | 'loading' | 'done' | 'failed' = 'idle';
-  let historyError = '';
-  // One controller per search: a new search aborts the one in flight, so the
-  // newest query always wins. The old code skipped any search started while
-  // one was running — typing during a slow scan did nothing until it ended.
-  let historyCtrl: AbortController | null = null;
-  let search = '';
-  // clientFilter holds a device's exact IP(s) when drilled in from Devices or
-  // the Tribunal — whole-address matching, distinct from the substring search.
-  let clientFilter: string[] = [];
-  let verdictFilter: 'all' | 'blocked' | 'allowed' | 'would_block' = 'all';
-  // listFilter matches the exact list name attributed to an entry —
-  // enforcing (List column) or audit ("would block"). '' = no constraint.
-  let listFilter = '';
-  // dnssecFilter narrows to one validation outcome, arriving as a deep link
-  // from the Tribunal's DNSSEC counters. '' = no constraint.
-  let dnssecFilter = '';
+  let paused = false;
+  let held: LogEntry[] = []; // live arrivals while paused
+
+  let results: LogEntry[] = [];
+  let resultsDone = false;
+  // resultsStatus says what the rows actually are, so a partial view is
+  // never presented as a complete one. 'failed' (timeout or error) shows
+  // the ring's matches with the reason.
+  let resultsStatus: 'idle' | 'loading' | 'done' | 'failed' = 'idle';
+  let resultsError = '';
+  let loadingOlder = false;
+  // One controller per search: a new search aborts the one in flight, so
+  // the newest query always wins.
+  let ctrl: AbortController | null = null;
+
   let listNames: string[] = [];
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+  let debounce: ReturnType<typeof setTimeout> | null = null;
   let destroyed = false;
   let connected = false;
+  let exporting = '';
 
-  $: hasFilter =
-    search.trim() !== '' ||
-    verdictFilter !== 'all' ||
-    clientFilter.length > 0 ||
-    listFilter !== '' ||
-    dnssecFilter !== '';
+  $: searching = hasFilter(filter);
+  // Results mode falls back to filtering the live ring when the server has
+  // nothing (ephemeral mode, or the search failed).
+  $: displayed = !searching
+    ? live
+    : results.length
+      ? results
+      : resultsStatus === 'loading'
+        ? []
+        : live.filter((e) => matches(filter, e));
+  $: recentOnly = searching && results.length === 0 && displayed.length > 0;
+  // Verdict and list have their own controls; everything else is a chip.
+  $: activeChips = chips(filter, verdictLabel).filter((c) => c.key !== 'verdict' && c.key !== 'list');
+  $: rangeLabel = RANGES.find((r) => r.key === filter.range)?.label ?? '';
 
-  function clientMatch(e: LogEntry): boolean {
-    if (verdictFilter === 'would_block') {
-      if (!e.audit_list) return false;
-    } else if (verdictFilter !== 'all' && e.verdict !== verdictFilter) return false;
-    if (clientFilter.length && !clientFilter.includes(e.client)) return false;
-    if (listFilter && e.list !== listFilter && e.audit_list !== listFilter) return false;
-    if (dnssecFilter && e.dnssec !== dnssecFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return e.qname.toLowerCase().includes(q) || e.client.toLowerCase().includes(q);
-    }
-    return true;
+  function verdictLabel(v: Verdict): string {
+    return v === 'blocked'
+      ? copy.docket.filterBlocked
+      : v === 'allowed'
+        ? copy.docket.filterAllowed
+        : v === 'would_block'
+          ? copy.docket.filterWouldBlock
+          : copy.docket.filterAll;
   }
 
-  // Unfiltered → the live tail. Filtered → server history, falling back to
-  // filtering the live ring when history is empty (ephemeral mode, where the
-  // ring already backs the dashboard too, or simply no persisted matches).
-  $: displayed = !hasFilter ? live : history.length ? history : live.filter(clientMatch);
-  // Matches shown came only from the live ring (the last few hundred
-  // queries), not the persisted history — say so.
-  $: recentOnly = hasFilter && history.length === 0 && displayed.length > 0;
+  // requestParams is the filter as the server takes it: `range` becomes a
+  // `since` timestamp at request time.
+  function requestParams(f: QueryFilter): URLSearchParams {
+    const sp = toParams(f);
+    sp.delete('range');
+    const since = sinceMs(f);
+    if (since !== undefined) sp.set('since', String(Math.floor(since)));
+    return sp;
+  }
 
-  async function fetchHistory(reset: boolean): Promise<void> {
+  // The hash mirrors the filter, so a search can be bookmarked, shared or
+  // reloaded. replaceState: filtering is not navigation, and it does not
+  // fire hashchange.
+  function hashFor(f: QueryFilter): string {
+    const qs = toParams(f).toString();
+    return qs ? `#/querylog?${qs}` : '#/querylog';
+  }
+
+  function syncHash(): void {
+    const h = hashFor(filter);
+    if (location.hash !== h) window.history.replaceState(null, '', h);
+  }
+
+  function setFilter(f: QueryFilter): void {
+    filter = f;
+    if (debounce) clearTimeout(debounce);
+    syncHash();
+    refresh();
+  }
+
+  async function fetchResults(reset: boolean): Promise<void> {
     if (reset) {
-      historyCtrl?.abort();
-    } else if (historyLoading) {
-      return; // "Load older" while a page is already coming
+      ctrl?.abort();
+    } else if (loadingOlder || resultsStatus === 'loading') {
+      return;
     }
-    const ctrl = new AbortController();
-    historyCtrl = ctrl;
-    historyLoading = true;
-    historyStatus = 'loading';
-    historyError = '';
+    const c = new AbortController();
+    ctrl = c;
+    if (reset) resultsStatus = 'loading';
+    else loadingOlder = true;
+    resultsError = '';
     try {
-      const before =
-        !reset && history.length ? new Date(history[history.length - 1].time).getTime() : undefined;
-      const rows = await api.querylogHistory(
-        {
-          q: search.trim(),
-          client: clientFilter.join(','),
-          verdict: verdictFilter === 'would_block' ? 'all' : verdictFilter,
-          would_block: verdictFilter === 'would_block',
-          list: listFilter,
-          dnssec: dnssecFilter,
-          before,
-          limit: HISTORY_PAGE,
-        },
-        ctrl.signal,
-      );
-      history = reset ? rows : [...history, ...rows];
-      historyDone = rows.length < HISTORY_PAGE;
-      historyStatus = 'done';
+      const sp = requestParams(filter);
+      if (!reset && results.length) {
+        sp.set('before', String(new Date(results[results.length - 1].time).getTime()));
+      }
+      sp.set('limit', String(HISTORY_PAGE));
+      const rows = await api.querylogSearch(sp, c.signal);
+      results = reset ? rows : [...results, ...rows];
+      resultsDone = rows.length < HISTORY_PAGE;
+      resultsStatus = 'done';
     } catch (e) {
-      if (ctrl.signal.aborted) return; // superseded; the newer search owns the state
-      historyStatus = 'failed';
-      historyError = e instanceof Error ? e.message : String(e);
+      if (c.signal.aborted) return; // superseded; the newer search owns the state
+      resultsStatus = 'failed';
+      resultsError = e instanceof Error ? e.message : String(e);
     } finally {
-      if (historyCtrl === ctrl) {
-        historyLoading = false;
-        historyCtrl = null;
+      if (ctrl === c) {
+        ctrl = null;
+        loadingOlder = false;
       }
     }
   }
 
-  function refreshHistory(): void {
-    history = [];
-    historyDone = false;
-    if (hasFilter) {
-      void fetchHistory(true);
+  function refresh(): void {
+    results = [];
+    resultsDone = false;
+    if (hasFilter(filter)) {
+      void fetchResults(true);
     } else {
-      historyCtrl?.abort();
-      historyCtrl = null;
-      historyLoading = false;
-      historyStatus = 'idle';
+      ctrl?.abort();
+      ctrl = null;
+      loadingOlder = false;
+      resultsStatus = 'idle';
     }
   }
 
-  function clearClientFilter(): void {
-    clientFilter = [];
-    refreshHistory();
+  // Typing: a finished key:value token (followed by a space) becomes a chip
+  // straight away; free text searches after a short pause.
+  function onInput(): void {
+    const { filter: f, rest } = parseInput(text, filter, false);
+    const chipsChanged =
+      JSON.stringify({ ...f, q: '' }) !== JSON.stringify({ ...filter, q: '' });
+    if (chipsChanged) text = rest;
+    const qChanged = f.q !== filter.q;
+    filter = f;
+    if (!chipsChanged && !qChanged) return;
+    if (debounce) clearTimeout(debounce);
+    debounce = setTimeout(
+      () => {
+        syncHash();
+        refresh();
+      },
+      chipsChanged ? 0 : 250,
+    );
   }
 
-  function clearDNSSECFilter(): void {
-    dnssecFilter = '';
-    refreshHistory();
+  function onSearchKey(ev: KeyboardEvent): void {
+    if (ev.key === 'Enter') {
+      const { filter: f, rest } = parseInput(text, filter, true);
+      text = rest;
+      setFilter(f);
+    } else if (ev.key === 'Escape') {
+      if (text) {
+        text = '';
+        setFilter({ ...filter, q: '' });
+      } else {
+        searchEl.blur();
+      }
+    } else if (ev.key === 'Backspace' && text === '' && activeChips.length) {
+      setFilter(removeChip(filter, activeChips[activeChips.length - 1].key));
+    }
   }
 
-  function onSearchInput(): void {
-    if (searchDebounce) clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(refreshHistory, 250);
+  // "/" focuses the search from anywhere on the page, as on most log viewers.
+  function onWindowKey(ev: KeyboardEvent): void {
+    if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    const t = ev.target as HTMLElement | null;
+    if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+    ev.preventDefault();
+    searchEl?.focus();
   }
 
+  // A link from elsewhere (a dashboard drill-down) while this page is open.
+  function onHashChange(): void {
+    if (!location.hash.startsWith('#/querylog')) return;
+    if (location.hash === hashFor(filter)) return;
+    filter = fromParams(currentParams());
+    text = filter.q;
+    refresh();
+  }
+
+  function narrow(change: Partial<QueryFilter>): void {
+    setFilter({ ...filter, ...change });
+  }
+
+  function setRange(r: RangeKey): void {
+    narrow({ range: r });
+  }
+
+  function setVerdict(v: Verdict): void {
+    narrow({ verdict: v });
+  }
+
+  function clearAll(): void {
+    text = '';
+    setFilter(emptyFilter());
+  }
+
+  function togglePause(): void {
+    paused = !paused;
+    if (!paused) {
+      if (held.length) live = [...held, ...live].slice(0, MAX_ROWS);
+      held = [];
+      if (hasFilter(filter)) refresh(); // pick up what matched meanwhile
+    }
+  }
 
   function connect(): void {
     if (destroyed) return;
     ws = openStream(
       (e) => {
         connected = true;
+        if (paused) {
+          held = [e, ...held].slice(0, MAX_ROWS);
+          return;
+        }
         live = [e, ...live].slice(0, MAX_ROWS);
-        // Keep a filtered/drilled-in view live: prepend new matches on top.
-        if (hasFilter && history.length && clientMatch(e)) history = [e, ...history];
+        // Keep a results view live: new matches join at the top.
+        if (hasFilter(filter) && results.length && matches(filter, e)) results = [e, ...results];
       },
       () => {
         ws = null;
@@ -160,6 +258,25 @@
       },
     );
     ws.onopen = () => (connected = true);
+  }
+
+  async function exportAs(format: 'csv' | 'json'): Promise<void> {
+    exporting = format;
+    try {
+      const sp = requestParams(filter);
+      sp.set('format', format);
+      const { blob, filename } = await api.querylogExport(sp);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      exporting = '';
+    }
   }
 
   async function pardon(domain: string): Promise<void> {
@@ -180,153 +297,206 @@
     }
   }
 
+  async function copyDomain(domain: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(domain);
+      notify(copy.docket.copied(domain));
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function check(domain: string): Promise<void> {
+    try {
+      const r = await api.check(domain);
+      notify(copy.docket.checkResult(domain, r.verdict === 'blocked', r.list, r.rule));
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
   onMount(async () => {
-    // Honour a deep link from the dashboard, e.g.
-    // #/querylog?verdict=blocked&client=192.168.1.5
-    const params = currentParams();
-    if (
-      params.verdict === 'blocked' ||
-      params.verdict === 'allowed' ||
-      params.verdict === 'would_block'
-    ) {
-      verdictFilter = params.verdict;
-    }
-    if (params.client) {
-      clientFilter = params.client
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-    } else if (params.qname) {
-      search = params.qname;
-    }
-    if (params.list) listFilter = params.list;
-    if (
-      params.dnssec === 'secure' ||
-      params.dnssec === 'insecure' ||
-      params.dnssec === 'bogus' ||
-      params.dnssec === 'indeterminate'
-    ) {
-      dnssecFilter = params.dnssec;
-    }
+    // Honour a deep link, e.g. #/querylog?verdict=blocked&client=192.168.1.5
+    filter = fromParams(currentParams());
+    text = filter.q;
+    window.addEventListener('keydown', onWindowKey);
+    window.addEventListener('hashchange', onHashChange);
 
     // Dropdown options are cosmetic — degrade silently if they fail to load.
     void api
       .querylogLists()
       .then((names) => {
         // A deep-linked name outside the window still shows as the active option.
-        if (listFilter && !names.includes(listFilter)) names = [listFilter, ...names];
+        if (filter.list && !names.includes(filter.list)) names = [filter.list, ...names];
         listNames = names;
       })
       .catch(() => {});
 
+    if (hasFilter(filter)) void fetchResults(true);
     try {
       live = await api.querylog(MAX_ROWS);
     } catch (e) {
       notifyError(e);
     }
-    // Arrived via a drill-down/search → load the persisted history for it.
-    if (hasFilter) void fetchHistory(true);
     connect();
   });
 
   onDestroy(() => {
     destroyed = true;
+    window.removeEventListener('keydown', onWindowKey);
+    window.removeEventListener('hashchange', onHashChange);
     if (reconnectTimer) clearTimeout(reconnectTimer);
-    if (searchDebounce) clearTimeout(searchDebounce);
+    if (debounce) clearTimeout(debounce);
+    ctrl?.abort();
     ws?.close();
   });
 </script>
 
 <h1>
   {copy.docket.title} <small>{copy.docket.subtitle}</small>
-  {#if connected}<span class="live" title="streaming new queries">{copy.docket.live}</span>{/if}
 </h1>
 
-<div class="filters">
-  <input
-    type="search"
-    placeholder={copy.docket.searchPlaceholder}
-    bind:value={search}
-    on:input={onSearchInput}
-  />
-  <select bind:value={verdictFilter} on:change={refreshHistory}>
-    <option value="all">{copy.docket.filterAll}</option>
-    <option value="blocked">{copy.docket.filterBlocked}</option>
-    <option value="allowed">{copy.docket.filterAllowed}</option>
-    <option value="would_block">{copy.docket.filterWouldBlock}</option>
-  </select>
-  <select
-    bind:value={listFilter}
-    on:change={refreshHistory}
-    title={copy.docket.filterListTitle}
-  >
-    <option value="">{copy.docket.filterListAll}</option>
-    {#each listNames as name (name)}
-      <option value={name}>{name}</option>
+<div class="toolbar">
+  <div class="searchbox">
+    {#each activeChips as c (c.key)}
+      <span class="chip" title={c.title}>
+        <span class="chip-label">{c.label}</span>
+        {c.value}
+        <button
+          class="chip-x"
+          on:click={() => setFilter(removeChip(filter, c.key))}
+          aria-label={copy.docket.removeFilter(c.label)}>×</button
+        >
+      </span>
     {/each}
-  </select>
-  {#if dnssecFilter}
-    <span class="chip" title={copy.docket.dnssecScopeTitle(dnssecFilter)}>
-      {copy.docket.dnssecScope}
-      {copy.docket.dnssecName(dnssecFilter)}
+    <input
+      type="search"
+      bind:this={searchEl}
+      bind:value={text}
+      on:input={onInput}
+      on:keydown={onSearchKey}
+      placeholder={activeChips.length ? '' : copy.docket.searchBoxPlaceholder}
+      aria-label={copy.docket.searchBoxLabel}
+      spellcheck="false"
+      autocomplete="off"
+    />
+  </div>
+
+  <div class="controls">
+    <div class="segmented" role="group" aria-label="Result">
+      {#each ['all', 'blocked', 'allowed', 'would_block'] as v (v)}
+        <button
+          class:active={filter.verdict === v}
+          aria-pressed={filter.verdict === v}
+          on:click={() => setVerdict(v as Verdict)}>{verdictLabel(v as Verdict)}</button
+        >
+      {/each}
+    </div>
+    <select
+      value={filter.list}
+      on:change={(e) => narrow({ list: e.currentTarget.value })}
+      title={copy.docket.filterListTitle}
+    >
+      <option value="">{copy.docket.filterListAll}</option>
+      {#each listNames as name (name)}
+        <option value={name}>{name}</option>
+      {/each}
+    </select>
+    <select
+      value={filter.range}
+      on:change={(e) => setRange(e.currentTarget.value as RangeKey)}
+      aria-label={copy.docket.rangeLabel}
+      title={copy.docket.rangeLabel}
+    >
+      {#each RANGES as r (r.key)}
+        <option value={r.key}>{r.label}</option>
+      {/each}
+    </select>
+  </div>
+</div>
+
+<div class="status">
+  {#if !searching}
+    {#if paused}
+      <span class="mode paused">{copy.docket.modePaused(held.length)}</span>
+    {:else if connected}
+      <span class="mode live">{copy.docket.modeLive}</span>
+      <span class="detail">{copy.docket.modeLiveDetail(live.length)}</span>
+    {:else}
+      <span class="detail">{copy.docket.modeReconnecting}</span>
+    {/if}
+  {:else}
+    <span class="mode results">{copy.docket.modeResults}</span>
+    <span class="detail">
+      {#if resultsStatus === 'loading'}
+        {copy.docket.searching}
+      {:else if recentOnly}
+        {displayed.length} · {copy.docket.scopeRecent}
+      {:else}
+        {copy.docket.resultsDetail(displayed.length, !resultsDone && results.length > 0, rangeLabel)}
+      {/if}
+    </span>
+    <button class="link" on:click={clearAll}>{copy.docket.clearAll}</button>
+  {/if}
+  <span class="spacer"></span>
+  <button
+    class="small"
+    class:active={paused}
+    on:click={togglePause}
+    title={copy.docket.pauseHint}>{paused ? copy.docket.resume : copy.docket.pause}</button
+  >
+  <span class="export">
+    {copy.docket.exportLabel}
+    {#each ['csv', 'json'] as fmt (fmt)}
       <button
-        class="chip-x"
-        on:click={clearDNSSECFilter}
-        aria-label="clear DNSSEC filter">×</button
+        class="small"
+        disabled={exporting !== ''}
+        title={copy.docket.exportHint(fmt)}
+        on:click={() => exportAs(fmt === 'csv' ? 'csv' : 'json')}
+        >{exporting === fmt ? copy.docket.exporting : fmt.toUpperCase()}</button
       >
-    </span>
-  {/if}
-  {#if clientFilter.length}
-    <span class="chip" title={clientFilter.join(', ')}>
-      {copy.docket.deviceScope}
-      {clientFilter.length === 1 ? clientFilter[0] : `${clientFilter[0]} +${clientFilter.length - 1}`}
-      <button class="chip-x" on:click={clearClientFilter} aria-label="clear device filter">×</button>
-    </span>
-  {/if}
-  <span class="count">
-    {displayed.length} shown{#if hasFilter}
-      <span class="scope">
-        · {history.length
-          ? copy.docket.scopeHistory
-          : historyStatus === 'loading'
-            ? copy.docket.scopeRecentSearching
-            : historyStatus === 'failed'
-              ? copy.docket.scopeRecentFailed
-              : copy.docket.scopeRecent}
-      </span>{/if}
+    {/each}
   </span>
 </div>
 
-{#if hasFilter && historyStatus === 'failed'}
+<details class="syntax">
+  <summary>{copy.docket.syntaxTitle}</summary>
+  <dl>
+    {#each copy.docket.syntax as [term, meaning] (term)}
+      <dt><code>{term}</code></dt>
+      <dd>{meaning}</dd>
+    {/each}
+  </dl>
+  <p>{copy.docket.syntaxKeys}</p>
+</details>
+
+{#if searching && resultsStatus === 'failed'}
   <p class="search-failed" role="alert">
-    {copy.docket.searchFailed(historyError, recentOnly)}
+    {copy.docket.searchFailed(resultsError, recentOnly)}
   </p>
 {/if}
 
 {#if displayed.length === 0}
   <p class="empty">
-    {hasFilter
-      ? historyStatus === 'loading'
+    {searching
+      ? resultsStatus === 'loading'
         ? copy.docket.searching
-        : historyStatus === 'failed'
+        : resultsStatus === 'failed'
           ? copy.docket.noRecentMatches
           : copy.docket.noMatches
       : copy.docket.empty}
   </p>
-  {#if hasFilter && historyStatus === 'done' && search.trim() !== ''}
-    <p class="empty search-hint">{copy.docket.searchScopeHint}</p>
-  {/if}
 {:else}
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
           <th>Time</th>
-          <th>Client</th>
+          <th>Device</th>
           <th>Domain</th>
           <th>Type</th>
-          <th>Verdict</th>
-          <th>Why</th>
+          <th>Result</th>
+          <th title={copy.docket.columnSourceHint}>{copy.docket.columnSource}</th>
           <th></th>
         </tr>
       </thead>
@@ -339,20 +509,27 @@
         {#each displayed as e}
           <tr>
             <td class="when" title={fmtLogTimeFull(e.time)}>{fmtLogTime(e.time)}</td>
-            <td>{e.client}</td>
-            <td title={e.qname}>{e.qname}</td>
-            <td>{e.qtype}</td>
+            <td>
+              <button class="cell" title={copy.docket.filterHint} on:click={() => narrow({ clients: [e.client] })}
+                >{e.client}</button
+              >
+            </td>
+            <td class="domain" title={e.qname}>
+              <button class="cell" title={copy.docket.filterHint} on:click={() => narrow({ domain: e.qname })}
+                >{e.qname}</button
+              >
+            </td>
+            <td>
+              <button class="cell" title={copy.docket.filterHint} on:click={() => narrow({ qtype: e.qtype })}
+                >{e.qtype}</button
+              >
+            </td>
             {#if e.verdict === 'blocked'}
               <td><span class="badge blocked">{copy.docket.verdictBlocked}</span></td>
-              <td title="rule: {e.rule}">{e.list}</td>
-              <td>
-                <button
-                  class="row-action"
-                  title={copy.pardon.actionHint}
-                  on:click={() => pardon(e.rule ?? e.qname)}
-                >
-                  {copy.pardon.action}
-                </button>
+              <td title="rule: {e.rule}">
+                {#if e.list}
+                  <button class="cell" on:click={() => narrow({ list: e.list })}>{e.list}</button>
+                {/if}
               </td>
             {:else}
               <td>
@@ -366,26 +543,44 @@
                   </span>
                 {/if}
               </td>
-              <td>{e.upstream ?? ''}</td>
               <td>
-                <button
-                  class="row-action subtle"
-                  title={copy.sentence.actionHint}
-                  on:click={() => sentence(e.qname)}
-                >
-                  {copy.sentence.action}
-                </button>
+                {#if e.list}
+                  <button class="cell" title="rule: {e.rule}" on:click={() => narrow({ list: e.list })}
+                    >{e.list}</button
+                  >
+                {:else if e.upstream}
+                  <button class="cell" title={copy.docket.filterHint} on:click={() => narrow({ upstream: e.upstream })}
+                    >{e.upstream}</button
+                  >
+                {/if}
               </td>
             {/if}
+            <td class="actions">
+              {#if e.verdict === 'blocked'}
+                <button class="row-action" title={copy.pardon.actionHint} on:click={() => pardon(e.rule ?? e.qname)}
+                  >{copy.pardon.action}</button
+                >
+              {:else}
+                <button class="row-action subtle" title={copy.sentence.actionHint} on:click={() => sentence(e.qname)}
+                  >{copy.sentence.action}</button
+                >
+              {/if}
+              <button class="row-action subtle" title={copy.docket.checkHint} on:click={() => check(e.qname)}
+                >{copy.docket.checkAction}</button
+              >
+              <button class="row-action subtle" title={copy.docket.copyHint} on:click={() => copyDomain(e.qname)}
+                >{copy.docket.copyAction}</button
+              >
+            </td>
           </tr>
         {/each}
       </tbody>
     </table>
   </div>
-  {#if hasFilter && history.length > 0 && !historyDone}
+  {#if searching && results.length > 0 && !resultsDone}
     <div class="load-older">
-      <button on:click={() => fetchHistory(false)} disabled={historyLoading}>
-        {historyLoading ? 'Loading…' : 'Load older'}
+      <button on:click={() => fetchResults(false)} disabled={loadingOlder}>
+        {loadingOlder ? copy.docket.loadingOlder : copy.docket.loadOlder}
       </button>
     </div>
   {/if}
@@ -398,28 +593,74 @@
     margin-left: 0.5rem;
   }
 
-  .live {
-    font-size: 0.65rem;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--allowed);
-    border: 1px solid var(--allowed);
-    border-radius: 999px;
-    padding: 0.05rem 0.5rem;
-    margin-left: 0.6rem;
-    vertical-align: middle;
-  }
-
-  .filters {
+  .toolbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.6rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
+    flex: none;
   }
 
-  .filters input {
+  /* A token field: chips sit inside the box, before the text. */
+  .searchbox {
+    flex: 1 1 22rem;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-raised);
+  }
+
+  .searchbox:focus-within {
+    border-color: var(--accent);
+  }
+
+  .searchbox input {
     flex: 1;
-    max-width: 24rem;
+    min-width: 10rem;
+    border: none;
+    background: transparent;
+    outline: none;
+    padding: 0.2rem 0.2rem;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .segmented {
+    display: inline-flex;
+  }
+
+  .segmented button {
+    border-radius: 0;
+    margin-left: -1px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+  }
+
+  .segmented button:first-child {
+    border-radius: 4px 0 0 4px;
+    margin-left: 0;
+  }
+
+  .segmented button:last-child {
+    border-radius: 0 4px 4px 0;
+  }
+
+  .segmented button.active,
+  button.small.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    position: relative;
   }
 
   .chip {
@@ -433,6 +674,13 @@
     border-radius: 999px;
     padding: 0.1rem 0.3rem 0.1rem 0.6rem;
     white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip-label {
+    color: var(--text-dim);
   }
 
   .chip-x {
@@ -448,14 +696,101 @@
     color: var(--accent);
   }
 
-  .count {
-    color: var(--text-dim);
+  .status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
     font-size: 0.8rem;
-    margin-left: auto;
+    color: var(--text-dim);
+    margin-bottom: 0.4rem;
+    flex: none;
   }
 
-  .count .scope {
+  .mode {
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border: 1px solid;
+    border-radius: 999px;
+    padding: 0.05rem 0.5rem;
+  }
+
+  .mode.live {
+    color: var(--allowed);
+  }
+
+  .mode.paused,
+  .mode.results {
     color: var(--accent);
+  }
+
+  .spacer {
+    flex: 1;
+  }
+
+  .export {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  button.small {
+    padding: 0.1rem 0.55rem;
+    font-size: 0.75rem;
+  }
+
+  button.link {
+    all: unset;
+    cursor: pointer;
+    color: var(--accent);
+    font-size: 0.8rem;
+  }
+
+  button.link:hover {
+    text-decoration: underline;
+  }
+
+  .syntax {
+    flex: none;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 0.6rem;
+  }
+
+  .syntax summary {
+    cursor: pointer;
+    width: fit-content;
+  }
+
+  .syntax dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.2rem 1rem;
+    margin: 0.5rem 0 0.3rem;
+  }
+
+  .syntax dd {
+    margin: 0;
+  }
+
+  .syntax p {
+    margin: 0.3rem 0 0;
+  }
+
+  /* Click-to-filter: cell values look like text until hovered. */
+  button.cell {
+    all: unset;
+    cursor: pointer;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  button.cell:hover,
+  button.cell:focus-visible {
+    color: var(--accent);
+    text-decoration: underline dotted;
   }
 
   .load-older {
@@ -483,14 +818,13 @@
     font-size: 0.85rem;
   }
 
-  .search-hint {
-    font-size: 0.8rem;
-    font-style: normal;
-  }
-
   td.when {
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
+  }
+
+  td.actions {
+    text-align: right;
   }
 
   /* Fill the height main.fill hands us and scroll the rows internally, so
@@ -532,7 +866,14 @@
     opacity: 0;
   }
 
-  tr:hover .row-action.subtle {
+  tr:hover .row-action.subtle,
+  .row-action.subtle:focus-visible {
     opacity: 1;
+  }
+
+  @media (hover: none) {
+    .row-action.subtle {
+      opacity: 1;
+    }
   }
 </style>

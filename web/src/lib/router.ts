@@ -53,25 +53,31 @@ export function currentParams(): Record<string, string> {
   return Object.fromEntries(new URLSearchParams(location.hash.slice(q + 1)).entries());
 }
 
-// docketHref builds a deep link into the Docket pre-filtered by verdict, an
-// exact client (or a device's set of IPs), a list name, and/or a domain
-// substring — the target of the dashboard and devices drill-downs.
-// `client`/`clients` and `list` match whole values; `qname` is a substring.
+// docketHref builds a deep link into the Query Log pre-filtered by verdict,
+// an exact client (or a device's set of IPs), a list name, a domain, and/or
+// a time range — the target of the dashboard and devices drill-downs.
+// `client`/`clients`, `list` and `domain` match whole values; `qname` is a
+// substring. `range` (a querysyntax RangeKey) should match the window the
+// clicked count came from, so the rows shown add up to it.
 export function docketHref(params: {
   verdict?: string;
   client?: string;
   clients?: string[];
   qname?: string;
+  domain?: string;
   list?: string;
   dnssec?: string;
+  range?: string;
 }): string {
   const sp = new URLSearchParams();
   if (params.verdict) sp.set('verdict', params.verdict);
   const ips = params.clients ?? (params.client ? [params.client] : []);
   if (ips.length) sp.set('client', ips.join(','));
   if (params.qname) sp.set('qname', params.qname);
+  if (params.domain) sp.set('domain', params.domain);
   if (params.list) sp.set('list', params.list);
   if (params.dnssec) sp.set('dnssec', params.dnssec);
+  if (params.range) sp.set('range', params.range);
   const qs = sp.toString();
   return qs ? `#/querylog?${qs}` : '#/querylog';
 }
