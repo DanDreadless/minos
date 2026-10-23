@@ -255,6 +255,24 @@ export const copy = {
     done: (domain: string) => `${domain} is now always blocked.`,
   },
 
+  header: {
+    blocking: (rules: number) =>
+      `Blocking · ${rules >= 10000 ? `${Math.round(rules / 1000).toLocaleString()}k` : rules.toLocaleString()} rules`,
+    noRules: 'Not blocking — no blocklist rules loaded',
+    noRulesHint: 'Every lookup is allowed until a blocklist loads. Open Blocklists to add or fix one.',
+    pauseFor: [
+      { duration: '5m', label: 'for 5 minutes' },
+      { duration: '30m', label: 'for 30 minutes' },
+      { duration: '1h', label: 'for 1 hour' },
+      { duration: '', label: 'until I resume it' },
+    ],
+    pauseCustom: '2h, 45m…',
+    pauseGo: 'Pause',
+    searchPlaceholder: 'Check a domain…',
+    searchLabel: 'Check whether a domain is blocked',
+    openInLog: 'Show in Query Log',
+  },
+
   pause: {
     action: 'Pause blocking',
     actionHint: 'every lookup is allowed until it resumes',

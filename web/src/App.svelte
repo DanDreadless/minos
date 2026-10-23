@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { api, ApiError, setToken, type Status, type UpdateInfo } from './lib/api';
+  import HeaderBar from './lib/components/HeaderBar.svelte';
   import Nav from './lib/components/Nav.svelte';
   import { copy } from './lib/copy';
   import { route } from './lib/router';
@@ -88,6 +89,7 @@
         </form>
       </section>
     {:else}
+      <HeaderBar {status} onStatusChange={refresh} />
       {#if fatalError}
         <p class="fatal" role="alert">{fatalError}</p>
       {/if}
@@ -105,7 +107,7 @@
         </section>
       {/if}
       {#if $route === 'dashboard'}
-        <Dashboard {status} onStatusChange={refresh} />
+        <Dashboard {status} />
       {:else if $route === 'querylog'}
         <QueryLog />
       {:else if $route === 'devices'}

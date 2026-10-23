@@ -328,10 +328,16 @@ sudo ufw allow from 192.168.1.0/24 to any port 8443 proto tcp
 
 Open `http://<host>:8080`. Six pages, one per concern:
 
+Every page opens with the same bar: whether Minos is blocking right now
+("Blocking · 73k rules", "Blocking paused until 14:20", or — in red — "Not
+blocking — no blocklist rules loaded"), a **Pause blocking** menu (5 or 30
+minutes, an hour, until you resume, or any duration), and **Check a
+domain** (Ctrl+K / ⌘K): type or paste a name or URL to see whether it is
+blocked and by which rule, then allow or block it, or open it in the
+Query Log.
+
 - **Dashboard** — query counters, cache hit rate, a
-  24-hour volume chart, the most-blocked domains, the busiest clients,
-  and **Pause blocking** controls (5/30 minutes, a custom
-  duration, or until resumed).
+  24-hour volume chart, the most-blocked domains and the busiest devices.
 - **Query Log** — the newest queries, streaming live, and a
   search across the whole retained history. Every blocked entry shows
   *which list and rule* blocked it and has a one-click **Allow** button;
