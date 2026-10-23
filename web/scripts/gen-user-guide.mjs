@@ -56,5 +56,19 @@ for (const s of docs) {
     lines.push('');
   }
 }
-writeFileSync(out, lines.join('\n'));
-console.log(`wrote ${out}`);
+// Leave the file untouched when nothing changed, and keep its existing line
+// endings when something did: a Windows checkout holds CRLF, and rewriting
+// it as LF would show as modified (and stop a release) with no real change.
+const text = lines.join('\n');
+let existing = null;
+try {
+  existing = readFileSync(out, 'utf8');
+} catch {
+  // first generation
+}
+if (existing !== null && existing.replace(/\r\n/g, '\n') === text) {
+  console.log(`${out} is up to date`);
+} else {
+  writeFileSync(out, existing?.includes('\r\n') ? text.replace(/\n/g, '\r\n') : text);
+  console.log(`wrote ${out}`);
+}
