@@ -116,8 +116,12 @@ type TLSListeners struct {
 	// DoTListen serves DNS-over-TLS (usually ":853"); empty disables.
 	DoTListen string `yaml:"dot_listen,omitempty"`
 	// DoHListen serves DNS-over-HTTPS at /dns-query (usually ":443");
-	// empty disables.
+	// empty disables. HTTP/3 (DoH3) is served on the same port over UDP
+	// and advertised with Alt-Svc, so clients that speak it upgrade.
 	DoHListen string `yaml:"doh_listen,omitempty"`
+	// DoQListen serves DNS-over-QUIC (RFC 9250, usually ":853" — UDP, so
+	// it shares the number with DoT's TCP port); empty disables.
+	DoQListen string `yaml:"doq_listen,omitempty"`
 	// ACME obtains and renews the certificate automatically (mutually
 	// exclusive with CertFile/KeyFile). File-only like the listeners.
 	ACME *ACMEConfig `yaml:"acme,omitempty"`
@@ -147,7 +151,9 @@ type ACMEConfig struct {
 }
 
 // Enabled reports whether any encrypted listener is configured.
-func (t TLSListeners) Enabled() bool { return t.DoTListen != "" || t.DoHListen != "" }
+func (t TLSListeners) Enabled() bool {
+	return t.DoTListen != "" || t.DoHListen != "" || t.DoQListen != ""
+}
 
 // Route is one conditional-forwarding rule. A route is authoritative for
 // its domains: if its upstream fails, the query fails (no fallback to the
@@ -680,7 +686,7 @@ func (c *Config) Validate() error {
 		case t.ACME != nil && hasFiles:
 			return fmt.Errorf("dns.tls: acme and cert_file/key_file are mutually exclusive")
 		case t.ACME == nil && (t.CertFile == "" || t.KeyFile == ""):
-			return fmt.Errorf("dns.tls: cert_file+key_file or an acme block is required when dot_listen or doh_listen is set")
+			return fmt.Errorf("dns.tls: cert_file+key_file or an acme block is required when dot_listen, doh_listen or doq_listen is set")
 		}
 		if t.DoTListen != "" {
 			if err := validateHostPort(t.DoTListen); err != nil {
@@ -690,6 +696,11 @@ func (c *Config) Validate() error {
 		if t.DoHListen != "" {
 			if err := validateHostPort(t.DoHListen); err != nil {
 				return fmt.Errorf("dns.tls.doh_listen: %w", err)
+			}
+		}
+		if t.DoQListen != "" {
+			if err := validateHostPort(t.DoQListen); err != nil {
+				return fmt.Errorf("dns.tls.doq_listen: %w", err)
 			}
 		}
 		if a := t.ACME; a != nil {
@@ -1041,7 +1052,7 @@ func (c *Config) Validate() error {
 
 func validateUpstream(u Upstream) error {
 	switch u.Protocol {
-	case "udp", "tcp", "dot":
+	case "udp", "tcp", "dot", "doq":
 		// The mistake this catches was a real one: a DoH URL left under
 		// protocol dot passed the old SplitHostPort check (host "https",
 		// port "//8.8.8.8/dns-query") and then failed every exchange.
@@ -1055,13 +1066,13 @@ func validateUpstream(u Upstream) error {
 		if host == "" || port == "0" {
 			return fmt.Errorf("address: %q needs both a host and a non-zero port", u.Address)
 		}
-	case "doh":
+	case "doh", "doh3":
 		parsed, err := url.Parse(u.Address)
 		if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
-			return fmt.Errorf("address: doh requires an https URL, got %q", u.Address)
+			return fmt.Errorf("address: %s requires an https URL, got %q", u.Protocol, u.Address)
 		}
 	default:
-		return fmt.Errorf("protocol: must be udp, tcp, dot, or doh, got %q", u.Protocol)
+		return fmt.Errorf("protocol: must be udp, tcp, dot, doh, doq, or doh3, got %q", u.Protocol)
 	}
 	return nil
 }
@@ -1089,11 +1100,11 @@ func (c *Config) encryptedDNSUpstreamWarnings() []string {
 	for _, u := range c.DNS.Upstreams {
 		var host string
 		switch u.Protocol {
-		case "doh":
+		case "doh", "doh3":
 			if parsed, err := url.Parse(u.Address); err == nil {
 				host = parsed.Hostname()
 			}
-		case "dot":
+		case "dot", "doq":
 			host, _, _ = net.SplitHostPort(u.Address)
 		default:
 			continue

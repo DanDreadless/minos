@@ -267,6 +267,8 @@
         <option value="tcp">TCP</option>
         <option value="dot">DoT</option>
         <option value="doh">DoH</option>
+        <option value="doh3">DoH3</option>
+        <option value="doq">DoQ</option>
       </select>
       <button class="danger" title="Remove route" on:click={() => removeRoute(i)}>✕</button>
     </div>

@@ -25,12 +25,14 @@ export interface ResolverPreset {
 
 export const resolverPresets: ResolverPreset[] = [
   { id: 'cloudflare', label: 'Cloudflare', upstream: { address: 'https://1.1.1.1/dns-query', protocol: 'doh' } },
+  { id: 'cloudflare-h3', label: 'Cloudflare (HTTP/3)', upstream: { address: 'https://1.1.1.1/dns-query', protocol: 'doh3' } },
   { id: 'cloudflare-security', label: 'Cloudflare — block malware', upstream: { address: 'https://1.1.1.2/dns-query', protocol: 'doh' } },
   { id: 'cloudflare-family', label: 'Cloudflare — block malware & adult', upstream: { address: 'https://1.1.1.3/dns-query', protocol: 'doh' } },
   { id: 'quad9', label: 'Quad9 — block malware', upstream: { address: 'https://9.9.9.9/dns-query', protocol: 'doh' } },
   { id: 'quad9-unfiltered', label: 'Quad9 — unfiltered', upstream: { address: 'https://9.9.9.10/dns-query', protocol: 'doh' } },
   { id: 'google', label: 'Google Public DNS', upstream: { address: 'https://8.8.8.8/dns-query', protocol: 'doh' } },
   { id: 'adguard', label: 'AdGuard DNS — block ads', upstream: { address: 'https://94.140.14.14/dns-query', protocol: 'doh' } },
+  { id: 'adguard-doq', label: 'AdGuard DNS — block ads (DNS over QUIC)', upstream: { address: '94.140.14.14:853', protocol: 'doq' } },
   { id: 'adguard-unfiltered', label: 'AdGuard DNS — unfiltered', upstream: { address: 'https://94.140.14.140/dns-query', protocol: 'doh' } },
   { id: 'opendns', label: 'OpenDNS', upstream: { address: 'https://208.67.222.222/dns-query', protocol: 'doh' } },
 ];

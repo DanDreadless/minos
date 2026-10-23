@@ -144,7 +144,7 @@ export interface CheckResult {
 
 export interface Upstream {
   address: string;
-  protocol: 'udp' | 'tcp' | 'dot' | 'doh';
+  protocol: 'udp' | 'tcp' | 'dot' | 'doh' | 'doh3' | 'doq';
 }
 
 // Live health per upstream (keyed by the configured address). state is the
