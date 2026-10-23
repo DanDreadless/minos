@@ -16,6 +16,7 @@
     { key: 'local', ...copy.nav.local },
     { key: 'logs', ...copy.nav.logs },
     { key: 'settings', ...copy.nav.settings },
+    { key: 'help', ...copy.nav.help },
   ];
 
   // A dot on Logs while there is a warning or error the user hasn't seen.

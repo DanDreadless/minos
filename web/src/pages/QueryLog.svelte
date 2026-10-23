@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { api, openStream, type LogEntry } from '../lib/api';
+  import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
   import { fmtLogTime, fmtLogTimeFull } from '../lib/format';
   import { currentParams } from '../lib/router';
@@ -353,7 +354,7 @@
 </script>
 
 <h1>
-  {copy.querylog.title} <small>{copy.querylog.subtitle}</small>
+  {copy.querylog.title} <small>{copy.querylog.subtitle}</small><HelpLink section="querylog" />
 </h1>
 
 <div class="toolbar">

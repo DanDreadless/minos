@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { api, type Device, type Group } from '../lib/api';
   import { confirmDialog } from '../lib/confirm';
+  import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
   import { deviceHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
@@ -203,7 +204,7 @@
   });
 </script>
 
-<h1>{copy.devices.title} <small>{copy.devices.subtitle}</small></h1>
+<h1>{copy.devices.title} <small>{copy.devices.subtitle}</small><HelpLink section="devices" /></h1>
 
 {#if devices.length === 0}
   <p class="empty">{copy.devices.empty}</p>

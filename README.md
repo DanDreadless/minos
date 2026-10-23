@@ -145,6 +145,8 @@ machine and every device follows.
 
 ## Documentation
 
+- [User guide](docs/user-guide.md) — every page and every setting, with
+  defaults and config keys (the same guide is built into Minos: **Help**)
 - [Getting started](docs/getting-started.md) — install, host prep,
   systemd, encrypted DNS, monitoring, and the full config reference
 - [REST API reference](docs/api.md) — every endpoint, with examples

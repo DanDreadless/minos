@@ -577,6 +577,14 @@ This is security software; hold it to that standard.
   the config is applied on boot unless `-log-level` was passed explicitly,
   and afterwards only when `log_level` itself changes. The menu dot keys
   "seen" by server boot (start time to the minute) because `seq` restarts.
+- **Every setting is documented in one place** (fixed decision, October
+  2026): `web/src/lib/docs.ts` is the user guide — the in-app Help page
+  renders it and `npm run build` generates `docs/user-guide.md` from it
+  (`web/scripts/gen-user-guide.mjs`), so never edit the generated file.
+  `TestEverySettingIsDocumented` (internal/config) walks the Config YAML
+  keys and fails on a key missing from docs.ts or a documented key that no
+  longer exists, so a new config key ships with its documentation;
+  release.sh refuses to tag if the build changed the generated guide.
 - **Notification standard** (fixed decisions, October 2026, `internal/notify`):
   every event is built by a constructor in `events.go` — specific plain
   title, a body that says what happened / why it matters / what to do, a
