@@ -199,6 +199,11 @@ type BlockingConfig struct {
 	// (and show "Private Relay is unavailable on this network"), so Minos
 	// can judge their queries. Opt-in — it is a real privacy trade.
 	BlockICloudPrivateRelay bool `yaml:"block_icloud_private_relay,omitempty"`
+	// CNAMEInspection judges every CNAME target in a forwarded answer like
+	// the name itself, refusing the answer when one is blocked — trackers
+	// hidden behind a first-party name ("CNAME cloaking"). On by default;
+	// no omitempty, so turning it off is written and survives a restart.
+	CNAMEInspection bool `yaml:"cname_inspection"`
 }
 
 // Group is a named device policy. Devices not assigned to a group get the
@@ -493,7 +498,7 @@ func Default() *Config {
 			},
 			LocalTTL: 300,
 		},
-		Blocking: BlockingConfig{Mode: "zero_ip"},
+		Blocking: BlockingConfig{Mode: "zero_ip", CNAMEInspection: true},
 		Lists: ListsConfig{
 			Sources: []ListSource{
 				{

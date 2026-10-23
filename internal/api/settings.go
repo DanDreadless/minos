@@ -37,6 +37,7 @@ type configView struct {
 		Mode                    string `json:"mode"`
 		SafeSearch              bool   `json:"safe_search"`
 		BlockICloudPrivateRelay bool   `json:"block_icloud_private_relay"`
+		CNAMEInspection         bool   `json:"cname_inspection"`
 	} `json:"blocking"`
 	Lists struct {
 		RefreshInterval string `json:"refresh_interval"`
@@ -98,6 +99,7 @@ func viewOf(c *config.Config) configView {
 	v.Blocking.Mode = c.Blocking.Mode
 	v.Blocking.SafeSearch = c.Blocking.SafeSearch
 	v.Blocking.BlockICloudPrivateRelay = c.Blocking.BlockICloudPrivateRelay
+	v.Blocking.CNAMEInspection = c.Blocking.CNAMEInspection
 	v.Lists.RefreshInterval = c.Lists.RefreshInterval.Std().String()
 	v.QueryLog.Ephemeral = c.QueryLog.Ephemeral
 	v.QueryLog.DBPath = c.QueryLog.DBPath
@@ -165,6 +167,7 @@ type settingsUpdate struct {
 		Mode                    *string `json:"mode"`
 		SafeSearch              *bool   `json:"safe_search"`
 		BlockICloudPrivateRelay *bool   `json:"block_icloud_private_relay"`
+		CNAMEInspection         *bool   `json:"cname_inspection"`
 	} `json:"blocking"`
 	Lists *struct {
 		RefreshInterval *string `json:"refresh_interval"`
@@ -267,6 +270,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			if upd.Blocking.BlockICloudPrivateRelay != nil {
 				c.Blocking.BlockICloudPrivateRelay = *upd.Blocking.BlockICloudPrivateRelay
+			}
+			if upd.Blocking.CNAMEInspection != nil {
+				c.Blocking.CNAMEInspection = *upd.Blocking.CNAMEInspection
 			}
 		}
 		if upd.Lists != nil && upd.Lists.RefreshInterval != nil {

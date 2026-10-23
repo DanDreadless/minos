@@ -201,6 +201,7 @@ export interface ConfigView {
     mode: 'zero_ip' | 'nxdomain';
     safe_search: boolean;
     block_icloud_private_relay: boolean;
+    cname_inspection: boolean;
   };
   lists: { refresh_interval: string };
   querylog: {
@@ -246,6 +247,7 @@ export interface SettingsUpdate {
     mode?: string;
     safe_search?: boolean;
     block_icloud_private_relay?: boolean;
+    cname_inspection?: boolean;
   };
   lists?: { refresh_interval?: string };
   querylog?: { ring_size?: number; retention_days?: number; memory_mb?: number };

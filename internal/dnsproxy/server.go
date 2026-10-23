@@ -90,6 +90,9 @@ type Server struct {
 	// rebindProtect refuses public names answered with LAN addresses
 	// (dns.rebind_protection, opt-in). See rebind.go.
 	rebindProtect atomic.Bool
+	// cnameInspect judges CNAME targets in forwarded answers
+	// (blocking.cname_inspection, on by default). See cname.go.
+	cnameInspect atomic.Bool
 	// forwardPrivateArpa opts out of answering RFC 6303 private reverse
 	// zones locally (dns.forward_private_reverse).
 	forwardPrivateArpa atomic.Bool
@@ -427,6 +430,7 @@ func (s *Server) ApplyConfig(cfg *config.Config) error {
 	s.safeSearch.Store(cfg.Blocking.SafeSearch)
 	s.allowFirefoxDoH.Store(cfg.DNS.AllowFirefoxDoH)
 	s.rebindProtect.Store(cfg.DNS.RebindProtection)
+	s.cnameInspect.Store(cfg.Blocking.CNAMEInspection)
 	s.forwardPrivateArpa.Store(cfg.DNS.ForwardPrivateReverse)
 	s.applyDNSSEC(cfg.DNS.DNSSEC)
 	// A fresh cache on every config change doubles as the flush that keeps
@@ -640,18 +644,7 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		entry.List = "group:" + pol.Group
 		entry.Rule = "bypass"
 	} else {
-		// A filter-mode group's overlay is judged first (its pardons beat
-		// global denies, its sentences add blocks); recess silences both.
-		if pol != nil && pol.Overlay != nil {
-			if paused, _ := s.engine.Paused(); !paused {
-				if res := pol.Overlay.Match(qname); res.Rule != "" {
-					verdict = res
-				}
-			}
-		}
-		if verdict.Rule == "" {
-			verdict = s.engine.Match(qname)
-		}
+		verdict = s.judge(qname, pol)
 	}
 
 	if verdict.Blocked {
@@ -718,6 +711,10 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 				entry.Upstream = "cache"
 			}
 			s.cacheHits.Add(1)
+			if target, res := s.cloakedTarget(resp, verdict, pol); res.Blocked {
+				s.refuseCloaked(w, req, q, entry, target, res, start)
+				return
+			}
 			if !pol.Bypasses() {
 				if ip := s.rebinding(qname, verdict, resp); ip != nil {
 					s.refuseRebinding(w, req, q, entry, ip, start)
@@ -764,6 +761,11 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		return
 	}
 	resp.Id = req.Id
+	if target, res := s.cloakedTarget(resp, verdict, pol); res.Blocked {
+		entry.Upstream = upstreamName
+		s.refuseCloaked(w, req, q, entry, target, res, start)
+		return
+	}
 	if !pol.Bypasses() {
 		if ip := s.rebinding(qname, verdict, resp); ip != nil {
 			entry.Upstream = upstreamName
@@ -787,6 +789,18 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 	}
 	entry.Verdict = querylog.VerdictAllowed
 	entry.Upstream = upstreamName
+	s.record(entry, start)
+}
+
+// refuseCloaked answers a name whose CNAME leads to a blocked target as a
+// block, attributed to the list that blocks the target.
+func (s *Server) refuseCloaked(w dns.ResponseWriter, req *dns.Msg, q dns.Question, entry querylog.Entry, target string, res filter.Result, start time.Time) {
+	reply := s.blockedResponse(req, q)
+	withEDE(req, reply, dns.ExtendedErrorCodeBlocked, "Blocked by Minos: "+res.List+" (via CNAME ", target+")")
+	_ = w.WriteMsg(reply)
+	entry.Verdict = querylog.VerdictBlocked
+	entry.List = res.List
+	entry.Rule = "via CNAME " + target + " → " + res.Rule
 	s.record(entry, start)
 }
 

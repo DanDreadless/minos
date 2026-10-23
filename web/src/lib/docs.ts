@@ -482,6 +482,15 @@ export const docs: Section[] = [
         where: 'Settings → Filtering',
       },
       {
+        label: 'Block trackers hidden behind CNAMEs',
+        key: 'blocking.cname_inspection',
+        default: 'on',
+        effect:
+          'Some trackers hide behind a name that looks first-party (metrics.shop.example) but is an alias (CNAME) for a tracker. Minos checks every alias in an answer against your rules and blocks the answer when one is blocked; the Query Log shows "via CNAME <tracker>". Names you have allowed, and bypass devices, are not checked.',
+        applies: 'live',
+        where: 'Settings → Filtering',
+      },
+      {
         label: 'Protect against DNS rebinding',
         key: 'dns.rebind_protection',
         default: 'off',

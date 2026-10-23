@@ -688,6 +688,9 @@ export const copy = {
     firefoxCanary: 'Keep Firefox on this resolver',
     firefoxCanaryHint:
       "Answers Firefox's use-application-dns.net check with NXDOMAIN — Mozilla's documented signal that this network filters DNS — so Firefox keeps using Minos instead of switching itself to its built-in DNS over HTTPS. Untick to let Firefox decide.",
+    cname: 'Block trackers hidden behind CNAMEs',
+    cnameHint:
+      'Some trackers hide behind a name that looks like the site you are on but is an alias (CNAME) for a tracker. Minos checks each alias against your rules and blocks the answer when one is blocked. Names you have allowed are not checked. On by default.',
     rebind: 'Protect against DNS rebinding',
     rebindHint:
       'Refuses answers that point a public name at an address on your own network — the trick a malicious web page uses to reach your router or NAS from inside your browser. Allowed domains (for example plex.direct, which Plex needs), local records, conditional forwarding and names like .lan are exempt. Off by default.',

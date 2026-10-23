@@ -601,6 +601,17 @@ This is security software; hold it to that standard.
   was used. `BenchmarkHandleBlocked` measures handle() end to end: plain
   ~520 ns / 7 allocs (unchanged), EDNS0 ~655 ns / 12 allocs. The Firefox
   canary NXDOMAIN deliberately carries no EDE.
+- **CNAME-cloak inspection** (fixed decisions, October 2026, `cname.go`):
+  `blocking.cname_inspection`, default on (a plain bool with no omitempty —
+  loading starts from `Default()`, so an older config gains it on, and
+  turning it off is written out). Every CNAME target in a forwarded or
+  cached answer goes through `judge()` — the same group-overlay-then-global
+  order as the queried name, pause included — and a blocked target refuses
+  the answer, attributed to the target's list with the rule "via CNAME
+  <target> → <rule>". Names an allow rule decided, and bypass devices, are
+  not inspected. Measured with `BenchmarkHandleCacheHit`: a cache hit
+  without a CNAME is unchanged within noise (~580–630 ns); the cloaked
+  block path is ~1.1 µs.
 - **DNS rebinding protection** (fixed decisions, October 2026, `rebind.go`):
   opt-in `dns.rebind_protection`. A forwarded or cached answer whose A/AAAA
   is RFC 1918, ULA, loopback or link-local, for a public name, is refused as
