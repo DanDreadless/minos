@@ -564,6 +564,25 @@ This is security software; hold it to that standard.
   `{healthState(u, upstreamHealth, savedUpstreams)}` — which also makes it
   a signal. Check with `svelte/compiler`: the declaration must read
   `$.mutable_source(...)`.
+- **Notification standard** (fixed decisions, October 2026, `internal/notify`):
+  every event is built by a constructor in `events.go` — specific plain
+  title, a body that says what happened / why it matters / what to do, a
+  `Link` into the UI and a priority — and `TestEventWording` pins the
+  wording and fails any event without a link. Field bug that started it: the
+  new-device message's only "link" was the device IP, which phones
+  auto-linked to `http://<ip>`. Links are UI paths made absolute at delivery
+  with `notifications.ui_url` or `DefaultUIBase(api.listen)` (the default
+  route's source address for a wildcard listen — a UDP dial, no packets).
+  ntfy is published as **JSON**, never headers: HTTP headers cannot carry
+  UTF-8 reliably (titles use dashes and names), and click/actions fit there. New devices wait 90 s
+  (`DeviceBatcher`) so discovery can name them and a burst becomes one
+  message. Upstream failures go through `Transition` (one announcement per
+  30 min cooldown; a recovery only for an announced failure) with a
+  re-check when a quiet re-failure outlasts the cooldown; when no other
+  upstream answers the event becomes `dns_down`, priority 5, the one that
+  ignores quiet hours and cannot be muted from the UI. `mute` types are
+  validated against `config.NotificationTypes`, which a notify test holds
+  equal to the events the package sends.
 - **Themed dropdowns need `appearance: base-select`**: a native `<select>`
   popup is an OS-drawn widget, and Chromium ignores author styles on its
   highlighted row — themed `option` rules alone leave the system blue. app.css

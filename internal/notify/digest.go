@@ -78,17 +78,19 @@ func (n *Notifier) sendDigest(ctx context.Context, stats DigestStats, cadence st
 		title = "Minos weekly digest"
 		period = "7 days"
 	}
-	msg, err := digestMessage(ctx, stats, now.Add(-window), period)
+	msg, err := digestMessage(ctx, stats, now.Add(-window), period, n.deviceName)
 	if err != nil {
 		slog.Debug("digest skipped", "err", err)
 		return
 	}
-	n.Publish("digest", title, msg)
+	n.Publish(Event{Type: TypeDigest, Title: title, Message: msg, Priority: PriorityLow, Link: "#/"})
 }
 
 // digestMessage assembles the plain-text summary. Copy stays literal —
 // notifications land outside the UI, where themed labels have no hover text.
-func digestMessage(ctx context.Context, stats DigestStats, since time.Time, period string) (string, error) {
+func digestMessage(ctx context.Context, stats DigestStats, since time.Time, period string,
+	name func(ip string) string,
+) (string, error) {
 	total, blocked, err := stats.Totals(ctx, since)
 	if err != nil {
 		return "", fmt.Errorf("digest totals: %w", err)
@@ -110,7 +112,13 @@ func digestMessage(ctx context.Context, stats DigestStats, since time.Time, peri
 		fmt.Fprintf(&b, "\nTop blocked: %s.", strings.Join(parts, ", "))
 	}
 	if client, queries, err := stats.BusiestClient(ctx, since); err == nil && client != "" {
-		fmt.Fprintf(&b, "\nBusiest client: %s (%s queries).", client, thousands(queries))
+		who := client
+		if name != nil {
+			if n := name(client); n != "" && n != client {
+				who = n + " (" + client + ")"
+			}
+		}
+		fmt.Fprintf(&b, "\nBusiest device: %s, %s queries.", who, thousands(queries))
 	}
 	if newDevices, err := stats.NewClientsSince(ctx, since); err == nil && newDevices > 0 {
 		plural := "s"

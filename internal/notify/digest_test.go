@@ -39,13 +39,19 @@ func TestDigestMessageGolden(t *testing.T) {
 		client:  "192.168.1.50", clientQueries: 12041,
 		newClients: 2,
 	}
-	got, err := digestMessage(t.Context(), stats, time.Now(), "7 days")
+	name := func(ip string) string {
+		if ip == "192.168.1.50" {
+			return "Living room TV"
+		}
+		return ""
+	}
+	got, err := digestMessage(t.Context(), stats, time.Now(), "7 days", name)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := "48,210 queries in the last 7 days — 9,114 blocked (18.9%).\n" +
 		"Top blocked: doubleclick.net (1,893), ads.example.com (912), tracker.io (455).\n" +
-		"Busiest client: 192.168.1.50 (12,041 queries).\n" +
+		"Busiest device: Living room TV (192.168.1.50), 12,041 queries.\n" +
 		"2 new devices."
 	if got != want {
 		t.Errorf("digest message:\n%s\nwant:\n%s", got, want)
@@ -53,7 +59,7 @@ func TestDigestMessageGolden(t *testing.T) {
 }
 
 func TestDigestMessageQuietNetwork(t *testing.T) {
-	got, err := digestMessage(t.Context(), fakeStats{}, time.Now(), "24 hours")
+	got, err := digestMessage(t.Context(), fakeStats{}, time.Now(), "24 hours", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +70,7 @@ func TestDigestMessageQuietNetwork(t *testing.T) {
 
 func TestDigestMessageSingularDevice(t *testing.T) {
 	got, err := digestMessage(t.Context(), fakeStats{total: 10, blocked: 1, newClients: 1},
-		time.Now(), "24 hours")
+		time.Now(), "24 hours", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

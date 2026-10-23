@@ -26,6 +26,7 @@ import (
 	"minos/internal/filter"
 	"minos/internal/hostinfo"
 	"minos/internal/lists"
+	"minos/internal/notify"
 	"minos/internal/querylog"
 )
 
@@ -70,6 +71,7 @@ type Server struct {
 	// runtime — see resolveInstallMethod.
 	installMethod string
 	started       time.Time
+	notifier      *notify.Notifier // may be nil
 }
 
 func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
@@ -115,6 +117,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/check", s.handleCheck)
 		r.Get("/config", s.handleGetConfig)
 		r.Put("/config", s.handleUpdateConfig)
+		r.Post("/notifications/test", s.handleNotificationTest)
 		r.Get("/config/export", s.handleExportConfig)
 		r.Post("/config/import", s.handleImportConfig)
 		r.Post("/import/pihole", s.handleImportPihole)

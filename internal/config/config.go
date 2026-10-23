@@ -367,6 +367,22 @@ type NotificationsConfig struct {
 	// DigestDay is the delivery weekday for the weekly cadence, as a
 	// lowercase English day name (default "monday"). Ignored for daily.
 	DigestDay string `yaml:"digest_day,omitempty" json:"digest_day"`
+	// UIURL is the address notification links open, e.g.
+	// "http://192.168.1.2:8080". Empty derives it from api.listen (its host,
+	// or this machine's LAN address when it listens on every interface).
+	UIURL string `yaml:"ui_url,omitempty" json:"ui_url"`
+	// QuietHours ("22:00-07:00", local time, may wrap midnight) delivers
+	// notifications silently — except "DNS is down", which always sounds.
+	QuietHours string `yaml:"quiet_hours,omitempty" json:"quiet_hours"`
+	// Mute lists event types that are never sent (NotificationTypes).
+	Mute []string `yaml:"mute,omitempty" json:"mute"`
+}
+
+// NotificationTypes are the event types a user can mute. internal/notify
+// owns the events; its tests hold this list to them.
+var NotificationTypes = []string{
+	"device_new", "upstream_sick", "upstream_recovered", "dns_down",
+	"list_failing", "list_recovered", "update_available", "acme_renewal_failed", "digest",
 }
 
 // DigestSchedule resolves the configured digest timing, applying defaults
@@ -374,7 +390,7 @@ type NotificationsConfig struct {
 // file must never panic the scheduler).
 func (n NotificationsConfig) DigestSchedule() (hour, minute int, day time.Weekday) {
 	hour, minute, day = 9, 0, time.Monday
-	if h, m, err := parseClock(n.DigestTime); err == nil {
+	if h, m, err := ParseClock(n.DigestTime); err == nil {
 		hour, minute = h, m
 	}
 	if d, err := parseWeekday(n.DigestDay); err == nil {
@@ -383,8 +399,8 @@ func (n NotificationsConfig) DigestSchedule() (hour, minute int, day time.Weekda
 	return hour, minute, day
 }
 
-// parseClock parses 24h "HH:MM". Empty is an error (callers apply defaults).
-func parseClock(s string) (hour, minute int, err error) {
+// ParseClock parses 24h "HH:MM". Empty is an error (callers apply defaults).
+func ParseClock(s string) (hour, minute int, err error) {
 	t, err := time.Parse("15:04", s)
 	if err != nil {
 		return 0, 0, fmt.Errorf("must be 24h HH:MM, got %q", s)
@@ -521,6 +537,7 @@ func (c *Config) Clone() *Config {
 		}
 	}
 	out.Clients = append([]Client(nil), c.Clients...)
+	out.Notifications.Mute = append([]string(nil), c.Notifications.Mute...)
 	out.DNS.LocalRecords = make([]LocalRecord, len(c.DNS.LocalRecords))
 	for i, r := range c.DNS.LocalRecords {
 		out.DNS.LocalRecords[i] = r
@@ -927,6 +944,7 @@ func (c *Config) Validate() error {
 	for name, u := range map[string]string{
 		"notifications.webhook_url": c.Notifications.WebhookURL,
 		"notifications.ntfy_url":    c.Notifications.NtfyURL,
+		"notifications.ui_url":      c.Notifications.UIURL,
 	} {
 		if u == "" {
 			continue
@@ -935,6 +953,26 @@ func (c *Config) Validate() error {
 		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 			return fmt.Errorf("%s: must be an http(s) URL, got %q", name, u)
 		}
+		if name == "notifications.ntfy_url" && strings.Trim(parsed.Path, "/") == "" {
+			return fmt.Errorf("%s: must name a topic, e.g. https://ntfy.sh/my-topic, got %q", name, u)
+		}
+	}
+	if s := c.Notifications.QuietHours; s != "" {
+		from, to, ok := strings.Cut(s, "-")
+		if !ok {
+			return fmt.Errorf("notifications.quiet_hours: must look like 22:00-07:00, got %q", s)
+		}
+		for _, part := range []string{from, to} {
+			if _, _, err := ParseClock(strings.TrimSpace(part)); err != nil {
+				return fmt.Errorf("notifications.quiet_hours: %w", err)
+			}
+		}
+	}
+	for _, m := range c.Notifications.Mute {
+		if !slices.Contains(NotificationTypes, m) {
+			return fmt.Errorf("notifications.mute: unknown event type %q (known: %s)",
+				m, strings.Join(NotificationTypes, ", "))
+		}
 	}
 	switch c.Notifications.Digest {
 	case "", "off", "daily", "weekly":
@@ -942,7 +980,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("notifications.digest: must be off, daily, or weekly, got %q", c.Notifications.Digest)
 	}
 	if s := c.Notifications.DigestTime; s != "" {
-		if _, _, err := parseClock(s); err != nil {
+		if _, _, err := ParseClock(s); err != nil {
 			return fmt.Errorf("notifications.digest_time: %w", err)
 		}
 	}

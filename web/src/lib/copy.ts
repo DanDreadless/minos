@@ -572,7 +572,34 @@ export const copy = {
     notificationsTitle: 'Notifications',
     notificationsHint: 'get told when something on your network changes',
     notificationsNote:
-      'Low-volume events only: a device makes its first DNS query, an upstream resolver fails or recovers, a blocklist stops updating or recovers, and (with the update check on) a new release. Nothing is sent unless a destination is set.',
+      'Low-volume events only, and nothing is sent unless a destination is set. Each one says what happened and what to do, and tapping it opens the right page in Minos.',
+    uiURL: 'Link address',
+    uiURLHint: 'where tapping a notification takes you — the address you open Minos at',
+    uiURLNote: (def: string) =>
+      def
+        ? `Leave blank to use ${def}. Set it if you reach Minos by another name, such as http://minos.lan:8080.`
+        : 'Minos could not work out its own address; set this so notifications can link back to it.',
+    eventsTitle: 'What to send',
+    events: [
+      { types: ['device_new'], label: 'New devices', hint: 'a device makes its first DNS query (named once discovery finds it; a burst arrives as one message)' },
+      { types: ['list_failing'], label: 'Blocklist problems', hint: 'a list is retired, refuses downloads, never loaded, or has stopped updating' },
+      { types: ['upstream_sick'], label: 'Resolver problems', hint: 'an upstream resolver stops answering (repeat failures within 30 minutes stay quiet)' },
+      { types: ['list_recovered', 'upstream_recovered'], label: 'Recoveries', hint: 'a list or resolver that was reported failing works again' },
+      { types: ['update_available'], label: 'Minos updates', hint: 'a new release is out (needs the update check on)' },
+      { types: ['acme_renewal_failed'], label: 'Certificate problems', hint: 'the DoT/DoH certificate cannot be renewed' },
+    ] as { types: string[]; label: string; hint: string }[],
+    dnsDownNote: '"DNS is down" — every resolver failing — is always sent, at urgent priority.',
+    quietTitle: 'Quiet hours',
+    quietHint: 'notifications still arrive, silently — except "DNS is down"',
+    quietFrom: 'From',
+    quietTo: 'to',
+    testAction: 'Send test notification',
+    testSending: 'Sending…',
+    testResult: (res: Record<string, string>) =>
+      Object.entries(res)
+        .map(([sink, r]) => `${sink === 'ntfy' ? 'ntfy' : 'Webhook'}: ${r === 'ok' ? 'delivered' : r}`)
+        .join(' · '),
+    testSaveFirst: 'Save first — the test uses the saved settings.',
     webhookURL: 'Webhook URL',
     webhookHint: 'each event is POSTed as JSON',
     ntfyURL: 'ntfy topic URL',
