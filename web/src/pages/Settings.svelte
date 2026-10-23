@@ -312,17 +312,32 @@
   // idle backup green, which is how one that had never answered a query sat
   // green for 49 days. An unused backup gets a hollow ring — untested, not
   // healthy — and a row typed but not saved has no light at all.
+  //
+  // The health map and the saved set are parameters, not globals read inside
+  // the functions, on purpose: Svelte re-evaluates a template expression only
+  // when a variable *named in it* changes. Read from closure, the lights
+  // froze on their first render — before the health data had arrived — so
+  // every row showed "not used yet" (field bug, v0.22.0; the old two-state
+  // light defaulted to green, which is what hid it).
   type Light = 'healthy' | 'failing' | 'unused' | 'unsaved';
   let savedUpstreams = new Set<string>();
 
-  function healthState(u: Upstream): Light {
-    if (!savedUpstreams.has(`${u.protocol} ${u.address}`)) return 'unsaved';
-    return upstreamHealth[u.address]?.state ?? 'unused';
+  function healthState(
+    u: Upstream,
+    health: Record<string, UpstreamHealth>,
+    saved: Set<string>,
+  ): Light {
+    if (!saved.has(`${u.protocol} ${u.address}`)) return 'unsaved';
+    return health[u.address]?.state ?? 'unused';
   }
 
-  function healthTitle(u: Upstream): string {
-    const h = upstreamHealth[u.address];
-    switch (healthState(u)) {
+  function healthTitle(
+    u: Upstream,
+    health: Record<string, UpstreamHealth>,
+    saved: Set<string>,
+  ): string {
+    const h = health[u.address];
+    switch (healthState(u, health, saved)) {
       case 'unsaved':
         return copy.settings.upstreamUnsaved;
       case 'failing':
@@ -359,7 +374,11 @@
     <h2>{copy.settings.upstreamsTitle} <small>{copy.settings.upstreamsHint}</small></h2>
     {#each upstreams as u, i (i)}
       <div class="upstream-row">
-        <span class="health-dot {healthState(u)}" title={healthTitle(u)} role="img" aria-label={healthTitle(u)}
+        <span
+          class="health-dot {healthState(u, upstreamHealth, savedUpstreams)}"
+          title={healthTitle(u, upstreamHealth, savedUpstreams)}
+          role="img"
+          aria-label={healthTitle(u, upstreamHealth, savedUpstreams)}
         ></span>
         <span class="order">{orderLabel(i)}</span>
         <select

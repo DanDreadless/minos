@@ -550,6 +550,20 @@ This is security software; hold it to that standard.
   (field bug, v0.16.5). The Docket and device-page tables are deliberately
   unkeyed; keep any future entry list that way (or add a synthetic
   client-side counter id).
+- **Svelte template functions must take their data as arguments**
+  (field bug, v0.22.0): in Svelte 5's legacy (non-runes) mode a top-level
+  `let` is compiled into a tracked signal **only if the template names it**.
+  Reads inside a called function are tracked at runtime — but only of
+  signals. `upstreamHealth` was read solely inside `healthState()`, so it
+  compiled to a plain variable (`let upstreamHealth = {}`, verified in the
+  compiler output) and the Ferrymen lights froze on their first render,
+  before the health fetch landed: every row "not used yet". The old
+  two-state light defaulted to green, which hid it for months. The Codex's
+  service `catalog` had the same shape (labels stuck as `service:<id>`).
+  Rule: pass anything that loads or changes later as a parameter —
+  `{healthState(u, upstreamHealth, savedUpstreams)}` — which also makes it
+  a signal. Check with `svelte/compiler`: the declaration must read
+  `$.mutable_source(...)`.
 - **Themed dropdowns need `appearance: base-select`**: a native `<select>`
   popup is an OS-drawn widget, and Chromium ignores author styles on its
   highlighted row — themed `option` rules alone leave the system blue. app.css
