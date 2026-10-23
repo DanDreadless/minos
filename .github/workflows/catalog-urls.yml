@@ -26,6 +26,11 @@ jobs:
   verify:
     if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
+    # A red scheduled run notifies nobody, which is how this check failed six
+    # weeks running in 2026 unseen. The issue steps below make it loud.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -40,3 +45,29 @@ jobs:
       - name: verify resolver presets answer
         if: success() || failure()
         run: go test -tags presets -timeout 5m -v ./internal/dnsproxy -run TestResolverPresetsAnswer
+      # One open issue per outage: opened (or commented on) when a scheduled
+      # or manual run fails, closed by the next passing one. Push runs are
+      # left out so a broken branch doesn't page anyone.
+      - name: open or update the catalog-broken issue
+        if: failure() && github.event_name != 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          n=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --label catalog-broken --json number --jq '.[0].number')
+          body="A catalog list or resolver preset failed verification: $RUN_URL"
+          if [ -n "$n" ]; then
+            gh issue comment "$n" -R "$GITHUB_REPOSITORY" --body "Still failing: $RUN_URL"
+          else
+            gh label create catalog-broken -R "$GITHUB_REPOSITORY" --color B60205               --description "weekly catalog/preset verification is failing" 2>/dev/null || true
+            gh issue create -R "$GITHUB_REPOSITORY" --label catalog-broken               --title "Catalog verification failing" --body "$body"
+          fi
+      - name: close the catalog-broken issue
+        if: success() && github.event_name != 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          for n in $(gh issue list -R "$GITHUB_REPOSITORY" --state open --label catalog-broken --json number --jq '.[].number'); do
+            gh issue close "$n" -R "$GITHUB_REPOSITORY" --comment "Passing again: $RUN_URL"
+          done

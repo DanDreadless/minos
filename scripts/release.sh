@@ -91,6 +91,23 @@ if [ "$assets_only" -eq 0 ]; then
   [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] ||
     die "main differs from origin/main — push or pull first"
 
+  # The release is built by GitHub's runners from the mirror, so a broken
+  # push mirror means the tag never arrives and nothing builds. It failed
+  # silently for seven weeks in 2026 (an expired PAT stored in Gitea) while
+  # .env held a valid one — check Gitea's own record, not the local token.
+  mirror_err="$(gitea_api GET /push_mirrors | grep -o '"last_error":"[^"]*"' | grep -v '"last_error":""' | head -1 || true)"
+  [ -z "$mirror_err" ] ||
+    die "Gitea push mirror is failing ($mirror_err) — fix it in the repo's mirror settings first"
+
+  if [ "$skip_verify" -eq 0 ]; then
+    # One-click choices must work on release day: every catalog list
+    # compiles, every resolver preset answers. Network-dependent, which is
+    # why they live behind build tags rather than in go test ./...
+    say "verifying catalog lists and resolver presets (network)"
+    go test -tags catalog -timeout 20m -count=1 ./internal/lists -run TestCatalogListsCompile
+    go test -tags presets -timeout 5m -count=1 ./internal/dnsproxy -run TestResolverPresetsAnswer
+  fi
+
   if [ "$skip_verify" -eq 0 ]; then
     say "verifying (gofmt, go test, lint, frontend)"
     # gofmt against the *committed blobs*, which is what CI sees: a
