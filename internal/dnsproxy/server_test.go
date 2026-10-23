@@ -2,6 +2,7 @@ package dnsproxy
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -297,5 +298,43 @@ func TestMalformedQueryRefused(t *testing.T) {
 	}
 	if resp.Rcode != dns.RcodeFormatError {
 		t.Errorf("rcode = %s, want FORMERR", dns.RcodeToString[resp.Rcode])
+	}
+}
+
+// TestBindRetriesEphemeralTCPCollision: a ":0" listen gets a free UDP port
+// whose TCP twin may be taken (a real CI failure). The pair is retried on a
+// fresh port; a fixed port is not, since a retry would pick the same one.
+func TestBindRetriesEphemeralTCPCollision(t *testing.T) {
+	busy := 0
+	flaky := func(network, addr string) (net.Listener, error) {
+		if busy < 2 {
+			busy++
+			return nil, fmt.Errorf("bind: address already in use")
+		}
+		return net.Listen(network, addr)
+	}
+	pc, ln, err := bindUDPTCP("127.0.0.1:0", flaky)
+	if err != nil {
+		t.Fatalf("ephemeral bind with two TCP collisions: %v", err)
+	}
+	defer pc.Close()
+	defer ln.Close()
+	if pc.LocalAddr().(*net.UDPAddr).Port != ln.Addr().(*net.TCPAddr).Port {
+		t.Errorf("udp %v and tcp %v on different ports", pc.LocalAddr(), ln.Addr())
+	}
+
+	calls := 0
+	never := func(string, string) (net.Listener, error) {
+		calls++
+		return nil, fmt.Errorf("bind: address already in use")
+	}
+	probe, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixed := probe.LocalAddr().String()
+	probe.Close()
+	if _, _, err := bindUDPTCP(fixed, never); err == nil || calls != 1 {
+		t.Errorf("fixed port: err=%v after %d attempts, want an error after exactly 1", err, calls)
 	}
 }

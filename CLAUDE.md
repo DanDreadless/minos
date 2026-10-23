@@ -251,7 +251,9 @@ This is security software; hold it to that standard.
 - **Ephemeral-port tests**: `dnsproxy.Server.Start` binds UDP first,
   then binds TCP to the port UDP actually received — required for
   `:0`-based integration tests. Don't "simplify" it back to two
-  independent binds.
+  independent binds. For a `:0` listen `bindUDPTCP` retries the
+  pair on a fresh port when the UDP port's TCP twin is taken (a real CI
+  flake); a fixed port fails at once.
 - **web/dist is committed**: it's embedded via `go:embed all:dist`, so
   a plain `go build` must work without Node. Rebuild it (`make web`)
   whenever `web/src` changes and commit the result.

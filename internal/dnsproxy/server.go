@@ -447,20 +447,9 @@ func (s *Server) CacheStats() (hits, misses uint64, entries int64, enabled bool)
 // Start binds UDP and TCP listeners and begins serving. It returns once
 // both listeners are active.
 func (s *Server) Start() error {
-	pc, err := net.ListenPacket("udp", s.listen)
+	pc, ln, err := bindUDPTCP(s.listen, net.Listen)
 	if err != nil {
-		return fmt.Errorf("bind udp %s: %w", s.listen, err)
-	}
-	// Bind TCP to the port UDP actually got, so listening on ":0" (tests)
-	// still yields one address serving both transports.
-	tcpAddr := s.listen
-	if udpAddr, ok := pc.LocalAddr().(*net.UDPAddr); ok {
-		tcpAddr = udpAddr.String()
-	}
-	ln, err := net.Listen("tcp", tcpAddr)
-	if err != nil {
-		pc.Close()
-		return fmt.Errorf("bind tcp %s: %w", tcpAddr, err)
+		return err
 	}
 	s.udpAddr = pc.LocalAddr()
 	handler := dns.HandlerFunc(s.handle)
@@ -483,6 +472,42 @@ func (s *Server) Start() error {
 	}()
 	slog.Info("dns server listening", "addr", s.udpAddr.String())
 	return nil
+}
+
+// ephemeralBindAttempts bounds bindUDPTCP's retries for a ":0" listen.
+const ephemeralBindAttempts = 10
+
+// bindUDPTCP binds UDP, then TCP to the port UDP actually got, so a ":0"
+// listen (tests) still yields one address serving both transports — a fixed
+// decision, see CLAUDE.md. The kernel picks a free *UDP* port, though, and the
+// same TCP port can be in use by an unrelated socket; on busy CI runners that
+// failed real runs ("bind: address already in use"). For an ephemeral listen
+// the pair is retried on a fresh port; a fixed port (":53") fails at once,
+// since a retry could only ever pick the same one.
+func bindUDPTCP(listen string, listenTCP func(network, addr string) (net.Listener, error)) (net.PacketConn, net.Listener, error) {
+	_, port, _ := net.SplitHostPort(listen)
+	attempts := 1
+	if port == "0" {
+		attempts = ephemeralBindAttempts
+	}
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		pc, err := net.ListenPacket("udp", listen)
+		if err != nil {
+			return nil, nil, fmt.Errorf("bind udp %s: %w", listen, err)
+		}
+		tcpAddr := listen
+		if udpAddr, ok := pc.LocalAddr().(*net.UDPAddr); ok {
+			tcpAddr = udpAddr.String()
+		}
+		ln, err := listenTCP("tcp", tcpAddr)
+		if err == nil {
+			return pc, ln, nil
+		}
+		pc.Close()
+		lastErr = fmt.Errorf("bind tcp %s: %w", tcpAddr, err)
+	}
+	return nil, nil, lastErr
 }
 
 // UDPAddr returns the bound UDP address (useful when listening on port 0).
