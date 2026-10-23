@@ -592,6 +592,15 @@ This is security software; hold it to that standard.
   keys and fails on a key missing from docs.ts or a documented key that no
   longer exists, so a new config key ships with its documentation;
   release.sh refuses to tag if the build changed the generated guide.
+- **Extended DNS Errors** (fixed decisions, October 2026, `ede.go`): answers
+  say why (RFC 8914) — 15 Blocked naming the list, 18 Prohibited for a
+  device-level block, 6 DNSSEC Bogus with the reason, 3 Stale Answer, 23
+  Network Error when no upstream answered — **only when the client sent
+  EDNS0**. The text is joined inside `withEDE` after that check: building it
+  at the call site cost every blocked query an allocation whether or not it
+  was used. `BenchmarkHandleBlocked` measures handle() end to end: plain
+  ~520 ns / 7 allocs (unchanged), EDNS0 ~655 ns / 12 allocs. The Firefox
+  canary NXDOMAIN deliberately carries no EDE.
 - **Notification standard** (fixed decisions, October 2026, `internal/notify`):
   every event is built by a constructor in `events.go` — specific plain
   title, a body that says what happened / why it matters / what to do, a
