@@ -106,6 +106,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/update", s.handleUpdate)
 		r.Get("/querylog", s.handleQueryLog)
 		r.Get("/querylog/history", s.handleQueryLogHistory)
+		r.Get("/querylog/export", s.handleQueryLogExport)
 		r.Get("/querylog/lists", s.handleQueryLogLists)
 		r.Get("/querylog/stream", s.handleQueryLogStream)
 		r.Get("/stats", s.handleStats)
@@ -340,45 +341,10 @@ func (s *Server) handleQueryLogHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		before = time.UnixMilli(ms)
 	}
-	verdict := q.Get("verdict")
-	if verdict == "all" {
-		verdict = ""
-	}
-	filter := querylog.HistoryFilter{Search: q.Get("q"), Verdict: verdict, List: q.Get("list")}
-	// dnssec narrows to one validation outcome — the Tribunal's counter
-	// drill-down. Validated against the known set rather than passed
-	// through, so a typo returns an error instead of silently no rows.
-	if d := q.Get("dnssec"); d != "" {
-		switch d {
-		case querylog.DNSSECSecure, querylog.DNSSECInsecure,
-			querylog.DNSSECBogus, querylog.DNSSECIndeterminate:
-			filter.DNSSEC = d
-		default:
-			writeError(w, http.StatusBadRequest,
-				"dnssec must be secure, insecure, bogus, or indeterminate")
-			return
-		}
-	}
-	// would_block narrows to entries an audit-mode list flagged.
-	switch v := q.Get("would_block"); v {
-	case "", "false":
-	case "true", "1":
-		filter.WouldBlock = true
-	default:
-		writeError(w, http.StatusBadRequest, "would_block must be true or false")
+	filter, err := historyFilter(q)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
-	}
-	// client is an exact-match filter (comma-separated for a multi-IP device),
-	// distinct from the free-text q substring. Capped so the IN list stays sane.
-	if c := q.Get("client"); c != "" {
-		for _, part := range strings.Split(c, ",") {
-			if part = strings.TrimSpace(part); part != "" {
-				filter.Clients = append(filter.Clients, part)
-			}
-			if len(filter.Clients) >= 32 {
-				break
-			}
-		}
 	}
 	entries, err := s.qlog.QueryHistory(r.Context(), filter, limit, before)
 	if errors.Is(err, querylog.ErrSearchTimeout) {

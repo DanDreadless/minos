@@ -156,6 +156,53 @@ export const copy = {
     searchFailed: (error: string, showingRecent: boolean) =>
       `The full-history search did not finish: ${error}${showingRecent ? ' Showing only matches among recent queries.' : ''}`,
     live: 'live',
+    searchBoxPlaceholder: 'Search domains or devices — try  blocked  type:AAAA  -cdn',
+    searchBoxLabel: 'Search the query log',
+    rangeLabel: 'Time range',
+    // The two modes, said plainly in the status line.
+    modeLive: 'Live',
+    modeLiveDetail: (n: number) => `newest ${n} queries, updating as they arrive`,
+    modePaused: (held: number) =>
+      held ? `Paused · ${held} new ${held === 1 ? 'query' : 'queries'} waiting` : 'Paused',
+    modeReconnecting: 'Reconnecting to the live feed…',
+    modeResults: 'Results',
+    resultsDetail: (n: number, more: boolean, range: string) =>
+      `${n === 0 ? 'no' : more ? `newest ${n}` : n} ${n === 1 ? 'match' : 'matches'} · ${range.toLowerCase()}`,
+    pause: 'Pause',
+    pauseHint: 'Stop new queries moving the rows while you read',
+    resume: 'Resume',
+    clearAll: 'Clear filters',
+    exportLabel: 'Export',
+    exportHint: (fmt: string) =>
+      `Download every match (up to 100,000) as ${fmt.toUpperCase()}`,
+    exporting: 'Preparing…',
+    loadOlder: 'Load older',
+    loadingOlder: 'Loading…',
+    filterHint: 'Show only queries with this value',
+    removeFilter: (label: string) => `remove the ${label} filter`,
+    columnSource: 'List or resolver',
+    columnSourceHint:
+      'For a blocked query, the list that matched (hover for the rule). For an allowed one, the resolver that answered.',
+    copyAction: 'Copy',
+    copyHint: 'copy the domain',
+    copied: (d: string) => `Copied ${d}`,
+    checkAction: 'Check',
+    checkHint: 'how would this domain be judged now, with the current lists?',
+    checkResult: (d: string, blocked: boolean, list: string, rule: string) =>
+      blocked ? `${d} would be blocked now by ${list} ("${rule}").` : `${d} would be allowed now.`,
+    syntaxTitle: 'Search syntax',
+    syntax: [
+      ['blocked · allowed · would-block', 'only that result'],
+      ['client:192.168.1.5', 'one device (exact address; comma-separate several)'],
+      ['domain:example.com', 'one exact name, not its subdomains'],
+      ['type:AAAA', 'one record type'],
+      ['list:StevenBlack · list:"My list"', 'queries a list matched (quote names with spaces)'],
+      ['upstream:1.1.1.1:853', 'answered by one resolver'],
+      ['dnssec:bogus', 'one DNSSEC outcome'],
+      ['-cdn', 'leave out names containing "cdn"'],
+      ['anything else', 'domain or device address contains it'],
+    ] as [string, string][],
+    syntaxKeys: 'Press / to search from anywhere on the page, Enter to apply, Esc to clear.',
   },
 
   pardon: {
@@ -430,6 +477,8 @@ export const copy = {
     notesTitle: 'Notes',
     notesPlaceholder: 'Anything worth remembering about this device — owner, room, model…',
     notesSaved: 'Notes saved.',
+    windowStart: (iso: string) =>
+      `· counted in whole days, since ${new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`,
     activityWindow: (hours: number): string => {
       if (hours >= 2160) return 'activity, last 90 days';
       if (hours >= 720) return 'activity, last 30 days';

@@ -118,6 +118,9 @@ export interface Host {
 
 export interface ClientOverview {
   window_hours: number;
+  // Where the counted window starts. Windows of 48 h or more count whole
+  // days (UTC), so this can be earlier than now minus window_hours.
+  window_start?: string;
   total: number;
   blocked: number;
   top_allowed: { qname: string; count: number }[];
@@ -476,6 +479,29 @@ export const api = {
     if (params.before) sp.set('before', String(params.before));
     sp.set('limit', String(params.limit ?? 200));
     return request<LogEntry[]>('GET', `/api/querylog/history?${sp.toString()}`, undefined, signal);
+  },
+  // The Query Log's search: params come from querysyntax.toParams, plus
+  // since/before/limit.
+  querylogSearch: (params: URLSearchParams, signal?: AbortSignal) =>
+    request<LogEntry[]>('GET', `/api/querylog/history?${params.toString()}`, undefined, signal),
+  // Downloads every match as one file. Fetched rather than linked so the API
+  // token travels in its header, never in a URL.
+  querylogExport: async (params: URLSearchParams): Promise<{ blob: Blob; filename: string }> => {
+    const headers: Record<string, string> = {};
+    const token = getToken();
+    if (token) headers['X-Api-Token'] = token;
+    const resp = await fetch(`/api/querylog/export?${params.toString()}`, { headers });
+    if (!resp.ok) {
+      const data: unknown = await resp.json().catch(() => ({}));
+      const msg =
+        typeof data === 'object' && data !== null && 'error' in data
+          ? String((data as { error: unknown }).error)
+          : resp.statusText;
+      throw new ApiError(resp.status, msg);
+    }
+    const cd = resp.headers.get('Content-Disposition') ?? '';
+    const filename = /filename="([^"]+)"/.exec(cd)?.[1] ?? 'minos-querylog';
+    return { blob: await resp.blob(), filename };
   },
   // Distinct list names attributed in the window, for the Docket's filter.
   querylogLists: (hours = 168) => request<string[]>('GET', `/api/querylog/lists?hours=${hours}`),

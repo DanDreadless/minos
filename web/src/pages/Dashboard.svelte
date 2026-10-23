@@ -300,7 +300,7 @@
             items={stats.dnssec.top_domains.map((d) => ({
               label: d.qname,
               count: d.count,
-              href: docketHref({ verdict: 'would_block', qname: d.qname }),
+              href: docketHref({ verdict: 'would_block', domain: d.qname, range: '24h' }),
             }))}
           />
           <p class="sub">
@@ -361,7 +361,7 @@
         items={stats.top_blocked.map((d) => ({
           label: d.qname,
           count: d.count,
-          href: docketHref({ verdict: 'blocked', qname: d.qname }),
+          href: docketHref({ verdict: 'blocked', domain: d.qname, range: '24h' }),
         }))}
       />
     </div>

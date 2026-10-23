@@ -253,7 +253,7 @@ so audit marks are sampled at resolution time, not on every hit.
 judged (a block, a local record, a route), or on a cache hit. Same
 sampling rule as audit marks: it records resolutions, not lookups.
 
-### `GET /api/querylog/history?q=&client=&verdict=&would_block=&list=&dnssec=&before=&limit=`
+### `GET /api/querylog/history?q=&domain=&exclude=&client=&verdict=&qtype=&upstream=&would_block=&list=&dnssec=&since=&before=&limit=`
 
 The persisted log (SQLite), newest first — the full retained history behind
 search and the dashboard drill-downs, not just the in-memory ring. `q`
@@ -270,6 +270,34 @@ reads as an error rather than as "no matches";
 `before` is a unix-millis cursor for "load older"
 pagination; `limit` 1–1000. Returns `[]` in ephemeral mode (there the ring
 already backs both the log and the dashboard, so the UI filters it directly).
+
+Structured filters, all optional and combined with AND:
+
+| Parameter | Matches |
+|---|---|
+| `domain` | one **exact** name (case and a trailing dot ignored) — not its subdomains; use `q` for those |
+| `exclude` | drops names containing any of these substrings, comma-separated (up to 8) |
+| `qtype` | the record type, e.g. `AAAA`, `HTTPS` (case-insensitive) |
+| `upstream` | the resolver that answered, exactly as the `upstream` field shows it |
+| `since` | unix milliseconds; rows older than this are left out (`before` is the upper bound) |
+
+Every value is validated, so a typo is a 400 rather than an empty result:
+`verdict` must be `blocked`, `allowed` or `all`, `qtype` letters and digits,
+`domain` a domain name.
+
+### `GET /api/querylog/export?format=csv|json&limit=&<filters>`
+
+Downloads every row matching the same filters as `/history`, newest first,
+as one file (`Content-Disposition: attachment`) — up to 100,000 rows, or
+`limit`. Read in a single pass, so no rows are lost or repeated the way
+page-by-page reading can at a millisecond boundary. CSV (the default) has
+the columns `time, client, domain, type, verdict, list, rule, upstream,
+duration_ms, would_block_list, would_block_rule, dnssec`, times in UTC;
+a cell a spreadsheet would treat as a formula (starting `=`, `+`, `-` or
+`@` — blocklist rules such as `@@||example.com^` do) gets a leading `'`.
+JSON is an array of entries in the `/history` shape. An export that fails
+part-way aborts the connection, so a short file never looks complete.
+Ephemeral mode exports nothing (header only, or `[]`).
 
 ### `GET /api/querylog/lists?hours=168`
 
