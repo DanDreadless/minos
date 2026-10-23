@@ -14,6 +14,7 @@ package dnsproxy
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -41,19 +42,40 @@ func TestResolverPresetsAnswer(t *testing.T) {
 			if proto != "doh" {
 				t.Fatalf("preset %s is %s; presets are IP-literal DoH by policy", id, proto)
 			}
-			up := newDoHUpstream(addr, nil)
-			q := new(dns.Msg)
-			q.SetQuestion("example.com.", dns.TypeA)
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			resp, err := up.Exchange(ctx, q)
-			if err != nil {
-				t.Fatalf("%s (%s): %v", id, addr, err)
+			// A preset fails only if it fails every attempt: one timeout from a
+			// CI runner's network is noise, and an alert that fires on noise
+			// stops being read. (First run on GitHub: Quad9 timed out once
+			// while its sibling 9.9.9.10 answered.)
+			var lastErr error
+			for attempt := 1; attempt <= presetAttempts; attempt++ {
+				lastErr = presetAnswers(addr)
+				if lastErr == nil {
+					t.Logf("%-20s %s ok (attempt %d)", id, addr, attempt)
+					return
+				}
+				t.Logf("%s attempt %d: %v", id, attempt, lastErr)
+				time.Sleep(2 * time.Second)
 			}
-			if resp.Rcode != dns.RcodeSuccess || len(resp.Answer) == 0 {
-				t.Fatalf("%s (%s): rcode %s, %d answers", id, addr, dns.RcodeToString[resp.Rcode], len(resp.Answer))
-			}
-			t.Logf("%-20s %s ok", id, addr)
+			t.Fatalf("%s (%s) failed %d attempts in a row: %v", id, addr, presetAttempts, lastErr)
 		})
 	}
+}
+
+const presetAttempts = 3
+
+// presetAnswers exchanges one query through a fresh production DoH client.
+func presetAnswers(addr string) error {
+	up := newDoHUpstream(addr, nil)
+	q := new(dns.Msg)
+	q.SetQuestion("example.com.", dns.TypeA)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	resp, err := up.Exchange(ctx, q)
+	if err != nil {
+		return err
+	}
+	if resp.Rcode != dns.RcodeSuccess || len(resp.Answer) == 0 {
+		return fmt.Errorf("rcode %s, %d answers", dns.RcodeToString[resp.Rcode], len(resp.Answer))
+	}
+	return nil
 }
