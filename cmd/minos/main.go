@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"minos/internal/acme"
@@ -40,6 +41,12 @@ var (
 	// only to pick the right upgrade guidance — never to self-update.
 	installMethod = ""
 )
+
+// shutdownSignals start the graceful path (flush the query log, close the
+// listeners). SIGTERM is what systemd and Docker send on stop/restart; with
+// only os.Interrupt caught, every service restart was a hard kill that lost
+// the unflushed query-log batch (up to 30 s / 500 entries).
+var shutdownSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -172,7 +179,7 @@ func serve(args []string) error {
 		return err
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), shutdownSignals...)
 	defer stop()
 	go mgr.Run(ctx)
 	go reg.Run(ctx)
