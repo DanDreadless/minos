@@ -114,6 +114,7 @@ func serve(args []string) error {
 
 	engine := filter.NewEngine()
 	mgr := lists.NewManager(engine, store)
+	mgr.SetVersion(version)
 
 	notifier := notify.New(store)
 	started := time.Now()
