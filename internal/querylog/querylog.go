@@ -144,6 +144,15 @@ type Log struct {
 	// hydration at startup — wait on it; nothing else has to.
 	ready chan struct{}
 
+	// derivedReady reports that the derived tables (derived.go) cover the
+	// whole log, so searches may trust the dictionary. derivedDone closes
+	// when the backfill goroutine exits, ready or not.
+	derivedReady atomic.Bool
+	derivedDone  chan struct{}
+	clientsMu    sync.Mutex
+	clientsAt    time.Time
+	clientsCache []string
+
 	total   atomic.Uint64
 	blocked atomic.Uint64
 	dropped atomic.Uint64
@@ -162,6 +171,8 @@ func Open(opts Options) (*Log, error) {
 		ring:  make([]Entry, opts.RingSize),
 		subs:  make(map[chan Entry]struct{}),
 		ready: make(chan struct{}),
+
+		derivedDone: make(chan struct{}),
 	}
 	l.retention.Store(int64(time.Duration(opts.RetentionDays) * 24 * time.Hour))
 	if opts.MemoryMB <= 0 {
@@ -170,6 +181,7 @@ func Open(opts Options) (*Log, error) {
 	l.memoryMB.Store(int64(opts.MemoryMB))
 	if opts.Ephemeral {
 		close(l.ready)
+		close(l.derivedDone)
 		go l.run()
 		return l, nil
 	}
@@ -189,7 +201,10 @@ func Open(opts Options) (*Log, error) {
 	// Indexes are built off the startup path: on a log of any size the
 	// build takes minutes, and it used to run before the DNS and HTTP
 	// listeners came up — the whole machine silent while it worked.
-	go l.buildIndexes()
+	go func() {
+		l.buildIndexes()
+		l.backfillDerived() // after the indexes: one writer-lock user at a time
+	}()
 	go l.flushLoop()
 	go l.run()
 	return l, nil
@@ -344,6 +359,10 @@ CREATE INDEX IF NOT EXISTS idx_querylog_ts ON querylog(ts);`
 		db.Close()
 		return nil, err
 	}
+	if err := prepareDerived(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return db, nil
 }
 
@@ -423,7 +442,7 @@ func migrateIndexes(db *sql.DB) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	built := false
+	var built []string
 	for _, idx := range []struct{ name, ddl string }{
 		// (client, ts, verdict) rather than (client, ts): the trailing
 		// column is what makes the device summary a covering scan.
@@ -435,6 +454,12 @@ func migrateIndexes(db *sql.DB) error {
 		{"idx_querylog_client_ts_verdict", `CREATE INDEX idx_querylog_client_ts_verdict ON querylog(client, ts, verdict)`},
 		{"idx_querylog_list_ts", `CREATE INDEX idx_querylog_list_ts ON querylog(list, ts)`},
 		{"idx_querylog_audit_ts", `CREATE INDEX idx_querylog_audit_ts ON querylog(audit_list, ts)`},
+		// Serves a search for names the dictionary says are rare: fetch
+		// exactly their rows instead of scanning the log for them. verdict
+		// sits before ts so a verdict-filtered search ("netflix, blocked")
+		// reads only the rows it returns — with (qname, ts) it visited every
+		// netflix row to find 36 blocked ones (2.5 s on the field Pi).
+		{"idx_querylog_qname_verdict_ts", `CREATE INDEX idx_querylog_qname_verdict_ts ON querylog(qname, verdict, ts)`},
 	} {
 		if have[idx.name] {
 			continue
@@ -445,7 +470,7 @@ func migrateIndexes(db *sql.DB) error {
 			return fmt.Errorf("build query log index %s: %w", idx.name, err)
 		}
 		slog.Info("query log index built", "index", idx.name, "took", time.Since(start).Round(time.Millisecond))
-		built = true
+		built = append(built, idx.name)
 	}
 	// idx_querylog_client_ts is a strict prefix of the widened index above,
 	// so once that exists the narrow one earns nothing and costs ~12% of
@@ -457,19 +482,18 @@ func migrateIndexes(db *sql.DB) error {
 		if _, err := db.Exec(`DROP INDEX idx_querylog_client_ts`); err != nil {
 			return fmt.Errorf("drop superseded index idx_querylog_client_ts: %w", err)
 		}
-		built = true
 	}
 	// Fresh indexes get planner statistics once (the query planner falls
 	// back to guesses without sqlite_stat1, which can flip a query onto the
 	// wrong index as the data grows); PRAGMA optimize in the daily prune
-	// keeps them current from then on.
-	if built {
-		slog.Info("analyzing query log (one-time)")
+	// keeps them current from then on. Only the indexes just built: a whole
+	// ANALYZE re-reads every index and took 2m18s on a 13.4M-row Pi log.
+	for _, name := range built {
 		start := time.Now()
-		if _, err := db.Exec(`ANALYZE`); err != nil {
-			return fmt.Errorf("analyze query log: %w", err)
+		if _, err := db.Exec(`ANALYZE ` + name); err != nil {
+			return fmt.Errorf("analyze %s: %w", name, err)
 		}
-		slog.Info("query log analyzed", "took", time.Since(start).Round(time.Millisecond))
+		slog.Info("query log index analyzed", "index", name, "took", time.Since(start).Round(time.Millisecond))
 	}
 	return nil
 }
@@ -562,6 +586,12 @@ func (l *Log) Resize(n int) {
 func (l *Log) Close() error {
 	l.closeOnce.Do(func() { close(l.done) })
 	<-l.dead
+	// The backfill stops between chunks once done is closed; wait for the
+	// chunk in hand (bounded — a stuck one must not turn shutdown into a hang).
+	select {
+	case <-l.derivedDone:
+	case <-time.After(shutdownFlushWait):
+	}
 	// Readers first: the writer holds the file's WAL, and an in-flight
 	// aggregate should be let go of before it is closed under it.
 	var err error
@@ -735,12 +765,21 @@ func (l *Log) writeBatch(batch []Entry) error {
 		return fmt.Errorf("prepare: %w", err)
 	}
 	defer stmt.Close()
+	var lastID int64
 	for _, e := range batch {
-		if _, err := stmt.Exec(e.Time.UnixMilli(), e.Client, e.QName, e.QType,
+		res, err := stmt.Exec(e.Time.UnixMilli(), e.Client, e.QName, e.QType,
 			e.Verdict, e.List, e.Rule, e.Upstream, e.DurationMs,
-			e.AuditList, e.AuditRule, e.DNSSEC); err != nil {
+			e.AuditList, e.AuditRule, e.DNSSEC)
+		if err != nil {
 			return fmt.Errorf("insert: %w", err)
 		}
+		if lastID, err = res.LastInsertId(); err != nil {
+			return fmt.Errorf("insert id: %w", err)
+		}
+	}
+	// Same transaction: the derived tables can never disagree with the log.
+	if err := writeDerivedLive(tx, batch, lastID); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit: %w", err)
@@ -757,6 +796,7 @@ func (l *Log) prune() {
 	if _, err := l.db.Exec(`DELETE FROM querylog WHERE ts < ?`, cutoff); err != nil {
 		slog.Error("query log prune failed", "err", err)
 	}
+	l.pruneDerived(cutoff)
 	// Refresh planner statistics on the daily cadence (SQLite's targeted,
 	// usually-no-op ANALYZE) so index choices stay right as the log grows.
 	if _, err := l.db.Exec(`PRAGMA optimize`); err != nil {
@@ -789,6 +829,69 @@ type HistoryFilter struct {
 	DNSSEC string
 }
 
+// searchPlan is how QueryHistory will answer a free-text search.
+type searchPlan int
+
+const (
+	planScan  searchPlan = iota // newest-first scan with a LIKE filter (common terms)
+	planNames                   // exact rows of the few names that match, via idx_querylog_qname_verdict_ts
+	planEmpty                   // the dictionary proves nothing matches
+)
+
+// namesPlanMaxRows: above this many matching rows, fetching them all and
+// sorting costs more than scanning newest-first until the page is full.
+const namesPlanMaxRows = 50000
+
+// planSearch chooses how to answer f.Search. The dictionary of distinct
+// names (thousands of rows, not millions) says which names match and
+// roughly how often, which turns the two pathological cases — a term that
+// matches nothing, and one that matches only rarely — from a 15 s scan of
+// the whole log into an instant answer or a handful of index lookups.
+func (l *Log) planSearch(ctx context.Context, f HistoryFilter) (searchPlan, []string, error) {
+	// The device and list drill-downs ride their own indexes; the search is
+	// a filter on rows they already bound. And until the dictionary covers
+	// the whole log it cannot prove absence.
+	if !l.derivedReady.Load() || !l.indexed.Load() || len(f.Clients) > 0 || f.List != "" {
+		return planScan, nil, nil
+	}
+	m, err := l.matchNames(ctx, f.Search)
+	if err != nil {
+		return planScan, nil, err
+	}
+	if clientLike(f.Search) {
+		clients, err := l.knownClients(ctx)
+		if err != nil {
+			return planScan, nil, err
+		}
+		for _, c := range clients {
+			if strings.Contains(c, f.Search) {
+				return planScan, nil, nil // a device's own rows are plentiful: scan
+			}
+		}
+	}
+	if m.capped {
+		return planScan, nil, nil
+	}
+	relevant := m.hits
+	switch f.Verdict {
+	case VerdictBlocked:
+		relevant = m.blocked
+	case VerdictAllowed:
+		relevant = m.hits - m.blocked
+	}
+	switch {
+	case len(m.names) == 0 || relevant == 0:
+		return planEmpty, nil, nil
+	case relevant <= namesPlanMaxRows:
+		return planNames, m.names, nil
+	}
+	return planScan, nil, nil
+}
+
+// waitBackfill blocks until the derived-table backfill has finished (tests
+// and the field benchmark).
+func (l *Log) waitBackfill() { <-l.derivedDone }
+
 // QueryHistory returns judged queries newest-first, older than `before`, that
 // match the filter — the Docket's window into the persisted log (so a
 // drill-down shows full history, not just what the ring buffer holds since the
@@ -808,10 +911,29 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 
 	where := []string{"ts < ?"}
 	args := []any{before.UnixMilli()}
+	plan := planScan
 	if f.Search != "" {
-		where = append(where, "(qname LIKE ? ESCAPE '\\' OR client LIKE ? ESCAPE '\\')")
-		like := "%" + escapeLike(f.Search) + "%"
-		args = append(args, like, like)
+		var names []string
+		var err error
+		plan, names, err = l.planSearch(ctx, f)
+		if err != nil {
+			return nil, historyErr(ctx, err)
+		}
+		switch plan {
+		case planEmpty:
+			return []Entry{}, nil
+		case planNames:
+			ph := make([]string, len(names))
+			for i, n := range names {
+				ph[i] = "?"
+				args = append(args, n)
+			}
+			where = append(where, "qname IN ("+strings.Join(ph, ",")+")")
+		default:
+			where = append(where, "(qname LIKE ? ESCAPE '\\' OR client LIKE ? ESCAPE '\\')")
+			like := "%" + escapeLike(f.Search) + "%"
+			args = append(args, like, like)
+		}
 	}
 	if f.Verdict == VerdictBlocked || f.Verdict == VerdictAllowed {
 		where = append(where, "verdict = ?")
@@ -857,7 +979,13 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 			strings.Join(where, " AND ") + ` ORDER BY ts DESC LIMIT ?`
 	case f.List == "":
 		args = append(args, limit)
-		query = `SELECT ` + cols + ` FROM querylog WHERE ` + strings.Join(where, " AND ") +
+		from := "querylog"
+		if plan == planNames {
+			// Name it: left alone, the planner may prefer walking (ts)
+			// newest-first, which is exactly the scan this plan avoids.
+			from = "querylog INDEXED BY idx_querylog_qname_verdict_ts"
+		}
+		query = `SELECT ` + cols + ` FROM ` + from + ` WHERE ` + strings.Join(where, " AND ") +
 			` ORDER BY ts DESC LIMIT ?`
 	default:
 		// A naive `(list = ? OR audit_list = ?)` clause can't ride either
@@ -880,7 +1008,7 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 	// few or no matches it scans the whole table (many seconds on Pi/SD).
 	// Bound it so the UI gets a prompt, explicit error instead of an
 	// apparently-hung "Searching…" — the caller surfaces the message.
-	if f.Search != "" {
+	if f.Search != "" && plan == planScan {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, searchDeadline)
 		defer cancel()
