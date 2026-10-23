@@ -24,6 +24,7 @@ export const copy = {
     lists: { label: 'Blocklists', hint: 'the lists that decide what is blocked' },
     domains: { label: 'Allow & Block', hint: 'your own domains & services' },
     settings: { label: 'Settings', hint: 'resolvers, filtering, notifications…' },
+    local: { label: 'Local DNS', hint: 'names on your own network' },
     logs: { label: 'Logs', hint: "Minos's own activity" },
     logsAlert: 'new warnings or errors',
   },
@@ -285,6 +286,7 @@ export const copy = {
     subtitle: 'the lists Minos blocks from, kept up to date automatically',
     empty: 'No blocklists configured. Add one below.',
     refreshAll: 'Refresh all lists',
+    refreshEvery: 'Check for updates every',
     refreshing: 'Refreshing…',
     addTitle: 'Add a list',
     allowBadge: 'allowlist',
@@ -531,6 +533,20 @@ export const copy = {
 
   settings: {
     title: 'Settings',
+    tabs: [
+      { key: 'dns', label: 'DNS' },
+      { key: 'filtering', label: 'Filtering' },
+      { key: 'notifications', label: 'Notifications' },
+      { key: 'discovery', label: 'Device discovery' },
+      { key: 'access', label: 'Access & security' },
+      { key: 'system', label: 'System' },
+      { key: 'backup', label: 'Backup & import' },
+    ] as const,
+    logLevelTitle: 'Application log',
+    logLevelHint: 'how much Minos records about its own activity',
+    logLevelNote:
+      'Applies at once, to the Logs page and the system journal. Debug records every query — use it briefly, when chasing a problem.',
+    logLevelLink: 'Open Logs',
     save: 'Save changes',
     saved: 'Settings saved and applied — no restart needed.',
     upstreamsTitle: 'Upstream resolvers',

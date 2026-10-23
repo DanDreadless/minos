@@ -42,8 +42,8 @@
         >
       </li>
       <li>{copy.setup.step2} <a href="#/lists">{copy.setup.step2Link}</a></li>
-      <li>{copy.setup.step3} <a href="#/settings">{copy.setup.step3Link}</a></li>
-      <li>{copy.setup.step4} <a href="#/settings">{copy.setup.step4Link}</a></li>
+      <li>{copy.setup.step3} <a href="#/settings?tab=dns">{copy.setup.step3Link}</a></li>
+      <li>{copy.setup.step4} <a href="#/settings?tab=notifications">{copy.setup.step4Link}</a></li>
     </ol>
   </section>
 {/if}

@@ -9,6 +9,7 @@ export type Route =
   | 'device'
   | 'lists'
   | 'domains'
+  | 'local'
   | 'logs'
   | 'settings';
 
@@ -35,6 +36,8 @@ function parse(): Route {
       return 'settings';
     case '#/logs':
       return 'logs';
+    case '#/local':
+      return 'local';
     default:
       return 'dashboard';
   }
@@ -94,6 +97,7 @@ export const hrefFor: Record<Route, string> = {
   domains: '#/domains',
   settings: '#/settings',
   logs: '#/logs',
+  local: '#/local',
 };
 
 // deviceHref links to a device's detail page. key is the device's MAC when

@@ -11,6 +11,7 @@
   import Devices from './pages/Devices.svelte';
   import QueryLog from './pages/QueryLog.svelte';
   import AllowBlock from './pages/AllowBlock.svelte';
+  import LocalDNS from './pages/LocalDNS.svelte';
   import Logs from './pages/Logs.svelte';
   import Settings from './pages/Settings.svelte';
 
@@ -115,6 +116,8 @@
         <Blocklists />
       {:else if $route === 'domains'}
         <AllowBlock />
+      {:else if $route === 'local'}
+        <LocalDNS />
       {:else if $route === 'logs'}
         <Logs />
       {:else if $route === 'settings'}

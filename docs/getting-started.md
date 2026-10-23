@@ -383,7 +383,8 @@ Open `http://<host>:8080`. Six pages, one per concern:
   in the page settings. Only exact search hostnames are rewritten —
   Gmail, Maps, and other subdomains are untouched.
 - **Blocklists** — add, enable/disable, or remove list
-  subscriptions and refresh them on demand, with per-list rule counts and
+  subscriptions, refresh them on demand or set how often they update
+  ("Check for updates every", default 24h), with per-list rule counts and
   fetch errors. The **Choose your blocklists** catalog offers curated,
   verified lists (Hagezi, OISD, StevenBlack, threat feeds) in four plain
   tiers — Balanced, Strict, Security, Family (see "Choosing blocklists"
@@ -401,17 +402,21 @@ Open `http://<host>:8080`. Six pages, one per concern:
   **group** on the Devices page instead — a group's blocked services apply
   to its members and obey the group's schedule.
 - **Allow & Block** (your own allowed and blocked domains) — manage both lists, plus a
-  "judge a domain" tool that shows exactly which rule decides any name's
-  fate before you ever query it. The **Allowed services** card fixes a
+  **Check a domain** tool that shows exactly which rule decides any name
+  before you ever query it. The **Allowed services** card fixes a
   streaming app a blocklist broke with one checkbox: allowing Netflix,
   Disney+, Prime Video (or any catalog service) always allows every domain
   it needs — including the playback and sign-in hosts on shared CDNs that
   the blocked-services bundles deliberately leave out. An allowed domain beats any
   blocked domain or blocklist; to allow a service only for certain devices, set
-  it on a group on the Devices page. The **Local DNS** card lives here too:
+  it on a group on the Devices page.
+- **Local DNS** — names on your own network. **Local records** are
   A/AAAA/CNAME records (wildcards like `*.home.lab` included) that Minos
   answers itself — they beat the blocklists, never leave your network, and
   address records answer reverse (PTR) lookups automatically.
+  **Conditional forwarding** sends chosen domains to another resolver —
+  typically `lan` or your reverse zone to the router, so DHCP hostnames
+  keep resolving.
 - **Logs** — what Minos itself is doing: list downloads, resolver
   failures, certificate renewals, errors. New lines stream in live; filter
   by level (everything, info and up, warnings and errors, errors only) and
@@ -427,12 +432,10 @@ Open `http://<host>:8080`. Six pages, one per concern:
   `token=`/`key=` parameters inside URLs, are replaced before anything is
   written — in the journal too.
 - **Settings** — everything below is editable here and applies immediately,
-  no restart: upstream resolvers and their order, conditional forwarding
-  (send `lan` or your reverse zone to the router so DHCP hostnames keep
-  resolving), the response cache (repeat queries answered from memory —
+  no restart: upstream resolvers and their order, the response cache (repeat queries answered from memory —
   the dashboard shows the hit rate), blocking mode and TTL, network-wide
   Safe Search, the Firefox DoH canary and the iCloud Private Relay block
-  (see Bypass resistance below), list refresh interval, query-log retention and buffer
+  (see Bypass resistance below), query-log retention and buffer
   size, the API token, a one-click YAML config backup, and an opt-in
   daily update check (a "vX.Y.Z available" link appears in the sidebar
   when a newer release exists — nothing is sent beyond the request).

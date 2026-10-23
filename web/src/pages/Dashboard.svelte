@@ -246,7 +246,7 @@
     {#if !tokenSet}
       <p class="sub">
         {copy.host.tokenHint}
-        <a href="#/settings">{copy.host.tokenAction}</a>
+        <a href="#/settings?tab=access">{copy.host.tokenAction}</a>
       </p>
     {/if}
   </section>
