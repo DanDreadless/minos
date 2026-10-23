@@ -688,6 +688,9 @@ export const copy = {
     firefoxCanary: 'Keep Firefox on this resolver',
     firefoxCanaryHint:
       "Answers Firefox's use-application-dns.net check with NXDOMAIN — Mozilla's documented signal that this network filters DNS — so Firefox keeps using Minos instead of switching itself to its built-in DNS over HTTPS. Untick to let Firefox decide.",
+    rebind: 'Protect against DNS rebinding',
+    rebindHint:
+      'Refuses answers that point a public name at an address on your own network — the trick a malicious web page uses to reach your router or NAS from inside your browser. Allowed domains (for example plex.direct, which Plex needs), local records, conditional forwarding and names like .lan are exempt. Off by default.',
     privateRelay: 'Block iCloud Private Relay',
     privateRelayHint:
       'Denies the mask.icloud.com hostnames Apple documents for exactly this. Apple devices show "Private Relay is unavailable on this network" and use normal DNS, so Minos can filter their queries. A real privacy trade — off by default.',

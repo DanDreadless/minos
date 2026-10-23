@@ -194,6 +194,7 @@ export interface ConfigView {
     local_ttl: number;
     routes: Route[];
     allow_firefox_doh: boolean;
+    rebind_protection: boolean;
     dnssec: 'off' | 'permissive' | 'enforce';
   };
   blocking: {
@@ -238,6 +239,7 @@ export interface SettingsUpdate {
     local_ttl?: number;
     routes?: Route[];
     allow_firefox_doh?: boolean;
+    rebind_protection?: boolean;
     dnssec?: string;
   };
   blocking?: {

@@ -482,6 +482,15 @@ export const docs: Section[] = [
         where: 'Settings → Filtering',
       },
       {
+        label: 'Protect against DNS rebinding',
+        key: 'dns.rebind_protection',
+        default: 'off',
+        effect:
+          'Refuses answers that point a public name at an address on your own network (192.168.x.x, 10.x.x.x, fd00::/8, loopback) — the trick a malicious web page uses to reach your router or NAS. Allowed domains (e.g. plex.direct for Plex), local records, conditional forwarding and names like .lan or .home.arpa are exempt. Refusals show in the Query Log under the list "rebinding".',
+        applies: 'live',
+        where: 'Settings → Filtering',
+      },
+      {
         label: 'Block iCloud Private Relay',
         key: 'blocking.block_icloud_private_relay',
         default: 'off',
