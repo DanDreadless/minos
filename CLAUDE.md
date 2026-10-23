@@ -803,3 +803,10 @@ This is security software; hold it to that standard.
   (`healUpstreams`: dot+https URL → doh, other invalid entries dropped,
   defaults if none survive) so an upgrade never bricks a config the old
   binary booted on.
+- **A custom `http.Transport` disables HTTP/2** unless `ForceAttemptHTTP2`
+  is set (field bug, v0.21.2): setting `TLSClientConfig` alone silently
+  pinned every DoH upstream to HTTP/1.1, so both Quad9 presets (HTTP/2-only,
+  505 to HTTP/1.1) could never answer. `newDoHUpstream` forces it and pings
+  idle connections; `TestDoHUpstreamSpeaksHTTP2` uses an h2-only stub. Verify
+  presets with `go test -tags presets ./internal/dnsproxy` (weekly in CI),
+  never curl — curl's negotiation is not ours.

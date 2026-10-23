@@ -3,17 +3,17 @@
 // Every entry is DoH over an IP literal, never a hostname: a DNS server must
 // not have to resolve its own resolver's name before it can forward anything
 // (the same reasoning behind the default upstream). That only works when the
-// provider's TLS certificate carries the IP as a SAN. Every address below
-// except Quad9 was verified to complete a validated TLS handshake by IP;
-// Quad9 is included on the maintainer's confirmation that it validates on
-// their network (its IPs were unreachable from the build box, so it could
-// not be checked there — a reachability block, not a cert failure).
-// Providers whose certs don't cover their IPs (e.g. Mullvad →
-// WRONG_PRINCIPAL) are deliberately omitted; a preset that fails validation
-// would silently break resolution.
+// provider's TLS certificate carries the IP as a SAN. Providers whose certs
+// don't cover their IPs (e.g. Mullvad → WRONG_PRINCIPAL) are deliberately
+// omitted; a preset that fails validation would silently break resolution.
 //
-// To add a provider: confirm `curl https://<ip>/dns-query` validates its cert
-// (curl exit 0, no SSL error) before listing it here.
+// Every entry is exercised weekly by a real query through the production DoH
+// transport: internal/dnsproxy/presets_test.go (build tag `presets`). Verify
+// with that, not curl — curl negotiates HTTP/2 differently, which is how both
+// Quad9 presets (HTTP/2-only) shipped while Minos still spoke HTTP/1.1.
+//
+// To add a provider: add it here, then run
+//   go test -tags presets -v ./internal/dnsproxy -run TestResolverPresetsAnswer
 
 import type { Upstream } from './api';
 

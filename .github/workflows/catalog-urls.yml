@@ -17,6 +17,8 @@ on:
   push:
     paths:
       - "web/src/lib/blocklists.ts"
+      - "web/src/lib/resolvers.ts"
+      - "internal/dnsproxy/presets_test.go"
       - "internal/lists/catalog_test.go"
       - ".github/workflows/catalog-urls.yml"
 
@@ -33,3 +35,8 @@ jobs:
       # go-test timeout is raised rather than left to bite on a slow day.
       - name: verify catalog lists compile
         run: go test -tags catalog -timeout 20m -v ./internal/lists -run TestCatalogListsCompile
+      # The resolver presets are one-click upstreams; one that cannot answer
+      # breaks resolution for whoever picks it. Real queries, real transport.
+      - name: verify resolver presets answer
+        if: success() || failure()
+        run: go test -tags presets -timeout 5m -v ./internal/dnsproxy -run TestResolverPresetsAnswer

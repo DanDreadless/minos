@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -59,17 +60,7 @@ func NewUpstream(u config.Upstream) (Upstream, error) {
 			},
 		}, nil
 	case "doh":
-		return &dohUpstream{
-			url: u.Address,
-			client: &http.Client{
-				Timeout: upstreamTimeout,
-				Transport: &http.Transport{
-					TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
-					MaxIdleConnsPerHost: 4,
-					IdleConnTimeout:     90 * time.Second,
-				},
-			},
-		}, nil
+		return newDoHUpstream(u.Address, nil), nil
 	default:
 		return nil, fmt.Errorf("unknown upstream protocol %q", u.Protocol)
 	}
@@ -101,6 +92,34 @@ func (c *classicUpstream) Exchange(ctx context.Context, msg *dns.Msg) (*dns.Msg,
 		return nil, err
 	}
 	return resp, nil
+}
+
+// newDoHUpstream builds a DoH client. roots overrides the system trust store
+// (tests only; nil in production).
+//
+// HTTP/2 must be forced: a Transport with a custom TLSClientConfig silently
+// disables Go's automatic HTTP/2, and that shipped — every DoH upstream spoke
+// HTTP/1.1, so Quad9 (which answers HTTP/1.1 with 505) could never work and
+// the rest lost request multiplexing. The pings retire a connection a NAT or
+// firewall dropped silently, instead of stalling queries on it until the
+// exchange timeout.
+func newDoHUpstream(url string, roots *x509.CertPool) *dohUpstream {
+	return &dohUpstream{
+		url: url,
+		client: &http.Client{
+			Timeout: upstreamTimeout,
+			Transport: &http.Transport{
+				TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots},
+				ForceAttemptHTTP2:   true,
+				MaxIdleConnsPerHost: 4,
+				IdleConnTimeout:     90 * time.Second,
+				HTTP2: &http.HTTP2Config{
+					SendPingTimeout: 30 * time.Second,
+					PingTimeout:     5 * time.Second,
+				},
+			},
+		},
+	}
 }
 
 // dohUpstream speaks RFC 8484 (POST, application/dns-message).
