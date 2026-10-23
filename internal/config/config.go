@@ -336,6 +336,11 @@ type QueryLogConfig struct {
 	DBPath        string `yaml:"db_path"`
 	RingSize      int    `yaml:"ring_size"`
 	RetentionDays int    `yaml:"retention_days"`
+	// MemoryMB caps the RAM SQLite keeps for the query log — page caches,
+	// sorts and aggregates together; larger work spills to a temp file.
+	// 0 = the built-in default (32 MB). Applies live. Additive key: an
+	// older Minos ignores it.
+	MemoryMB int `yaml:"memory_mb,omitempty"`
 }
 
 type APIConfig struct {
@@ -906,6 +911,9 @@ func (c *Config) Validate() error {
 	}
 	if c.QueryLog.RingSize <= 0 {
 		return fmt.Errorf("querylog.ring_size: must be positive, got %d", c.QueryLog.RingSize)
+	}
+	if m := c.QueryLog.MemoryMB; m != 0 && (m < 8 || m > 4096) {
+		return fmt.Errorf("querylog.memory_mb: must be 8–4096 (or 0 for the default), got %d", m)
 	}
 	if c.QueryLog.RetentionDays < 1 {
 		return fmt.Errorf("querylog.retention_days: must be at least 1, got %d", c.QueryLog.RetentionDays)

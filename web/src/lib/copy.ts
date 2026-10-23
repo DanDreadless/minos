@@ -505,6 +505,10 @@ export const copy = {
     querylogTitle: 'Query log',
     retention: 'Keep history (days)',
     ringSize: 'Live buffer size (entries)',
+    memoryMB: 'Query log memory limit (MB)',
+    memoryMBHint:
+      'The most RAM the query log database keeps for caching and for working out searches and statistics. Work that needs more spills to a temporary file on disk — slower, but it never takes more memory. History itself always lives on disk. Applies immediately.',
+    procRSS: (rss: string) => `Minos is using ${rss} of memory in total right now.`,
     ephemeralNote: 'Disk logging is off (ephemeral mode) — set in the config file.',
     dbPathNote: (p: string) => `History is stored in ${p}.`,
     apiTitle: 'API access',

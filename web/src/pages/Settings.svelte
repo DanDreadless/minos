@@ -10,7 +10,7 @@
     type UpstreamHealth,
   } from '../lib/api';
   import { copy } from '../lib/copy';
-  import { fmtLogTime } from '../lib/format';
+  import { fmtBytes, fmtLogTime } from '../lib/format';
   import { resolverPresets, matchPreset } from '../lib/resolvers';
   import { notify, notifyError } from '../lib/toast';
 
@@ -27,6 +27,9 @@
   let refreshInterval = '24h';
   let retentionDays = 90;
   let ringSize = 10000;
+  let memoryMB = 32;
+  // Minos's own resident memory, so the cap can be judged against reality.
+  let procRSS: number | undefined;
   let newToken = '';
   let cacheEnabled = true;
   let cacheMaxEntries = 10000;
@@ -64,6 +67,7 @@
     refreshInterval = c.lists.refresh_interval;
     retentionDays = c.querylog.retention_days;
     ringSize = c.querylog.ring_size;
+    memoryMB = c.querylog.memory_mb;
     cacheEnabled = c.dns.cache.enabled;
     cacheMaxEntries = c.dns.cache.max_entries;
     cacheMinTTL = c.dns.cache.min_ttl;
@@ -127,7 +131,7 @@
       },
     });
   const saveQuerylog = () =>
-    save({ querylog: { retention_days: retentionDays, ring_size: ringSize } });
+    save({ querylog: { retention_days: retentionDays, ring_size: ringSize, memory_mb: memoryMB } });
 
   function addUpstream(): void {
     upstreams = [...upstreams, { address: '', protocol: 'doh' }];
@@ -336,6 +340,10 @@
   onMount(() => {
     void load();
     void loadUpstreamHealth();
+    void api
+      .host()
+      .then((h) => (procRSS = h.sample?.proc_rss))
+      .catch(() => {});
     healthTimer = setInterval(loadUpstreamHealth, 10000);
   });
 
@@ -526,6 +534,16 @@
       <span>{copy.settings.ringSize}</span>
       <input type="number" min="100" max="1000000" step="100" bind:value={ringSize} />
     </label>
+    {#if !cfg.querylog.ephemeral}
+      <label class="field">
+        <span>{copy.settings.memoryMB}</span>
+        <input type="number" min="8" max="4096" step="8" bind:value={memoryMB} />
+        <small>{copy.settings.memoryMBHint}</small>
+      </label>
+      {#if procRSS !== undefined}
+        <p class="note">{copy.settings.procRSS(fmtBytes(procRSS))}</p>
+      {/if}
+    {/if}
     <div class="section-actions">
       <button class="primary" on:click={saveQuerylog}>{copy.settings.save}</button>
     </div>

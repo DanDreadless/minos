@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"minos/internal/config"
+	"minos/internal/querylog"
 )
 
 // configView is the settings payload the UI reads. The API token is never
@@ -43,6 +44,7 @@ type configView struct {
 		DBPath        string `json:"db_path"`
 		RingSize      int    `json:"ring_size"`
 		RetentionDays int    `json:"retention_days"`
+		MemoryMB      int    `json:"memory_mb"`
 	} `json:"querylog"`
 	API struct {
 		Listen   string `json:"listen"`
@@ -88,6 +90,10 @@ func viewOf(c *config.Config) configView {
 	v.QueryLog.DBPath = c.QueryLog.DBPath
 	v.QueryLog.RingSize = c.QueryLog.RingSize
 	v.QueryLog.RetentionDays = c.QueryLog.RetentionDays
+	v.QueryLog.MemoryMB = c.QueryLog.MemoryMB
+	if v.QueryLog.MemoryMB == 0 {
+		v.QueryLog.MemoryMB = querylog.DefaultMemoryMB
+	}
 	v.API.Listen = c.API.Listen
 	v.API.TokenSet = c.API.Token != ""
 	v.UpdateCheck = c.UpdateCheck
@@ -146,6 +152,7 @@ type settingsUpdate struct {
 	QueryLog *struct {
 		RingSize      *int `json:"ring_size"`
 		RetentionDays *int `json:"retention_days"`
+		MemoryMB      *int `json:"memory_mb"`
 	} `json:"querylog"`
 	API *struct {
 		Token *string `json:"token"`
@@ -244,6 +251,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			if upd.QueryLog.RetentionDays != nil {
 				c.QueryLog.RetentionDays = *upd.QueryLog.RetentionDays
+			}
+			if upd.QueryLog.MemoryMB != nil {
+				c.QueryLog.MemoryMB = *upd.QueryLog.MemoryMB
 			}
 		}
 		if upd.API != nil && upd.API.Token != nil {
