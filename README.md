@@ -120,6 +120,7 @@ minos status        # counters, rules, pause state
 minos pause 5m      # pause blocking for five minutes
 minos resume        # resume blocking
 minos import pihole /etc/pihole   # bring your Pi-hole settings with you
+minos logs -f       # follow Minos's own log (also on the Logs page)
 ```
 
 For local development without root, set `dns.listen: ":5353"` in the config

@@ -501,6 +501,44 @@ added plus a `skipped` list of anything that couldn't map:
 [monitoring section](getting-started.md#monitoring-with-prometheus--grafana)
 and the ready-made dashboard in `deploy/grafana-dashboard.json`.
 
+## Application log
+
+Minos's own log — the lines that also go to the journal — held in memory
+(the newest 2,000, from this run) with secrets redacted: attributes named
+like credentials (`token`, `password`, `key`, `auth`, `secret`, …) become
+`[redacted]`, and URL passwords and `token=`/`key=` query values become
+`xxxxx`. The journal output is redacted the same way.
+
+### `GET /api/logs?level=&q=&after=`
+
+```json
+{"level": "info",
+ "records": [{"seq": 41, "time": "2026-10-23T18:15:28.041+01:00", "level": "warn",
+              "message": "list fetch failed",
+              "attrs": [{"key": "list", "value": "URLhaus"}, {"key": "err", "value": "…"}]}],
+ "alert_seq": 41}
+```
+
+Records oldest first. `level` narrows to that level and above; `q` matches
+the message or any `key=value`; `after` returns only records with a larger
+`seq` (for polling — `minos logs -f` uses it). The response's `level` is
+what is being recorded now; `alert_seq` is the newest warning/error (also
+`log_alert_seq` on `/api/status`, which the UI's menu dot compares with the
+last one seen). Sequence numbers restart at 1 when Minos restarts.
+
+### `GET /api/logs/stream` (WebSocket)
+
+Each new record as a JSON frame, same shape.
+
+### `GET /api/logs/download?level=&q=`
+
+The held records as a text file (`Content-Disposition: attachment`), one
+journal-style line each.
+
+The level to record is `log_level` in `PUT /api/config` (`debug`, `info`,
+`warn`, `error`), applied live. It is saved in the config, and wins over
+the `-log-level` flag's default but not over a flag passed explicitly.
+
 ## Notifications (outbound)
 
 Configured via `notifications` in the config or Settings; each event is

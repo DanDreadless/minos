@@ -21,6 +21,7 @@ import (
 
 	"minos/internal/acme"
 	"minos/internal/api"
+	"minos/internal/applog"
 	"minos/internal/clients"
 	"minos/internal/config"
 	"minos/internal/dnsproxy"
@@ -72,11 +73,13 @@ func run(args []string) error {
 		return clientResume(args)
 	case "import":
 		return runImport(args)
+	case "logs":
+		return clientLogs(args)
 	case "version":
 		fmt.Println("minos", version)
 		return nil
 	default:
-		return fmt.Errorf("unknown command %q (try: serve, status, pause, resume, import, version)", cmd)
+		return fmt.Errorf("unknown command %q (try: serve, status, pause, resume, import, logs, version)", cmd)
 	}
 }
 
@@ -94,13 +97,31 @@ func serve(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	setupLogging(*logLevel)
+	levelFlagSet := false
+	fs.Visit(func(f *flag.Flag) { levelFlagSet = levelFlagSet || f.Name == "log-level" })
+	logRing, logLevelVar := setupLogging(*logLevel)
 
 	store, err := config.Open(*cfgPath)
 	if err != nil {
 		return err
 	}
 	cfg := store.Get()
+	// The level saved from the UI wins over the flag's default, but not over
+	// a -log-level passed explicitly (someone debugging from the shell).
+	applyLogLevel := func(c *config.Config) {
+		if c.LogLevel == "" {
+			return
+		}
+		if l, err := applog.ParseLevel(c.LogLevel); err == nil {
+			logLevelVar.Set(l)
+		}
+	}
+	if !levelFlagSet {
+		applyLogLevel(cfg)
+	}
+	// Later, only a change to log_level itself applies — saving some other
+	// setting must not undo an explicit -log-level.
+	lastLogLevel := cfg.LogLevel
 
 	qlog, err := querylog.Open(querylog.Options{
 		RingSize:      cfg.QueryLog.RingSize,
@@ -184,6 +205,10 @@ func serve(args []string) error {
 		qlog.Resize(c.QueryLog.RingSize)
 		qlog.SetMemoryMB(c.QueryLog.MemoryMB)
 		reg.ApplyConfig(c)
+		if c.LogLevel != lastLogLevel {
+			lastLogLevel = c.LogLevel
+			applyLogLevel(c)
+		}
 	})
 	if err := proxy.Start(); err != nil {
 		return err
@@ -225,6 +250,7 @@ func serve(args []string) error {
 
 	apiSrv := api.New(engine, qlog, store, mgr, reg, proxy, checker, hostStats, static, version, installMethod)
 	apiSrv.SetNotifier(notifier)
+	apiSrv.SetAppLog(logRing, logLevelVar)
 	httpSrv := &http.Server{
 		Addr:              cfg.API.Listen,
 		Handler:           apiSrv.Router(),
@@ -337,19 +363,18 @@ func runImport(args []string) error {
 	return nil
 }
 
-func setupLogging(level string) {
-	var l slog.Level
-	switch level {
-	case "debug":
-		l = slog.LevelDebug
-	case "warn":
-		l = slog.LevelWarn
-	case "error":
-		l = slog.LevelError
-	default:
-		l = slog.LevelInfo
+// setupLogging installs the default logger: text to stderr (the journal,
+// `docker logs`) teed into the ring the UI's Logs page reads, under one
+// live-changeable level.
+func setupLogging(level string) (*applog.Ring, *slog.LevelVar) {
+	lv := new(slog.LevelVar)
+	if l, err := applog.ParseLevel(level); err == nil {
+		lv.Set(l)
 	}
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: l})))
+	ring := applog.NewRing(applog.DefaultSize)
+	inner := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lv, ReplaceAttr: applog.ReplaceAttr})
+	slog.SetDefault(slog.New(applog.NewHandler(inner, ring, lv)))
+	return ring, lv
 }
 
 // --- client subcommands: talk to a running instance over its API ---

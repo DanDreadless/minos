@@ -2,6 +2,7 @@
   import { onDestroy } from 'svelte';
   import type { Status } from '../api';
   import { copy } from '../copy';
+  import { bootOf, hasUnseen, logSeen } from '../logseen';
   import { hrefFor, route, type Route } from '../router';
 
   export let status: Status | null;
@@ -12,8 +13,14 @@
     { key: 'devices', ...copy.nav.devices },
     { key: 'lists', ...copy.nav.lists },
     { key: 'domains', ...copy.nav.domains },
+    { key: 'logs', ...copy.nav.logs },
     { key: 'settings', ...copy.nav.settings },
   ];
+
+  // A dot on Logs while there is a warning or error the user hasn't seen.
+  $: logAlert = status
+    ? hasUnseen(status.log_alert_seq ?? 0, bootOf(status.uptime_seconds), $logSeen)
+    : false;
 
   // The drawer is a mobile-only concern: on desktop the CSS keeps <nav>
   // static and hides the burger/backdrop, so `open` is inert there.
@@ -66,7 +73,13 @@
           title={item.hint}
           on:click={closeDrawer}
         >
-          <span class="label">{item.label}</span>
+          <span class="label"
+            >{item.label}{#if item.key === 'logs' && logAlert}<span
+                class="alert-dot"
+                title={copy.nav.logsAlert}
+                aria-label={copy.nav.logsAlert}
+              ></span>{/if}</span
+          >
           <span class="hint">{item.hint}</span>
         </a>
       </li>
@@ -97,6 +110,16 @@
 </nav>
 
 <style>
+  .alert-dot {
+    display: inline-block;
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-left: 0.4rem;
+    border-radius: 50%;
+    background: var(--blocked);
+    vertical-align: middle;
+  }
+
   nav {
     display: flex;
     flex-direction: column;

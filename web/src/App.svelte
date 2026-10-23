@@ -11,6 +11,7 @@
   import Devices from './pages/Devices.svelte';
   import Docket from './pages/Docket.svelte';
   import Judgments from './pages/Judgments.svelte';
+  import Logs from './pages/Logs.svelte';
   import Settings from './pages/Settings.svelte';
 
   let status: Status | null = null;
@@ -69,7 +70,7 @@
   <aside>
     <Nav {status} />
   </aside>
-  <main class:fill={!needsToken && $route === 'querylog'}>
+  <main class:fill={!needsToken && ($route === 'querylog' || $route === 'logs')}>
     {#if needsToken}
       <section class="token-gate">
         <img class="gate-logo" src="/logo.png" alt="" />
@@ -114,6 +115,8 @@
         <Codex />
       {:else if $route === 'domains'}
         <Judgments />
+      {:else if $route === 'logs'}
+        <Logs />
       {:else if $route === 'settings'}
         <Settings />
       {/if}
