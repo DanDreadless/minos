@@ -185,8 +185,10 @@
     }
   }
 
-  function memberCount(name: string): number {
-    return devices.filter((d) => d.group === name).length;
+  // devices is a parameter so the template re-runs this when it changes
+  // (Svelte only tracks variables named in the template expression).
+  function memberCount(name: string, all: Device[]): number {
+    return all.filter((d) => d.group === name).length;
   }
 
   onMount(() => {
@@ -318,7 +320,7 @@
     <div class="card group">
       <div class="group-head">
         <span class="group-name">{g.name}</span>
-        <span class="members">{memberCount(g.name)} device(s)</span>
+        <span class="members">{memberCount(g.name, devices)} device(s)</span>
         <select value={g.mode} on:change={(e) => setGroupMode(g, e)}>
           <option value="filter">{copy.devices.modeFilter}</option>
           <option value="bypass">{copy.devices.modeBypass}</option>

@@ -23,10 +23,14 @@
   // blocked services, group overlays, and device blocks.
   $: builtinStats = (listStats?.lists ?? []).filter((s) => !lists.some((l) => l.name === s.list));
 
-  function builtinLabel(name: string): string {
+  // services is a parameter, not the closure's catalog: the catalog loads
+  // asynchronously, and Svelte only re-runs a template expression when a
+  // variable named in it changes — read from closure, a label rendered
+  // before the catalog arrived stayed the raw "service:<id>" for good.
+  function builtinLabel(name: string, services: Service[]): string {
     if (name.startsWith('service:')) {
       const raw = name.slice('service:'.length);
-      const svc = catalog.find((c) => c.name === raw);
+      const svc = services.find((c) => c.name === raw);
       return copy.lists.statService(svc ? svc.label : raw);
     }
     if (name.startsWith('group:')) return copy.lists.statGroup(name.slice('group:'.length));
@@ -328,7 +332,7 @@
 {#if builtinStats.length > 0}
   <p class="builtin">
     {copy.lists.builtinStatsTitle}
-    {#each builtinStats as s, i (s.list)}{i > 0 ? ' · ' : ' '}{builtinLabel(s.list)}:
+    {#each builtinStats as s, i (s.list)}{i > 0 ? ' · ' : ' '}{builtinLabel(s.list, catalog)}:
       <a class="count-link" href={docketHref({ list: s.list })} title={copy.lists.blocksLinkTitle}
         >{s.count.toLocaleString()}</a
       >{/each}
