@@ -144,6 +144,17 @@ export const copy = {
         indeterminate: 'No DNSSEC records came back, so nothing could be checked.',
       })[s] ?? s,
     deviceScope: 'device', // prefixes the drilled-in device's IP(s) chip
+    // What the shown rows are, beside the count — a partial view must never
+    // pass for a complete one.
+    scopeHistory: 'full history',
+    scopeRecentSearching: 'recent queries only — searching full history…',
+    scopeRecentFailed: 'recent queries only',
+    scopeRecent: 'recent queries only',
+    searching: 'Searching the full history…',
+    noMatches: 'No queries match these filters in the retained history.',
+    noRecentMatches: 'No recent queries match.',
+    searchFailed: (error: string, showingRecent: boolean) =>
+      `The full-history search did not finish: ${error}${showingRecent ? ' Showing only matches among recent queries.' : ''}`,
     live: 'live',
   },
 

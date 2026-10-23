@@ -339,7 +339,12 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) headers['X-Api-Token'] = token;
@@ -348,6 +353,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
   });
   const data: unknown = await resp.json().catch(() => ({}));
   if (!resp.ok) {
@@ -417,16 +423,21 @@ export const api = {
   check: (domain: string) =>
     request<CheckResult>('GET', `/api/check?domain=${encodeURIComponent(domain)}`),
   querylog: (limit = 100) => request<LogEntry[]>('GET', `/api/querylog?limit=${limit}`),
-  querylogHistory: (params: {
-    q?: string;
-    client?: string; // exact address(es), comma-separated for a multi-IP device
-    verdict?: string;
-    would_block?: boolean;
-    list?: string; // exact list name (enforcing or audit attribution)
-    dnssec?: string; // one validation outcome, for the Tribunal drill-down
-    before?: number;
-    limit?: number;
-  }) => {
+  // signal lets a superseded search be abandoned; the server sees the
+  // disconnect and interrupts the SQLite scan rather than finishing it.
+  querylogHistory: (
+    params: {
+      q?: string;
+      client?: string; // exact address(es), comma-separated for a multi-IP device
+      verdict?: string;
+      would_block?: boolean;
+      list?: string; // exact list name (enforcing or audit attribution)
+      dnssec?: string; // one validation outcome, for the Tribunal drill-down
+      before?: number;
+      limit?: number;
+    },
+    signal?: AbortSignal,
+  ) => {
     const sp = new URLSearchParams();
     if (params.q) sp.set('q', params.q);
     if (params.client) sp.set('client', params.client);
@@ -436,7 +447,7 @@ export const api = {
     if (params.dnssec) sp.set('dnssec', params.dnssec);
     if (params.before) sp.set('before', String(params.before));
     sp.set('limit', String(params.limit ?? 200));
-    return request<LogEntry[]>('GET', `/api/querylog/history?${sp.toString()}`);
+    return request<LogEntry[]>('GET', `/api/querylog/history?${sp.toString()}`, undefined, signal);
   },
   // Distinct list names attributed in the window, for the Docket's filter.
   querylogLists: (hours = 168) => request<string[]>('GET', `/api/querylog/lists?hours=${hours}`),
