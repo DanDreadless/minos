@@ -113,7 +113,7 @@ func (c *Checker) check(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	req.Header.Set("User-Agent", "minos-dns/"+c.version)
+	req.Header.Set("User-Agent", "Minos/"+c.version+" (+https://github.com/DanDreadless/minos)")
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := c.client.Do(req)
 	if err != nil {

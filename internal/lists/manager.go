@@ -20,7 +20,11 @@ const (
 	// attacker-controllable; never trust Content-Length.
 	maxListBytes = 64 << 20 // 64 MB
 	fetchTimeout = 2 * time.Minute
-	userAgent    = "minos-dns/0.1 (+https://github.com/minos)"
+	// userAgent is the fallback until SetVersion stamps the real one. List
+	// publishers read it to see who fetches their lists (and how often), so it
+	// names the project honestly — the old string carried a frozen "0.1" and
+	// a URL that does not exist.
+	userAgent = "Minos (+https://github.com/DanDreadless/minos)"
 )
 
 // SourceStatus is what the API reports per configured list.
@@ -50,6 +54,7 @@ type Manager struct {
 	auditEngine *filter.Engine
 	store       *config.Store
 	client      *http.Client
+	ua          string
 
 	mu     sync.Mutex
 	cached map[string][]byte // source name → last good raw body
@@ -64,6 +69,7 @@ func NewManager(engine *filter.Engine, store *config.Store) *Manager {
 		auditEngine: filter.NewEngine(),
 		store:       store,
 		client:      &http.Client{Timeout: fetchTimeout},
+		ua:          userAgent,
 		cached:      make(map[string][]byte),
 		status:      make(map[string]*SourceStatus),
 		refreshNow:  make(chan struct{}, 1),
@@ -72,6 +78,12 @@ func NewManager(engine *filter.Engine, store *config.Store) *Manager {
 	// immediately — no refetch needed, no restart ever.
 	store.OnChange(func(*config.Config) { m.TriggerRebuild() })
 	return m
+}
+
+// SetVersion stamps the running version into the fetch User-Agent. Call
+// before Run.
+func (m *Manager) SetVersion(v string) {
+	m.ua = "Minos/" + v + " (+https://github.com/DanDreadless/minos)"
 }
 
 // AuditEngine exposes the audit matcher for the DNS server's "would block"
@@ -349,7 +361,7 @@ func (m *Manager) fetch(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", m.ua)
 	resp, err := m.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)

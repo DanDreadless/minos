@@ -2,6 +2,8 @@ package lists
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"minos/internal/config"
@@ -197,5 +199,27 @@ func TestCustomServices(t *testing.T) {
 	m.rebuild(context.Background(), false)
 	if res := engine.Match("idle.example"); res.Blocked || res.Rule != "" {
 		t.Errorf("idle.example = %+v, want untouched (no flags set)", res)
+	}
+}
+
+func TestFetchSendsVersionedUserAgent(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("User-Agent")
+		_, _ = w.Write([]byte("ads.example\n"))
+	}))
+	defer srv.Close()
+
+	store, err := config.Open(t.TempDir() + "/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewManager(filter.NewEngine(), store)
+	m.SetVersion("1.2.3")
+	if _, err := m.fetch(context.Background(), srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Minos/1.2.3 (+https://github.com/DanDreadless/minos)"; got != want {
+		t.Errorf("User-Agent = %q, want %q", got, want)
 	}
 }
