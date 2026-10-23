@@ -293,6 +293,15 @@ export const copy = {
     openLogs: 'Open Logs',
   },
 
+  confirm: {
+    cancel: 'Cancel',
+    removeList: 'Remove list',
+    deleteGroup: 'Delete group',
+    removeService: 'Remove service',
+    leave: 'Discard changes',
+    leaveMessage: 'You have unsaved changes in Settings. Leave without saving them?',
+  },
+
   header: {
     blocking: (rules: number) =>
       `Blocking · ${rules >= 10000 ? `${Math.round(rules / 1000).toLocaleString()}k` : rules.toLocaleString()} rules`,
@@ -604,6 +613,9 @@ export const copy = {
       'Applies at once, to the Logs page and the system journal. Debug records every query — use it briefly, when chasing a problem.',
     logLevelLink: 'Open Logs',
     save: 'Save changes',
+    discard: 'Discard',
+    unsaved: (tabs: string[]) => `Unsaved changes: ${tabs.join(', ')}.`,
+    unsavedTab: 'unsaved changes on this tab',
     saved: 'Settings saved and applied — no restart needed.',
     upstreamsTitle: 'Upstream resolvers',
     upstreamsHint: 'where Minos looks up allowed names, tried in order — the first is the primary',
@@ -708,7 +720,7 @@ export const copy = {
       Object.entries(res)
         .map(([sink, r]) => `${sink === 'ntfy' ? 'ntfy' : 'Webhook'}: ${r === 'ok' ? 'delivered' : r}`)
         .join(' · '),
-    testSaveFirst: 'Save first — the test uses the saved settings.',
+    testSaveFirst: 'Sends to the saved destinations — save any changes first.',
     webhookURL: 'Webhook URL',
     webhookHint: 'each event is POSTed as JSON',
     ntfyURL: 'ntfy topic URL',

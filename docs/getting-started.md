@@ -444,7 +444,11 @@ Query Log.
   appear: attributes named like tokens, keys or passwords, and passwords or
   `token=`/`key=` parameters inside URLs, are replaced before anything is
   written — in the journal too.
-- **Settings** — everything below is editable here and applies immediately,
+- **Settings** — in tabs (DNS, Filtering, Notifications, Device discovery,
+  Access & security, System, Backup & import). Changes on any tab are
+  drafts until you press **Save changes** in the bar that appears at the
+  bottom (or **Discard**); a dot marks each tab with unsaved changes, and
+  leaving the page asks first. Everything saved applies immediately, with
   no restart: upstream resolvers and their order, the response cache (repeat queries answered from memory —
   the dashboard shows the hit rate), blocking mode and TTL, network-wide
   Safe Search, the Firefox DoH canary and the iCloud Private Relay block

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api, type ListStats, type ListStatus, type Service } from '../lib/api';
   import { blocklistPresets, blocklistTiers, type BlocklistPreset } from '../lib/blocklists';
+  import { confirmDialog } from '../lib/confirm';
   import { copy } from '../lib/copy';
   import { fmtAgo } from '../lib/format';
   import { docketHref } from '../lib/router';
@@ -122,7 +123,8 @@
   }
 
   async function remove(l: ListStatus): Promise<void> {
-    if (!window.confirm(copy.lists.confirmDelete(l.name))) return;
+    if (!(await confirmDialog({ message: copy.lists.confirmDelete(l.name), confirm: copy.confirm.removeList, danger: true })))
+      return;
     try {
       lists = await api.deleteList(l.name);
       notify(`List "${l.name}" removed.`);
