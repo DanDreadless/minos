@@ -11,7 +11,9 @@ import (
 // measures handle() itself, not a socket.
 type discardWriter struct{ remote net.Addr }
 
-func (w *discardWriter) LocalAddr() net.Addr         { return &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 53} }
+func (w *discardWriter) LocalAddr() net.Addr {
+	return &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 53}
+}
 func (w *discardWriter) RemoteAddr() net.Addr        { return w.remote }
 func (w *discardWriter) WriteMsg(*dns.Msg) error     { return nil }
 func (w *discardWriter) Write(b []byte) (int, error) { return len(b), nil }
