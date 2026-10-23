@@ -242,6 +242,15 @@ export const copy = {
         suspicious: `Last download refused · still blocking with the copy from ${age}`,
         disabled: 'Off',
       })[state] ?? state,
+    replace: (label: string) => `Replace with ${label}`,
+    replaceHint: (label: string) =>
+      `This list has been retired. Subscribe to ${label} from the catalog instead — it is added first, then this one is removed, so blocking never lapses.`,
+    replaced: (from: string, to: string) => `Replaced "${from}" with "${to}".`,
+    addMirrors: 'Add mirrors',
+    addMirrorsHint: (mirrors: string[]) =>
+      `The catalog has verified fallback copies of this list. They are used only if the main address fails for long or disappears:\n${mirrors.join('\n')}`,
+    mirrorsAdded: (name: string, n: number) =>
+      `Added ${n} ${n === 1 ? 'mirror' : 'mirrors'} to "${name}".`,
     viaMirror: 'via mirror',
     viaMirrorHint: (mirror: string, primaryError: string) =>
       `The main address failed (${primaryError}), so this copy came from the mirror ${mirror}. Minos tries the main address first on every refresh.`,
@@ -510,7 +519,7 @@ export const copy = {
     notificationsTitle: 'Notifications',
     notificationsHint: 'get told when something on your network changes',
     notificationsNote:
-      'Three events, all low-volume: a device makes its first DNS query, an upstream resolver fails or recovers, and (with the update check on) a new release. Nothing is sent unless a destination is set.',
+      'Low-volume events only: a device makes its first DNS query, an upstream resolver fails or recovers, a blocklist stops updating or recovers, and (with the update check on) a new release. Nothing is sent unless a destination is set.',
     webhookURL: 'Webhook URL',
     webhookHint: 'each event is POSTed as JSON',
     ntfyURL: 'ntfy topic URL',

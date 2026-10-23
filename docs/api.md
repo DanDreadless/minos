@@ -466,11 +466,17 @@ Configured via `notifications` in the config or Settings; each event is
 POSTed to your webhook as:
 
 ```json
-{"type": "device_new | upstream_sick | upstream_recovered | update_available | digest",
+{"type": "device_new | upstream_sick | upstream_recovered | list_failing | list_recovered | update_available | digest",
  "title": "New device on your network",
  "message": "192.168.1.77 (phone.lan) [aa:bb:cc:dd:ee:ff] made its first DNS query through Minos.",
  "time": "2026-07-05T10:12:03Z"}
 ```
+
+`list_failing` fires once when a blocklist becomes retired (404/410) or
+unauthorized (401/403), or — after it has failed three attempts running, so
+a slow boot never pages anyone — unavailable or stale; `list_recovered`
+fires when a list that was reported comes back. Minos keeps blocking with
+the last good copy throughout.
 
 `digest` events are the opt-in traffic summary (`notifications.digest:
 daily|weekly`): totals, block rate, top blocked domains, busiest client,
