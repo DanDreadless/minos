@@ -7,6 +7,7 @@ package importer
 
 import (
 	"fmt"
+	"strings"
 
 	"minos/internal/config"
 	"minos/internal/filter"
@@ -57,6 +58,24 @@ func mergeDomain(list *[]string, domain string) int {
 		}
 	}
 	*list = append(*list, norm)
+	return 1
+}
+
+// mergeRegex adds a regex rule as /pattern/ unless it is already there. A
+// pattern Minos cannot run (backreferences, lookaround, Pi-hole options
+// such as ;querytype=) is reported as skipped, with the reason.
+func mergeRegex(list *[]string, pattern string, rep *Report) int {
+	entry := "/" + strings.TrimSpace(pattern) + "/"
+	if _, err := filter.CompileRegexRule(entry); err != nil {
+		rep.skip("regex rule %q: %v", pattern, err)
+		return 0
+	}
+	for _, d := range *list {
+		if d == entry {
+			return 0
+		}
+	}
+	*list = append(*list, entry)
 	return 1
 }
 

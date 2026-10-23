@@ -148,9 +148,11 @@ func (s *Server) Router() http.Handler {
 		r.Get("/allowlist", s.handleGetDomains("allowlist"))
 		r.Post("/allowlist", s.handleAddDomain("allowlist"))
 		r.Delete("/allowlist/{domain}", s.handleDeleteDomain("allowlist"))
+		r.Delete("/allowlist", s.handleDeleteDomain("allowlist")) // ?domain=, for /regex/ rules
 		r.Get("/denylist", s.handleGetDomains("denylist"))
 		r.Post("/denylist", s.handleAddDomain("denylist"))
 		r.Delete("/denylist/{domain}", s.handleDeleteDomain("denylist"))
+		r.Delete("/denylist", s.handleDeleteDomain("denylist"))
 		r.Post("/pause", s.handlePause)
 		r.Delete("/pause", s.handleResume)
 	})
@@ -472,12 +474,12 @@ func (s *Server) handleAddDomain(kind string) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "body must be JSON: {\"domain\": \"...\"}")
 			return
 		}
-		norm := filter.NormalizeDomain(body.Domain)
-		if norm == "" {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("%q is not a valid domain", body.Domain))
+		norm, err := domainOrRegex(body.Domain)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		err := s.store.Update(func(c *config.Config) error {
+		err = s.store.Update(func(c *config.Config) error {
 			list := s.domains(kind, c)
 			for _, d := range *list {
 				if d == norm {
@@ -501,15 +503,36 @@ func (s *Server) handleAddDomain(kind string) http.HandlerFunc {
 
 var errAlreadyExists = errors.New("already present")
 
+// domainOrRegex accepts a domain (normalized) or a /pattern/ regex rule
+// (kept as written, after checking it compiles as RE2).
+func domainOrRegex(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if filter.IsRegexRule(s) {
+		if _, err := filter.CompileRegexRule(s); err != nil {
+			return "", fmt.Errorf("%s: %v", s, err)
+		}
+		return s, nil
+	}
+	norm := filter.NormalizeDomain(s)
+	if norm == "" {
+		return "", fmt.Errorf("%q is not a valid domain (or a /regex/ rule)", s)
+	}
+	return norm, nil
+}
+
 func (s *Server) handleDeleteDomain(kind string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		norm := filter.NormalizeDomain(chi.URLParam(r, "domain"))
-		if norm == "" {
-			writeError(w, http.StatusBadRequest, "invalid domain")
+		raw := r.URL.Query().Get("domain")
+		if raw == "" {
+			raw = chi.URLParam(r, "domain")
+		}
+		norm, err := domainOrRegex(raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		found := false
-		err := s.store.Update(func(c *config.Config) error {
+		err = s.store.Update(func(c *config.Config) error {
 			list := s.domains(kind, c)
 			kept := (*list)[:0]
 			for _, d := range *list {

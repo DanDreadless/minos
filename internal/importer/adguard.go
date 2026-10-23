@@ -9,6 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"minos/internal/config"
+	"minos/internal/filter"
 	"minos/internal/services"
 )
 
@@ -134,6 +135,19 @@ func importUserRule(rule string, cfg *config.Config, rep *Report) {
 	if strings.HasPrefix(line, "@@") {
 		allow = true
 		line = line[2:]
+	}
+	if filter.IsRegexRule(line) {
+		list := &cfg.Blocking.Denylist
+		if allow {
+			list = &cfg.Blocking.Allowlist
+		}
+		n := mergeRegex(list, line[1:len(line)-1], rep)
+		if allow {
+			rep.Allow += n
+		} else {
+			rep.Deny += n
+		}
+		return
 	}
 	line = strings.TrimPrefix(line, "||")
 	if i := strings.IndexByte(line, '^'); i >= 0 {

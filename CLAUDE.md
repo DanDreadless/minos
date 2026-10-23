@@ -605,6 +605,23 @@ This is security software; hold it to that standard.
   was used. `BenchmarkHandleBlocked` measures handle() end to end: plain
   ~520 ns / 7 allocs (unchanged), EDNS0 ~655 ns / 12 allocs. The Firefox
   canary NXDOMAIN deliberately carries no EDE.
+- **Regex rules** (fixed decisions, October 2026, `internal/filter/regex.go`):
+  a `/pattern/` entry in any allow/deny list (global, group, AdBlock list,
+  imports) compiles as RE2 with `(?i)`, at most 1000 per side and 512
+  characters. Exact rules first: an exact allow returns before any regex;
+  an allow regex beats an exact block; a block regex applies only when no
+  exact rule decided. The builder recognises regexes in AddDeny/AddAllow's
+  "not a domain" branch, so a million-line list's per-entry path is
+  unchanged. **Each rule has a literal prefilter** (`needlesFor`, from
+  regexp/syntax: text any match must contain); a name without it skips the
+  rule. One combined alternation measured ~96 µs per miss for 100 rules;
+  the prefilter ~1.3 µs on x86 and ~17 µs on the Pi (miss with no regexes:
+  1.1 µs) — fine for real configs, which carry a handful. `TestNeedlesNeverHideAMatch` holds the prefilter
+  to the plain regex on random names. Delete uses `?domain=` because a
+  regex cannot travel in a path segment. **Benchmark the matcher on the
+  Pi, not the x86 box**: there BenchmarkMatchHit swings ~25% between
+  builds from code alignment alone (550 ↔ 700 ns with identical Match
+  code), while the Pi measured 4.03 / 4.04 µs before and after.
 - **DDR** (fixed decisions, October 2026, `ddr.go`): `_dns.resolver.arpa`
   is always answered locally, authoritative, **never forwarded** — an
   upstream's own DDR answer could move devices' DNS off Minos. With DoT/DoH

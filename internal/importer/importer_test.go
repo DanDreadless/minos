@@ -80,18 +80,20 @@ func TestPiholeImport(t *testing.T) {
 		t.Errorf("sources = %+v, want a StevenBlack-2 suffix and a disabled other-list", cfg.Lists.Sources)
 	}
 
-	if rep.Allow != 1 || cfg.Blocking.Allowlist[0] != "allowed.example.com" {
-		t.Errorf("allowlist = %v (rep %d), want allowed.example.com", cfg.Blocking.Allowlist, rep.Allow)
+	if rep.Allow != 2 || !contains(cfg.Blocking.Allowlist, "allowed.example.com") ||
+		!contains(cfg.Blocking.Allowlist, `/^regex-allow\./`) {
+		t.Errorf("allowlist = %v (rep %d), want allowed.example.com and the allow regex", cfg.Blocking.Allowlist, rep.Allow)
 	}
-	if rep.Deny != 1 || cfg.Blocking.Denylist[0] != "denied.example.com" {
-		t.Errorf("denylist = %v (rep %d), want denied.example.com (disabled excluded)", cfg.Blocking.Denylist, rep.Deny)
+	if rep.Deny != 2 || !contains(cfg.Blocking.Denylist, "denied.example.com") ||
+		!contains(cfg.Blocking.Denylist, `/(^|\.)regex-deny\.com$/`) {
+		t.Errorf("denylist = %v (rep %d), want denied.example.com and the deny regex (disabled excluded)", cfg.Blocking.Denylist, rep.Deny)
 	}
 	if rep.LocalRecords != 2 {
 		t.Errorf("LocalRecords = %d, want 2", rep.LocalRecords)
 	}
-	// Two regex rules + two bad custom.list lines.
-	if len(rep.Skipped) != 4 {
-		t.Errorf("Skipped = %v, want 4 reasons", rep.Skipped)
+	// Two bad custom.list lines (regex rules are imported now).
+	if len(rep.Skipped) != 2 {
+		t.Errorf("Skipped = %v, want 2 reasons", rep.Skipped)
 	}
 }
 
@@ -216,8 +218,8 @@ func TestAdGuardImport(t *testing.T) {
 		t.Errorf("allow sources = %+v, want the whitelist filter as an enabled allow list", cfg.Lists.AllowSources)
 	}
 
-	if rep.Deny != 2 { // ads.example.com + plain.example.com
-		t.Errorf("Deny = %d, want 2", rep.Deny)
+	if rep.Deny != 3 { // ads.example.com + plain.example.com + the /banner\d+/ regex
+		t.Errorf("Deny = %d, want 3", rep.Deny)
 	}
 	if rep.Allow != 1 || cfg.Blocking.Allowlist[0] != "good.example.com" {
 		t.Errorf("Allow = %d %v, want good.example.com", rep.Allow, cfg.Blocking.Allowlist)
@@ -240,9 +242,12 @@ func TestAdGuardImport(t *testing.T) {
 		t.Errorf("services = %v (rep %d), want tiktok + epicgames (alias mapped)", cfg.Blocking.Services, rep.Services)
 	}
 
-	// $important rule + regex rule + unknown service.
-	if len(rep.Skipped) != 3 {
-		t.Errorf("Skipped = %v, want 3 reasons", rep.Skipped)
+	// $important rule + unknown service (the regex rule is imported now).
+	if len(rep.Skipped) != 2 {
+		t.Errorf("Skipped = %v, want 2 reasons", rep.Skipped)
+	}
+	if !contains(cfg.Blocking.Denylist, `/banner\d+/`) {
+		t.Errorf("denylist = %v, want the AdGuard regex rule", cfg.Blocking.Denylist)
 	}
 }
 

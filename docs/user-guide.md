@@ -125,8 +125,8 @@ Your own rules, which beat the blocklists: domains you always allow or always bl
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
-| Allowed domains<br><small>Blocking → Allowed</small> | `blocking.allowlist` | — | Always allowed, with subdomains. | at once |
-| Blocked domains<br><small>Blocking → Blocked</small> | `blocking.denylist` | — | Always blocked, with subdomains. | at once |
+| Allowed domains<br><small>Blocking → Allowed</small> | `blocking.allowlist` | — | Always allowed, with subdomains. An entry written /pattern/ is a regex rule (case-insensitive, matched anywhere in the name): an allow regex beats any block. | at once |
+| Blocked domains<br><small>Blocking → Blocked</small> | `blocking.denylist` | — | Always blocked, with subdomains. An entry written /pattern/ is a regex rule, e.g. /^ad[0-9]*\./ — checked after the exact rules, so an allowed domain still wins. Regexes use RE2 (no backreferences or lookaround); up to 1000 per list. | at once |
 | Blocked services<br><small>Blocking → Allowed / Blocked → Services</small> | `blocking.services` | — | Services blocked for everyone. | at once |
 | Allowed services<br><small>Blocking → Allowed / Blocked → Services</small> | `blocking.allowed_services` | — | Services allowed for everyone; allowing beats blocking. | at once |
 | Your custom services<br><small>Blocking → Allowed / Blocked → Your custom services</small> | `blocking.custom_services` | — | Your own service bundles.<br>`name`: Its ID (derived from the label if not given).<br>`label`: Its display name.<br>`domains`: The domains it covers.<br>`allow_extra`: Extra hosts allowed only while the service is allowed.<br>`blocked`: Blocked for everyone.<br>`allowed`: Allowed for everyone. | at once |

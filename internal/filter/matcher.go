@@ -25,6 +25,9 @@ type Builder struct {
 	listIdx map[string]int32
 	deny    map[string]int32 // reversed-label domain → index into lists
 	allow   map[string]int32
+	// denyRe and allowRe hold /pattern/ rules (regex.go).
+	denyRe  []regexRule
+	allowRe []regexRule
 	skipped int
 	// countOnly classifies and counts entries without storing them, for
 	// vetting a freshly downloaded list (did it shrink? is it empty?) without
@@ -64,9 +67,17 @@ func (b *Builder) listIndex(list string) int32 {
 // AddDeny records domain (and its subdomains) as blocked by list.
 // Invalid domains are counted as skipped. First list to claim a domain wins,
 // so list order is priority order.
+//
+// A /pattern/ entry is a regex rule (regex.go). It never normalizes as a
+// domain, so it is recognised in that branch, keeping the per-entry path
+// of a million-line list exactly as it was.
 func (b *Builder) AddDeny(list, domain string) {
 	norm := NormalizeDomain(domain)
 	if norm == "" {
+		if IsRegexRule(domain) {
+			b.addRegex(&b.denyRe, list, domain)
+			return
+		}
 		b.skipped++
 		return
 	}
@@ -85,6 +96,10 @@ func (b *Builder) AddDeny(list, domain string) {
 func (b *Builder) AddAllow(list, domain string) {
 	norm := NormalizeDomain(domain)
 	if norm == "" {
+		if IsRegexRule(domain) {
+			b.addRegex(&b.allowRe, list, domain)
+			return
+		}
 		b.skipped++
 		return
 	}
@@ -96,6 +111,26 @@ func (b *Builder) AddAllow(list, domain string) {
 	if _, exists := b.allow[key]; !exists {
 		b.allow[key] = b.listIndex(list)
 	}
+}
+
+// addRegex records a /pattern/ rule; one that does not compile, or beyond
+// MaxRegexRules, is skipped like any other unsupported rule.
+func (b *Builder) addRegex(set *[]regexRule, list, entry string) {
+	re, err := CompileRegexRule(entry)
+	if err != nil || len(*set) >= MaxRegexRules {
+		b.skipped++
+		return
+	}
+	if b.countOnly {
+		b.counted++
+		return
+	}
+	for _, r := range *set {
+		if r.entry == entry {
+			return // first list to claim a rule wins, as for domains
+		}
+	}
+	*set = append(*set, regexRule{entry: entry, list: b.listIndex(list), re: re})
 }
 
 // Skip counts an unsupported or unparseable rule. Skipped rules are a
@@ -110,6 +145,8 @@ func (b *Builder) Build() *Matcher {
 		lists:   b.lists,
 		deny:    compactSet(b.deny),
 		allow:   compactSet(b.allow),
+		denyRe:  buildRegexSet(b.denyRe),
+		allowRe: buildRegexSet(b.allowRe),
 		skipped: b.skipped,
 	}
 }
@@ -120,6 +157,8 @@ type Matcher struct {
 	lists   []string
 	deny    domainSet
 	allow   domainSet
+	denyRe  *regexSet // nil when there are none
+	allowRe *regexSet
 	skipped int
 }
 
@@ -203,10 +242,10 @@ func compareStringBytes(a string, b []byte) int {
 func EmptyMatcher() *Matcher { return NewBuilder().Build() }
 
 // Rules returns the number of compiled deny entries.
-func (m *Matcher) Rules() int { return len(m.deny.idx) }
+func (m *Matcher) Rules() int { return len(m.deny.idx) + m.denyRe.len() }
 
 // AllowRules returns the number of compiled allow entries.
-func (m *Matcher) AllowRules() int { return len(m.allow.idx) }
+func (m *Matcher) AllowRules() int { return len(m.allow.idx) + m.allowRe.len() }
 
 // Skipped returns how many rules were dropped as invalid or unsupported.
 func (m *Matcher) Skipped() int { return m.skipped }
@@ -214,16 +253,30 @@ func (m *Matcher) Skipped() int { return m.skipped }
 // Empty reports whether the matcher holds no rules at all — the hot path's
 // cheap gate for skipping optional engines (the audit engine when no audit
 // lists are configured). Zero allocations.
-func (m *Matcher) Empty() bool { return len(m.deny.idx) == 0 && len(m.allow.idx) == 0 }
+func (m *Matcher) Empty() bool {
+	return len(m.deny.idx) == 0 && len(m.allow.idx) == 0 && m.denyRe == nil && m.allowRe == nil
+}
 
 // Match judges a query name. qname must already be normalized
 // (lowercase, no trailing dot); use NormalizeDomain for untrusted input.
 // It walks the name's parent domains from TLD to leaf via prefix slices of
 // the reversed-label key, so a lookup does exactly one small allocation
 // (the reversed key) regardless of match depth.
+//
+// Regex rules come after the exact ones: an allow regex beats any block
+// (allowing always wins, as for domains); a block regex applies only when
+// no exact rule decided. Each side is one combined pass over the name.
+//
+// Measured on the Pi (arm64, 1M entries, no regex rules): hit 4.03 µs and
+// miss 1.14 µs, the same before and after regex support. On the x86 dev box
+// the hit benchmark swings ~25% between builds from code alignment alone —
+// compare on the Pi, not there.
 func (m *Matcher) Match(qname string) Result {
 	if len(m.deny.idx) == 0 && len(m.allow.idx) == 0 {
-		return Result{}
+		if m.denyRe == nil && m.allowRe == nil {
+			return Result{}
+		}
+		return m.matchRegex(qname, Result{})
 	}
 	rev := reverseLabels(qname)
 	// Check every label boundary: for "com.doubleclick.ads." the prefixes
@@ -243,13 +296,33 @@ func (m *Matcher) Match(qname string) Result {
 			}
 		}
 	}
+	if m.denyRe == nil && m.allowRe == nil {
+		return denied
+	}
+	return m.matchRegex(qname, denied)
+}
+
+// matchRegex applies the regex rules after the exact walk found no allow:
+// an allow regex beats an exact block; a block regex applies only when
+// nothing exact decided.
+func (m *Matcher) matchRegex(qname string, denied Result) Result {
+	if r := m.allowRe.match(qname); r != nil {
+		return Result{Blocked: false, List: m.lists[r.list], Rule: r.entry}
+	}
+	if denied.Blocked {
+		return denied
+	}
+	if r := m.denyRe.match(qname); r != nil {
+		return Result{Blocked: true, List: m.lists[r.list], Rule: r.entry}
+	}
 	return denied
 }
 
 // ParseAdblockLine classifies one line of an AdBlock-syntax list and feeds
 // it into the builder. Supported: comments, "||domain^" (block),
-// "@@||domain^" (exception), and bare domains. Anything else — element
-// hiding, regexes, paths, option suffixes — is counted and skipped.
+// "@@||domain^" (exception), /regex/ rules (and @@/regex/), and bare
+// domains. Anything else — element hiding, paths, option suffixes — is
+// counted and skipped.
 // allowList marks a subscribed allowlist: membership makes every supported
 // rule an allow, "@@" or not — that is how AdGuard whitelist filters and
 // Pi-hole v6 "antigravity" lists are written (block-shaped rules whose
@@ -263,6 +336,14 @@ func (b *Builder) ParseAdblockLine(list, line string, allowList bool) {
 	if strings.HasPrefix(line, "@@") {
 		allow = true
 		line = line[2:]
+	}
+	if IsRegexRule(line) {
+		if allow {
+			b.AddAllow(list, line)
+		} else {
+			b.AddDeny(list, line)
+		}
+		return
 	}
 	if strings.HasPrefix(line, "||") {
 		line = line[2:]

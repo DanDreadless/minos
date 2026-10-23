@@ -246,6 +246,26 @@ func BenchmarkMatchMiss(b *testing.B) {
 	}
 }
 
+// BenchmarkMatchRegexMiss is the regex rules' cost on the common path: a
+// name no rule matches, with 100 block regexes and 1M exact entries.
+func BenchmarkMatchRegexMiss(b *testing.B) {
+	bl := NewBuilder()
+	for i := 0; i < 1_000_000; i++ {
+		bl.AddDeny("bench", fmt.Sprintf("host%d.tracker%d.example.com", i, i%1000))
+	}
+	for i := 0; i < 100; i++ {
+		bl.AddDeny("regex", fmt.Sprintf(`/^ad[sz]?%d[.-]|\.track%d\./`, i, i))
+	}
+	m := bl.Build()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if r := m.Match("www.perfectly-innocent.example.net"); r.Blocked {
+			b.Fatal("unexpected hit")
+		}
+	}
+}
+
 func BenchmarkBuild100k(b *testing.B) {
 	domains := make([]string, 100_000)
 	for i := range domains {

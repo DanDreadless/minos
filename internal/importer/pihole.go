@@ -23,8 +23,9 @@ const (
 )
 
 // Pihole imports from a Pi-hole configuration directory (typically
-// /etc/pihole): blocklist subscriptions and exact allow/deny domains from
-// gravity.db, and local DNS records from custom.list when present.
+// /etc/pihole): blocklist subscriptions and allow/deny domains (exact and
+// regex) from gravity.db, and local DNS records from custom.list when
+// present.
 // path may also point straight at a gravity.db file.
 func Pihole(path string, cfg *config.Config) (*Report, error) {
 	dbPath := path
@@ -124,8 +125,10 @@ func piholeGravity(dbPath string, cfg *config.Config, rep *Report) error {
 			rep.Allow += mergeDomain(&cfg.Blocking.Allowlist, domain)
 		case piholeExactDeny:
 			rep.Deny += mergeDomain(&cfg.Blocking.Denylist, domain)
-		case piholeRegexAllow, piholeRegexDeny:
-			rep.skip("regex rule %q: Minos does not support regex rules", domain)
+		case piholeRegexAllow:
+			rep.Allow += mergeRegex(&cfg.Blocking.Allowlist, domain, rep)
+		case piholeRegexDeny:
+			rep.Deny += mergeRegex(&cfg.Blocking.Denylist, domain, rep)
 		}
 	}
 	return domains.Err()
