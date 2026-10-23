@@ -216,7 +216,7 @@ func TestFetchSendsVersionedUserAgent(t *testing.T) {
 	}
 	m := NewManager(filter.NewEngine(), store)
 	m.SetVersion("1.2.3")
-	if _, err := m.fetch(context.Background(), srv.URL, cacheMeta{}); err != nil {
+	if _, err := m.fetch(context.Background(), srv.URL, cacheMeta{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if want := "Minos/1.2.3 (+https://github.com/DanDreadless/minos)"; got != want {

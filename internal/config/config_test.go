@@ -575,3 +575,28 @@ func TestListMirrorsValidatedAndDeepCopied(t *testing.T) {
 		t.Error("Clone shares the Mirrors slice between snapshots")
 	}
 }
+
+func TestListHeadersValidated(t *testing.T) {
+	for _, h := range []map[string]string{
+		{"Bad Name": "x"},
+		{"User-Agent": "spoof"},        // set by Minos
+		{"If-None-Match": "x"},         // conditional requests are Minos's
+		{"Auth-Key": "a\r\nX-Evil: 1"}, // header injection
+	} {
+		c := Default()
+		c.Lists.Sources[0].Headers = h
+		if err := c.Validate(); err == nil {
+			t.Errorf("headers %q accepted", h)
+		}
+	}
+	c := Default()
+	c.Lists.Sources[0].Headers = map[string]string{"Auth-Key": "abc123"}
+	if err := c.Validate(); err != nil {
+		t.Errorf("a valid Auth-Key header refused: %v", err)
+	}
+	cl := c.Clone()
+	cl.Lists.Sources[0].Headers["Auth-Key"] = "changed"
+	if c.Lists.Sources[0].Headers["Auth-Key"] != "abc123" {
+		t.Error("Clone shares the Headers map between snapshots")
+	}
+}
