@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { api, type Host, type Stats, type Status } from '../lib/api';
+  import AttentionPanel from '../lib/components/AttentionPanel.svelte';
   import BarList from '../lib/components/BarList.svelte';
   import SetupCard from '../lib/components/SetupCard.svelte';
   import StatTile from '../lib/components/StatTile.svelte';
@@ -19,6 +20,36 @@
   export let status: Status | null;
 
   let stats: Stats | null = null;
+
+  // The window every number on the page describes (the tiles, the chart and
+  // both top lists), so they always agree. Counters since the last restart
+  // are shown separately and labelled as such.
+  const windows = copy.dashboard.windows;
+  type Win = (typeof windows)[number];
+  let win: Win = loadWindow();
+
+  function loadWindow(): Win {
+    try {
+      const h = Number(localStorage.getItem('minos.dashboardWindow'));
+      return windows.find((w) => w.hours === h) ?? windows[0];
+    } catch {
+      return windows[0];
+    }
+  }
+
+  function setWindow(w: Win): void {
+    win = w;
+    try {
+      localStorage.setItem('minos.dashboardWindow', String(w.hours));
+    } catch {
+      // per-browser convenience only
+    }
+    stats = null;
+    void loadStats();
+  }
+
+  $: windowTotal = stats ? stats.timeline.reduce((n, b) => n + b.total, 0) : 0;
+  $: windowBlocked = stats ? stats.timeline.reduce((n, b) => n + b.blocked, 0) : 0;
   let host: Host | null = null;
   // Whether an API token is configured. Read once: it drives a one-line
   // nudge on the host card, which is the first thing here to expose the
@@ -27,7 +58,7 @@
   let timer: ReturnType<typeof setInterval> | null = null;
   let hostTimer: ReturnType<typeof setInterval> | null = null;
 
-  // A fresh instance: nothing judged in the last 24 h. The setup checklist
+  // A fresh instance: nothing judged in the window. The setup checklist
   // shows until traffic arrives or the user dismisses it (SetupCard also
   // honours its own localStorage flag, so dismissal is permanent).
   $: fresh = stats !== null && stats.timeline.every((b) => b.total === 0);
@@ -52,7 +83,7 @@
 
   async function loadStats(): Promise<void> {
     try {
-      stats = await api.stats(24);
+      stats = await api.stats(win.hours);
     } catch (e) {
       notifyError(e);
     }
@@ -103,24 +134,36 @@
   <SetupCard />
 {/if}
 
+<AttentionPanel {status} {diskLow} dnssecBlind={dnssecUpstreamBlind} />
+
+<div class="window" role="group" aria-label={copy.dashboard.windowLabel}>
+  <span>{copy.dashboard.windowLabel}</span>
+  {#each windows as w (w.hours)}
+    <button class:active={win.hours === w.hours} aria-pressed={win.hours === w.hours} on:click={() => setWindow(w)}
+      >{w.label}</button
+    >
+  {/each}
+</div>
+
 {#if status}
   <section class="stats">
     <StatTile
-      value={status.queries_total.toLocaleString()}
+      value={stats ? windowTotal.toLocaleString() : '…'}
       label={copy.stats.judged}
-      hint={copy.stats.judgedHint}
+      hint={copy.stats.windowHint(win.long)}
+      href={docketHref({ range: win.range })}
     />
     <StatTile
-      value={status.queries_blocked.toLocaleString()}
+      value={stats ? windowBlocked.toLocaleString() : '…'}
       label={copy.stats.condemned}
-      hint={copy.stats.condemnedHint}
+      hint={copy.stats.windowHint(win.long)}
       tone="blocked"
-      href={docketHref({ verdict: 'blocked' })}
+      href={docketHref({ verdict: 'blocked', range: win.range })}
     />
     <StatTile
-      value={fmtPercent(status.queries_total, status.queries_blocked)}
+      value={stats ? fmtPercent(windowTotal, windowBlocked) : '…'}
       label={copy.stats.blockRate}
-      hint={copy.stats.blockRateHint}
+      hint={copy.stats.windowHint(win.long)}
     />
     <StatTile
       value={status.rules.toLocaleString()}
@@ -135,6 +178,9 @@
       />
     {/if}
   </section>
+  <p class="since-restart">
+    {copy.stats.sinceRestart(status.queries_total, status.queries_blocked, status.uptime_seconds)}
+  </p>
 {/if}
 
 {#if host?.supported}
@@ -205,7 +251,7 @@
 
 {#if stats}
   <section class="card">
-    <h2>{copy.dashboard.timelineTitle}</h2>
+    <h2>{copy.dashboard.timelineTitle(win.long)}</h2>
     {#if stats.timeline.some((b) => b.total > 0)}
       <TimelineChart data={stats.timeline} />
       <p class="legend">
@@ -251,7 +297,7 @@
             items={stats.dnssec.top_domains.map((d) => ({
               label: d.qname,
               count: d.count,
-              href: docketHref({ verdict: 'would_block', domain: d.qname, range: '24h' }),
+              href: docketHref({ verdict: 'would_block', domain: d.qname, range: win.range }),
             }))}
           />
           <p class="sub">
@@ -305,19 +351,19 @@
 
   <section class="columns">
     <div class="card">
-      <h2>{copy.dashboard.topBlockedTitle} <small>{copy.dashboard.topBlockedHint}</small></h2>
+      <h2>{copy.dashboard.topBlockedTitle} <small>{copy.dashboard.windowHint(win.long)}</small></h2>
       <BarList
         tone="blocked"
         empty={copy.dashboard.noData}
         items={stats.top_blocked.map((d) => ({
           label: d.qname,
           count: d.count,
-          href: docketHref({ verdict: 'blocked', domain: d.qname, range: '24h' }),
+          href: docketHref({ verdict: 'blocked', domain: d.qname, range: win.range }),
         }))}
       />
     </div>
     <div class="card">
-      <h2>{copy.dashboard.topClientsTitle} <small>{copy.dashboard.topClientsHint}</small></h2>
+      <h2>{copy.dashboard.topClientsTitle} <small>{copy.dashboard.windowHint(win.long)}</small></h2>
       <BarList
         tone="accent"
         empty={copy.dashboard.noData}
@@ -325,7 +371,7 @@
           label: c.client,
           count: c.total,
           sub: `${c.blocked} blocked`,
-          href: docketHref({ client: c.client }),
+          href: docketHref({ client: c.client, range: win.range }),
         }))}
       />
     </div>
@@ -333,6 +379,36 @@
 {/if}
 
 <style>
+  .window {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.9rem;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+
+  .window span {
+    margin-right: 0.3rem;
+  }
+
+  .window button {
+    padding: 0.15rem 0.65rem;
+    font-size: 0.8rem;
+  }
+
+  .window button.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .since-restart {
+    margin: -0.5rem 0 1.25rem;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+  }
+
   .stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
