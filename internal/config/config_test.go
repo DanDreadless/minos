@@ -148,7 +148,7 @@ func TestValidateCatchesBadValues(t *testing.T) {
 		func(c *Config) { c.DNS.Upstreams = nil },
 		func(c *Config) { c.DNS.Upstreams[0].Protocol = "carrier-pigeon" },
 		func(c *Config) { c.DNS.Upstreams = []Upstream{{Address: "http://insecure", Protocol: "doh"}} },
-		// a DoH URL left under protocol dot: SplitHostPort alone accepted it (field bug)
+		// A DoH URL left under protocol dot: SplitHostPort alone accepted it (field bug)
 		func(c *Config) { c.DNS.Upstreams = []Upstream{{Address: "https://8.8.8.8/dns-query", Protocol: "dot"}} },
 		func(c *Config) { c.DNS.Upstreams = []Upstream{{Address: "1.1.1.1:dns", Protocol: "udp"}} },
 		func(c *Config) { c.DNS.Upstreams = []Upstream{{Address: ":53", Protocol: "udp"}} },

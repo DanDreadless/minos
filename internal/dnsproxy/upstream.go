@@ -82,7 +82,7 @@ func (c *classicUpstream) Exchange(ctx context.Context, msg *dns.Msg) (*dns.Msg,
 			return resp, nil
 		}
 		if err == nil && resp.Truncated {
-			// fall through to TCP retry
+			// Fall through to TCP retry
 		} else if ctx.Err() != nil {
 			return nil, err
 		}

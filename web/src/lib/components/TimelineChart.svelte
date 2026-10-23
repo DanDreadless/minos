@@ -45,7 +45,7 @@
       : [];
 </script>
 
-<svg viewBox="0 0 {W} {H}" preserveAspectRatio="none" role="img" aria-label="query volume chart">
+<svg viewBox="0 0 {W} {H}" preserveAspectRatio="none" role="img" aria-label="Query volume chart">
   {#each bars as b, i (i)}
     <g>
       <title>{b.title}</title>

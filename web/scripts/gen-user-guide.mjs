@@ -64,7 +64,7 @@ let existing = null;
 try {
   existing = readFileSync(out, 'utf8');
 } catch {
-  // first generation
+  // First generation
 }
 if (existing !== null && existing.replace(/\r\n/g, '\n') === text) {
   console.log(`${out} is up to date`);

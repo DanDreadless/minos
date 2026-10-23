@@ -177,7 +177,7 @@
   <h2>{copy.domains.localTitle} <small>{copy.domains.localHint}</small></h2>
   <form class="local-add" on:submit|preventDefault={addLocalRecord}>
     <input placeholder={copy.domains.localNamePlaceholder} bind:value={newLocalName} required />
-    <select bind:value={newLocalType} title="record type">
+    <select bind:value={newLocalType} title="Record type">
       <option value="A">A (IPv4)</option>
       <option value="AAAA">AAAA (IPv6)</option>
       <option value="CNAME">CNAME (alias)</option>
@@ -201,7 +201,7 @@
           {#if editingLocal === r.name}
             <form class="local-edit" on:submit|preventDefault={() => saveEditLocal(r.name)}>
               <span class="domain">{r.name}</span>
-              <select bind:value={editLocalType} title="record type">
+              <select bind:value={editLocalType} title="Record type">
                 <option value="A">A</option>
                 <option value="AAAA">AAAA</option>
                 <option value="CNAME">CNAME</option>
@@ -232,7 +232,7 @@
               <button class="row-action" title={copy.domains.localEditTitle} on:click={() => startEditLocal(r)}>
                 {copy.domains.localEdit}
               </button>
-              <button class="row-action" title="remove record" on:click={() => removeLocalRecord(r.name)}>
+              <button class="row-action" title="Remove record" on:click={() => removeLocalRecord(r.name)}>
                 Remove
               </button>
             </span>
@@ -262,13 +262,13 @@
         bind:value={r.address}
         on:input={() => matchProtocol(r)}
       />
-      <select bind:value={r.protocol} title="protocol">
+      <select bind:value={r.protocol} title="Protocol">
         <option value="udp">UDP</option>
         <option value="tcp">TCP</option>
         <option value="dot">DoT</option>
         <option value="doh">DoH</option>
       </select>
-      <button class="danger" title="remove route" on:click={() => removeRoute(i)}>✕</button>
+      <button class="danger" title="Remove route" on:click={() => removeRoute(i)}>✕</button>
     </div>
   {/each}
   <p class="note">{copy.settings.routesNote}</p>

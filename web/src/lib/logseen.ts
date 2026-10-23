@@ -18,7 +18,7 @@ function load(): Seen {
     const v = JSON.parse(localStorage.getItem(KEY) ?? '') as Seen;
     if (typeof v?.seq === 'number' && typeof v?.boot === 'number') return v;
   } catch {
-    // missing, malformed, or storage unavailable
+    // Missing, malformed, or storage unavailable
   }
   return { seq: 0, boot: 0 };
 }
@@ -29,7 +29,7 @@ logSeen.subscribe((v) => {
   try {
     localStorage.setItem(KEY, JSON.stringify(v));
   } catch {
-    // storage unavailable — the in-memory value still works
+    // Storage unavailable — the in-memory value still works
   }
 });
 

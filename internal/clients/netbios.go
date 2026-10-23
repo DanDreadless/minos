@@ -57,7 +57,7 @@ func buildNBStatQuery() []byte {
 	buf := make([]byte, 0, 12+1+len(name)+1+4)
 	var hdr [12]byte
 	binary.BigEndian.PutUint16(hdr[0:2], dns.Id()) // transaction ID
-	// flags left 0x0000: standard query, opcode 0, unicast (no broadcast).
+	// Flags left 0x0000: standard query, opcode 0, unicast (no broadcast).
 	binary.BigEndian.PutUint16(hdr[4:6], 1) // QDCOUNT = 1
 	buf = append(buf, hdr[:]...)
 	buf = append(buf, byte(len(name))) // label length prefix (0x20)

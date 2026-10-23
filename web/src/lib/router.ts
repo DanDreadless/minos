@@ -8,7 +8,8 @@ export type Route =
   | 'devices'
   | 'device'
   | 'lists'
-  | 'domains'
+  | 'allowed'
+  | 'blocked'
   | 'local'
   | 'logs'
   | 'help'
@@ -31,8 +32,11 @@ function parse(): Route {
       return 'devices';
     case '#/lists':
       return 'lists';
-    case '#/domains':
-      return 'domains';
+    case '#/allowed':
+    case '#/domains': // the old Allow & Block address
+      return 'allowed';
+    case '#/blocked':
+      return 'blocked';
     case '#/settings':
       return 'settings';
     case '#/logs':
@@ -97,7 +101,8 @@ export const hrefFor: Record<Route, string> = {
   devices: '#/devices',
   device: '#/devices', // detail pages aren't nav destinations; fall back to the list
   lists: '#/lists',
-  domains: '#/domains',
+  allowed: '#/allowed',
+  blocked: '#/blocked',
   settings: '#/settings',
   logs: '#/logs',
   local: '#/local',

@@ -81,7 +81,7 @@
           href={hrefFor[item.key]}
           class:active={$route === item.key ||
             ($route === 'device' && item.key === 'devices') ||
-            ($route === 'domains' && item.key === 'lists')}
+            (($route === 'allowed' || $route === 'blocked') && item.key === 'lists')}
           title={item.hint}
           on:click={closeDrawer}
         >

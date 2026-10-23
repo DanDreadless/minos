@@ -130,7 +130,7 @@
         <Devices />
       {:else if $route === 'device'}
         <DevicePage />
-      {:else if $route === 'lists' || $route === 'domains'}
+      {:else if $route === 'lists' || $route === 'allowed' || $route === 'blocked'}
         <Blocking />
       {:else if $route === 'local'}
         <LocalDNS />

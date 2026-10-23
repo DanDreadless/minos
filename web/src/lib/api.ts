@@ -703,7 +703,7 @@ export function openLogStream(onRecord: (r: AppLogRecord) => void, onDrop: () =>
     try {
       onRecord(JSON.parse(ev.data as string) as AppLogRecord);
     } catch {
-      // ignore malformed frames
+      // Ignore malformed frames
     }
   };
   ws.onclose = onDrop;
@@ -719,7 +719,7 @@ export function openStream(onEntry: (e: LogEntry) => void, onDrop: () => void): 
     try {
       onEntry(JSON.parse(ev.data as string) as LogEntry);
     } catch {
-      // ignore malformed frames
+      // Ignore malformed frames
     }
   };
   ws.onclose = onDrop;

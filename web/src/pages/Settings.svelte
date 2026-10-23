@@ -511,7 +511,7 @@
         <span class="order">{orderLabel(i)}</span>
         <select
           class="preset"
-          title="pick a known resolver"
+          title="Pick a known resolver"
           value={matchPreset(u)}
           on:change={(e) => applyPreset(i, e)}
         >
@@ -526,17 +526,17 @@
           bind:value={u.address}
           on:input={() => matchProtocol(u)}
         />
-        <select bind:value={u.protocol} title="protocol">
+        <select bind:value={u.protocol} title="Protocol">
           <option value="doh">DoH (encrypted, HTTPS)</option>
           <option value="dot">DoT (encrypted, TLS)</option>
           <option value="udp">UDP (plaintext)</option>
           <option value="tcp">TCP (plaintext)</option>
         </select>
-        <button title="move up" disabled={i === 0} on:click={() => moveUpstream(i, -1)}>↑</button>
-        <button title="move down" disabled={i === upstreams.length - 1} on:click={() => moveUpstream(i, 1)}>
+        <button title="Move up" disabled={i === 0} on:click={() => moveUpstream(i, -1)}>↑</button>
+        <button title="Move down" disabled={i === upstreams.length - 1} on:click={() => moveUpstream(i, 1)}>
           ↓
         </button>
-        <button class="danger" title="remove" disabled={upstreams.length === 1} on:click={() => removeUpstream(i)}>
+        <button class="danger" title="Remove" disabled={upstreams.length === 1} on:click={() => removeUpstream(i)}>
           ✕
         </button>
       </div>
@@ -676,9 +676,9 @@
         <label class="field">
           <span>{copy.settings.digestCadence}</span>
           <select bind:value={digest}>
-            <option value="off">off</option>
-            <option value="daily">daily</option>
-            <option value="weekly">weekly</option>
+            <option value="off">Off</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
           </select>
         </label>
         {#if digest !== 'off'}
