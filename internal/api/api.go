@@ -262,7 +262,13 @@ type upstreamHealth struct {
 	Requests uint64  `json:"requests"`
 	Failures uint64  `json:"failures"`
 	AvgMs    float64 `json:"avg_ms"`
-	Sick     bool    `json:"sick"`
+	// Sick: breaker tripped and not yet recovered (the whole outage).
+	Sick bool `json:"sick"`
+	// State: unused | healthy | failing — the one word the UI shows.
+	State       string     `json:"state"`
+	LastSuccess *time.Time `json:"last_success,omitempty"`
+	LastFailure *time.Time `json:"last_failure,omitempty"`
+	LastError   string     `json:"last_error,omitempty"`
 }
 
 func (s *Server) handleUpstreams(w http.ResponseWriter, r *http.Request) {
@@ -270,10 +276,18 @@ func (s *Server) handleUpstreams(w http.ResponseWriter, r *http.Request) {
 	if s.cache != nil {
 		for _, st := range s.cache.UpstreamStats() {
 			h := upstreamHealth{
-				Address:  st.Name,
-				Requests: st.Requests,
-				Failures: st.Failures,
-				Sick:     st.Sick,
+				Address:   st.Name,
+				Requests:  st.Requests,
+				Failures:  st.Failures,
+				Sick:      st.Sick,
+				State:     string(st.State),
+				LastError: st.LastError,
+			}
+			if !st.LastSuccess.IsZero() {
+				h.LastSuccess = &st.LastSuccess
+			}
+			if !st.LastFailure.IsZero() {
+				h.LastFailure = &st.LastFailure
 			}
 			if st.Requests > 0 {
 				h.AvgMs = st.DurationSeconds / float64(st.Requests) * 1000

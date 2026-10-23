@@ -792,7 +792,13 @@ This is security software; hold it to that standard.
   upstream for 30 s; a lapsed cooldown admits exactly one CAS-elected
   probe query; sick upstreams are still tried as a last resort (a breaker
   must never refuse to try everything); routes are exempt (authoritative,
-  no alternative). Health lives on the same name-keyed counters as
+  no alternative). **Health is three-state** (`UpstreamStats().State`,
+  October 2026): `failing` = breaker tripped and no success since
+  (`sickUntil != 0` — the deadline only schedules the probe) **or** never
+  answered at all; `unused` = never asked, which is untested, not healthy.
+  The old `now < sickUntil` check read a never-recovered upstream as healthy
+  between trips — a dead backup sat green for 49 days. The UI shows the
+  server's `state`; never re-derive one client-side. Health lives on the same name-keyed counters as
   /metrics so it survives config swaps.- **`net.SplitHostPort` validates almost nothing** (field bug, v0.21.2): it
   splits on the last colon, so `https://8.8.8.8/dns-query` "parses" as host
   `https`, port `//8.8.8.8/dns-query`. A DoH URL saved under protocol `dot`

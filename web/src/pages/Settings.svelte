@@ -10,6 +10,7 @@
     type UpstreamHealth,
   } from '../lib/api';
   import { copy } from '../lib/copy';
+  import { fmtLogTime } from '../lib/format';
   import { resolverPresets, matchPreset } from '../lib/resolvers';
   import { notify, notifyError } from '../lib/toast';
 
@@ -53,6 +54,7 @@
   function initFrom(c: ConfigView): void {
     cfg = c;
     upstreams = c.dns.upstreams.map((u) => ({ ...u }));
+    savedUpstreams = new Set(c.dns.upstreams.map((u) => `${u.protocol} ${u.address}`));
     dnssec = c.dns.dnssec;
     mode = c.blocking.mode;
     safeSearch = c.blocking.safe_search;
@@ -301,19 +303,34 @@
     }
   }
 
-  // Two states only: green = active/healthy (the default for any configured
-  // upstream with no breaker fault, including an idle backup), red = the
-  // failover breaker is currently sidestepping it. The tooltip carries the
-  // nuance (serving vs. standing by) so the dot stays a plain green/red.
-  function healthState(u: Upstream): 'ok' | 'sick' {
-    return upstreamHealth[u.address]?.sick ? 'sick' : 'ok';
+  // The light shows the server's verdict, never a guess. Green only for a
+  // resolver that has actually answered: the old two-state light painted an
+  // idle backup green, which is how one that had never answered a query sat
+  // green for 49 days. An unused backup gets a hollow ring — untested, not
+  // healthy — and a row typed but not saved has no light at all.
+  type Light = 'healthy' | 'failing' | 'unused' | 'unsaved';
+  let savedUpstreams = new Set<string>();
+
+  function healthState(u: Upstream): Light {
+    if (!savedUpstreams.has(`${u.protocol} ${u.address}`)) return 'unsaved';
+    return upstreamHealth[u.address]?.state ?? 'unused';
   }
 
   function healthTitle(u: Upstream): string {
     const h = upstreamHealth[u.address];
-    if (h?.sick) return copy.settings.upstreamSick;
-    if (!h || h.requests === 0) return copy.settings.upstreamReady;
-    return copy.settings.upstreamHealthy(h.requests, h.failures, h.avg_ms);
+    switch (healthState(u)) {
+      case 'unsaved':
+        return copy.settings.upstreamUnsaved;
+      case 'failing':
+        return copy.settings.upstreamFailing(
+          h?.last_success ? fmtLogTime(h.last_success) : '',
+          h?.last_error ?? '',
+        );
+      case 'healthy':
+        return copy.settings.upstreamHealthy(h!.requests, h!.failures, h!.avg_ms);
+      default:
+        return copy.settings.upstreamUnused;
+    }
   }
 
   onMount(() => {
@@ -787,14 +804,23 @@
     cursor: help;
   }
 
-  .health-dot.ok {
+  .health-dot.healthy {
     background: var(--allowed);
     box-shadow: 0 0 4px var(--allowed);
   }
 
-  .health-dot.sick {
+  .health-dot.failing {
     background: var(--blocked);
     box-shadow: 0 0 4px var(--blocked);
+  }
+
+  /* Untested is not healthy: a hollow ring, not a green dot. */
+  .health-dot.unused {
+    border: 2px solid var(--text-dim);
+  }
+
+  .health-dot.unsaved {
+    border: 2px dashed var(--border);
   }
 
   .upstream-row .preset {

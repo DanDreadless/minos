@@ -141,15 +141,21 @@ export interface Upstream {
   protocol: 'udp' | 'tcp' | 'dot' | 'doh';
 }
 
-// Live breaker state per upstream (keyed by the configured address).
-// sick = the failover breaker is currently sidestepping it; requests 0 =
-// never needed since start (healthy primaries starve the backups).
+// Live health per upstream (keyed by the configured address). state is the
+// server's single verdict — the UI shows it rather than re-deriving one:
+//   healthy: has answered and is not currently failing
+//   failing: the breaker is open, or it has never answered at all
+//   unused:  never asked since start (the resolvers ahead answered everything)
 export interface UpstreamHealth {
   address: string;
   requests: number;
   failures: number;
   avg_ms: number;
   sick: boolean;
+  state: 'healthy' | 'failing' | 'unused';
+  last_success?: string;
+  last_failure?: string;
+  last_error?: string;
 }
 
 export interface CacheSettings {
