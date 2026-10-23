@@ -446,6 +446,17 @@ real parser, so a list that is deleted, repurposed, emptied, reformatted,
 or has drifted from its advertised size fails the build rather than
 quietly leaving you subscribed to nothing.
 
+**Lists survive outages and reboots.** Minos keeps the last good copy of
+every list in `lists-cache/` beside its config file (`/var/lib/minos` for
+the systemd service, `/data` in Docker) and compiles those copies before
+it fetches anything, so blocking is on from the first second after a
+restart, even if a list's host is down or the network isn't up yet. A
+refresh asks the publisher whether the list changed and downloads it only
+when it has; an unchanged list costs a single small request. The copies
+are rewritten only when their content changes, which spares SD cards.
+`querylog.ephemeral: true` keeps this cache in memory only, because that
+mode promises no disk writes.
+
 ## Bypass resistance — no side doors
 
 A sinkhole that devices can quietly sidestep is theatre. Modern browsers
