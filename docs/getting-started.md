@@ -457,6 +457,16 @@ are rewritten only when their content changes, which spares SD cards.
 `querylog.ephemeral: true` keeps this cache in memory only, because that
 mode promises no disk writes.
 
+**A failing list never takes its rules away.** If an update fails — the
+network is down, the host errors, a captive portal answers with a web page,
+or the publisher retires the list — Minos keeps blocking with the last good
+copy and says so on the Codex: *Update failing · still blocking with the
+copy from 3 hours ago*. Network trouble is retried within minutes (backing
+off to hourly), not at the next daily refresh. A download that suddenly has
+less than half the rules it had is refused, because that is far more often
+a broken publish than a real change; if the same smaller list is served
+three refreshes in a row, Minos accepts it as the list's new size.
+
 ## Bypass resistance — no side doors
 
 A sinkhole that devices can quietly sidestep is theatre. Modern browsers

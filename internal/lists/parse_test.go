@@ -371,6 +371,7 @@ func TestManagerAuditSourceCompilesSeparately(t *testing.T) {
 }
 
 func TestManagerKeepsCacheOnFetchFailure(t *testing.T) {
+	fastRetries(t)
 	healthy := true
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !healthy {

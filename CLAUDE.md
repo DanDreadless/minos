@@ -739,8 +739,22 @@ This is security software; hold it to that standard.
   body (SD discipline). A body that fails its sidecar hash is ignored, not
   compiled. `prune` drops entries for unconfigured URLs and interrupted
   `.tmp-*` writes; disabled lists keep theirs. Ephemeral mode stays
-  memory-only. Known gap fixed next: a source that fails was not retried
-  until the next refresh interval (24 h by default).
+  memory-only.
+- **List fetch failure semantics** (fixed decisions, October 2026): every
+  failure keeps the last good copy in force. `fetch.go` classifies:
+  transient (network, 5xx, 429, an HTML page — captive portals) gets two
+  quick in-refresh retries (`Retry-After` honoured, capped 60 s) and then
+  `retryFailing` on a 1m/2m/5m/15m/30m/1h schedule capped at the interval —
+  before this a source failing at boot waited a full 24 h. Retired
+  (404/410) and unauthorized (401/403) never retry early. **Shrink guard**:
+  a body under half the previous rule count (prev ≥ 100) is refused as
+  `suspicious` and is *not* retried early, because the self-heal rule —
+  the same smaller body `shrinkAcceptAfter` (3) refreshes running is
+  accepted — must span real refreshes, not three retries in eight minutes.
+  Vetting counts rules with `filter.NewCountingBuilder` (same
+  classification, no maps), so it never doubles memory on a Pi. `state` is
+  derived server-side in `Status()`; the UI never infers health from
+  timestamps. Fetches run two at a time.
 - **Hosts preamble is not a skipped rule**: every hosts file opens with
   boilerplate mapping ignorable names to non-sinkhole addresses
   (`255.255.255.255 broadcasthost`, `ff02::1 ip6-allnodes`). The target

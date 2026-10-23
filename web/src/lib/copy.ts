@@ -226,6 +226,34 @@ export const copy = {
     statClients: 'device blocks',
     statService: (label: string) => `service ${label}`,
     statGroup: (name: string) => `group ${name}`,
+    statusHeader: 'Status',
+    // One plain label per server-side list state. `age` is how old the copy
+    // in force is ("3 hours ago"). Every label says whether the list is
+    // still blocking, because that is what the user actually needs to know.
+    state: (state: string, age: string): string =>
+      ({
+        pending: 'Not downloaded yet',
+        ok: `Up to date · checked ${age}`,
+        failing: `Update failing · still blocking with the copy from ${age}`,
+        stale: `Out of date · still blocking with the copy from ${age}`,
+        unavailable: 'Not loaded · not blocking anything',
+        retired: `Retired by its publisher · still blocking with the copy from ${age}`,
+        unauthorized: `Now needs credentials · still blocking with the copy from ${age}`,
+        suspicious: `Last download refused · still blocking with the copy from ${age}`,
+        disabled: 'Off',
+      })[state] ?? state,
+    stateHint: (state: string, error: string): string =>
+      ({
+        pending: 'Minos will download this list shortly.',
+        ok: 'The last check reached the publisher successfully.',
+        failing: `The last update failed: ${error}. Minos retries on a short backoff and keeps using the last good copy.`,
+        stale: `Updates have failed for more than two refresh intervals: ${error}. The copy in force is getting old.`,
+        unavailable: `No copy of this list could be downloaded yet: ${error}. Minos keeps retrying.`,
+        retired: `The publisher no longer serves this list (${error}). Replace it with another from the catalog.`,
+        unauthorized: `The publisher now refuses the download (${error}). The feed may need an account or key.`,
+        suspicious: `${error}.`,
+        disabled: 'This list is switched off and not blocking.',
+      })[state] ?? error,
     catalogTitle: 'Choose your blocklists',
     catalogHint: 'curated, verified lists — one click to subscribe',
     catalogAdd: 'Add',

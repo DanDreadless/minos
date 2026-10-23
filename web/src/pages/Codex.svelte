@@ -3,6 +3,7 @@
   import { api, type ListStats, type ListStatus, type Service } from '../lib/api';
   import { blocklistPresets, blocklistTiers, type BlocklistPreset } from '../lib/blocklists';
   import { copy } from '../lib/copy';
+  import { fmtAgo } from '../lib/format';
   import { docketHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
@@ -171,7 +172,7 @@
           <th>Rules</th>
           <th>Skipped</th>
           <th>{copy.lists.blocksHeader}</th>
-          <th>Last refresh</th>
+          <th>{copy.lists.statusHeader}</th>
           <th></th>
         </tr>
       </thead>
@@ -230,12 +231,11 @@
                 {/if}
               {/if}
             </td>
-            <td>
-              {#if l.last_error}
-                <span class="err" title={l.last_error}>fetch failed</span>
-              {:else}
-                {fmtWhen(l.last_refresh)}
-              {/if}
+            <td
+              class="state {l.state}"
+              title={`${copy.lists.stateHint(l.state, l.last_error ?? '')}${l.last_refresh ? ` Copy in force: ${fmtWhen(l.last_refresh)}.` : ''}`}
+            >
+              {copy.lists.state(l.state, fmtAgo(l.last_refresh))}
             </td>
             <td>
               <button class="row-action danger" on:click={() => remove(l)}>Remove</button>
@@ -340,8 +340,29 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .err {
+  .state {
+    font-size: 0.82rem;
+    cursor: help;
+  }
+
+  /* Red only when the list is not protecting at all; amber when it is
+     blocking from an older copy; quiet when all is well. */
+  .state.unavailable {
     color: var(--blocked);
+  }
+
+  .state.failing,
+  .state.stale,
+  .state.retired,
+  .state.unauthorized,
+  .state.suspicious {
+    color: var(--audit, #c9962e);
+  }
+
+  .state.ok,
+  .state.pending,
+  .state.disabled {
+    color: var(--text-dim);
   }
 
   .count-link {
