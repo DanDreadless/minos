@@ -263,3 +263,27 @@ func BenchmarkBuild100k(b *testing.B) {
 		}
 	}
 }
+
+// TestCountingBuilderMatchesARealOne: the counting builder (used to vet a
+// download before it may replace a list) must classify exactly like the
+// real builder while storing nothing.
+func TestCountingBuilderMatchesARealOne(t *testing.T) {
+	lines := []string{"||ads.example^", "@@||ok.example^", "||path.example/x^", "bare.example", "not a domain", "! comment"}
+	real, count := NewBuilder(), NewCountingBuilder()
+	for _, l := range lines {
+		real.ParseAdblockLine("l", l, false)
+		count.ParseAdblockLine("l", l, false)
+	}
+	count.AddDeny("l", "deny.example")
+	real.AddDeny("l", "deny.example")
+	m := real.Build()
+	if got, want := count.Counted(), m.Rules()+m.AllowRules(); got != want {
+		t.Errorf("counted %d, real builder holds %d", got, want)
+	}
+	if count.SkippedCount() != real.SkippedCount() {
+		t.Errorf("skipped: counting %d, real %d", count.SkippedCount(), real.SkippedCount())
+	}
+	if len(count.deny) != 0 || len(count.allow) != 0 {
+		t.Error("counting builder stored entries")
+	}
+}

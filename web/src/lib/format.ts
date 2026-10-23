@@ -53,6 +53,15 @@ export function fmtCelsius(v: number | undefined): string {
 }
 
 // Coarse by design: an uptime panel wants "12 days", not "12d 4h 31m 9s".
+// fmtAgo renders how long ago an ISO time was: "just now", "5 minutes ago",
+// "3 hours ago", "2 days ago". Pair with the full time in a title.
+export function fmtAgo(iso: string | undefined, now = Date.now()): string {
+  if (!iso) return '—';
+  const s = Math.max(0, (now - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'just now';
+  return `${fmtUptime(s)} ago`;
+}
+
 export function fmtUptime(seconds: number | undefined): string {
   if (seconds === undefined) return '—';
   const d = Math.floor(seconds / 86400);

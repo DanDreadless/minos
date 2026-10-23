@@ -91,6 +91,7 @@ func startup(m *Manager) {
 // before it, a restart while a list host was down brought that list back
 // with zero rules.
 func TestListsSurviveRestartDuringOutage(t *testing.T) {
+	fastRetries(t)
 	srv := newListServer(t, "ads.example\ntracker.example\n")
 	dir := t.TempDir()
 

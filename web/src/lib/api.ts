@@ -251,9 +251,26 @@ export interface ListStatus {
   audit: boolean;
   rules: number;
   skipped: number;
+  // last_refresh: the last time the publisher was reached (200 or 304) — the
+  // age of the copy in force. last_attempt: the latest try, success or not.
   last_refresh?: string;
   last_error?: string;
+  state: ListState;
+  last_attempt?: string;
+  consecutive_failures?: number;
 }
+
+// The server's single health verdict per list (internal/lists ListState).
+export type ListState =
+  | 'pending'
+  | 'ok'
+  | 'failing'
+  | 'stale'
+  | 'unavailable'
+  | 'retired'
+  | 'unauthorized'
+  | 'suspicious'
+  | 'disabled';
 
 export interface Device {
   ip: string; // primary (most recently active) address

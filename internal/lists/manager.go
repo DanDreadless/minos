@@ -3,8 +3,6 @@ package lists
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -29,17 +27,43 @@ const (
 
 // SourceStatus is what the API reports per configured list.
 type SourceStatus struct {
-	Name        string    `json:"name"`
-	URL         string    `json:"url"`
-	Format      string    `json:"format"`
-	Action      string    `json:"action"` // "block" or "allow" (empty config = block)
-	Enabled     bool      `json:"enabled"`
-	Audit       bool      `json:"audit"` // rules logged as "would block", never enforced
-	Rules       int       `json:"rules"`
-	Skipped     int       `json:"skipped"`
+	Name    string `json:"name"`
+	URL     string `json:"url"`
+	Format  string `json:"format"`
+	Action  string `json:"action"` // "block" or "allow" (empty config = block)
+	Enabled bool   `json:"enabled"`
+	Audit   bool   `json:"audit"` // rules logged as "would block", never enforced
+	Rules   int    `json:"rules"`
+	Skipped int    `json:"skipped"`
+	// LastRefresh is the last time the publisher was successfully reached
+	// (a 200 or a 304) — the age of the copy in force.
 	LastRefresh time.Time `json:"last_refresh,omitempty"`
 	LastError   string    `json:"last_error,omitempty"`
+	// State is the one word for this list's health (see ListState).
+	State ListState `json:"state"`
+	// LastAttempt is the most recent fetch attempt, successful or not.
+	LastAttempt         time.Time `json:"last_attempt,omitempty"`
+	ConsecutiveFailures int       `json:"consecutive_failures,omitempty"`
+
+	failKind failKind
+	hasBody  bool
 }
+
+// ListState is the single health verdict the API reports per list, so the
+// UI never has to infer one from timestamps and error strings.
+type ListState string
+
+const (
+	ListPending      ListState = "pending"      // not fetched yet
+	ListOK           ListState = "ok"           // last attempt succeeded
+	ListFailing      ListState = "failing"      // failing; a recent copy is in force
+	ListStale        ListState = "stale"        // failing for over two refresh intervals
+	ListUnavailable  ListState = "unavailable"  // failing and no copy at all: not blocking
+	ListRetired      ListState = "retired"      // 404/410: the publisher removed it
+	ListUnauthorized ListState = "unauthorized" // 401/403: the feed now needs credentials
+	ListSuspicious   ListState = "suspicious"   // download refused by vetting; previous copy kept
+	ListDisabled     ListState = "disabled"
+)
 
 // Manager owns list fetching and matcher rebuilds. A rebuild always
 // constructs a complete new matcher off the hot path, then swaps it into
@@ -56,11 +80,12 @@ type Manager struct {
 	client      *http.Client
 	ua          string
 
-	mu     sync.Mutex
-	cached map[string][]byte    // source name → last good raw body
-	meta   map[string]cacheMeta // source name → validators for conditional GET
-	status map[string]*SourceStatus
-	disk   *diskCache // nil = memory only (ephemeral mode, or not configured)
+	mu      sync.Mutex
+	cached  map[string][]byte    // source name → last good raw body
+	meta    map[string]cacheMeta // source name → validators for conditional GET
+	status  map[string]*SourceStatus
+	rejects map[string]rejection // source name → body vetting refused
+	disk    *diskCache           // nil = memory only (ephemeral mode, or not configured)
 
 	refreshNow chan struct{}
 }
@@ -75,6 +100,7 @@ func NewManager(engine *filter.Engine, store *config.Store) *Manager {
 		cached:      make(map[string][]byte),
 		meta:        make(map[string]cacheMeta),
 		status:      make(map[string]*SourceStatus),
+		rejects:     make(map[string]rejection),
 		refreshNow:  make(chan struct{}, 1),
 	}
 	// Config changes (new pardons/sentences, list edits) rebuild from cache
@@ -141,6 +167,8 @@ func (m *Manager) loadFromDisk() bool {
 func (m *Manager) AuditEngine() *filter.Engine { return m.auditEngine }
 
 // Run blocks: initial refresh, then periodic refreshes until ctx ends.
+// Sources that failed transiently are retried sooner, on a backoff schedule,
+// without refetching the healthy ones.
 func (m *Manager) Run(ctx context.Context) {
 	// Compile what's on disk first: blocking is live from the first second,
 	// before (and regardless of) the network.
@@ -148,13 +176,25 @@ func (m *Manager) Run(ctx context.Context) {
 		m.rebuild(ctx, false)
 	}
 	m.Refresh(ctx)
+	next := time.Now().Add(m.store.Get().Lists.RefreshInterval.Std())
 	for {
 		interval := m.store.Get().Lists.RefreshInterval.Std()
+		wait := time.Until(next)
+		retry := m.retryDelay(interval)
+		retrying := retry > 0 && retry < wait
+		if retrying {
+			wait = retry
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(interval):
-			m.Refresh(ctx)
+		case <-time.After(wait):
+			if retrying {
+				m.retryFailing(ctx)
+			} else {
+				m.Refresh(ctx)
+				next = time.Now().Add(interval)
+			}
 		case <-m.refreshNow:
 			m.rebuild(ctx, false)
 		}
@@ -233,13 +273,14 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 
 	if refetch {
 		keep := make(map[string]bool)
+		var todo []annotated
 		for _, src := range allSources(cfg) {
 			keep[src.URL] = true // a disabled list keeps its cache for re-enable
-			if !src.Enabled {
-				continue
+			if src.Enabled {
+				todo = append(todo, src)
 			}
-			m.refreshSource(ctx, src)
 		}
+		m.refreshAll(ctx, todo)
 		if m.disk != nil {
 			m.disk.prune(keep)
 		}
@@ -340,15 +381,51 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 		"refetched", refetch)
 }
 
-func (m *Manager) setStatusFetched(src annotated) {
-	st := m.ensureStatus(src)
-	st.LastRefresh = time.Now()
-	st.LastError = ""
+// fetchConcurrency bounds parallel downloads: enough that one slow
+// publisher doesn't hold the rest up, few enough to be gentle on a Pi's
+// network and memory (bodies are held until the rebuild).
+const fetchConcurrency = 2
+
+func (m *Manager) refreshAll(ctx context.Context, srcs []annotated) {
+	sem := make(chan struct{}, fetchConcurrency)
+	var wg sync.WaitGroup
+	for _, src := range srcs {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer func() { <-sem; wg.Done() }()
+			m.refreshSource(ctx, src)
+		}()
+	}
+	wg.Wait()
 }
 
-func (m *Manager) setStatusError(src annotated, err error) {
-	st := m.ensureStatus(src)
-	st.LastError = err.Error()
+// retryFailing refetches only the sources whose last attempt failed
+// transiently, and rebuilds if any of them recovered.
+func (m *Manager) retryFailing(ctx context.Context) {
+	var todo []annotated
+	m.mu.Lock()
+	for _, src := range allSources(m.store.Get()) {
+		if st := m.status[src.Name]; src.Enabled && st != nil && st.failKind == failTransient {
+			todo = append(todo, src)
+		}
+	}
+	m.mu.Unlock()
+	if len(todo) == 0 {
+		return
+	}
+	m.refreshAll(ctx, todo)
+	m.mu.Lock()
+	recovered := false
+	for _, src := range todo {
+		if st := m.status[src.Name]; st != nil && st.failKind == failNone {
+			recovered = true
+		}
+	}
+	m.mu.Unlock()
+	if recovered {
+		m.rebuild(ctx, false)
+	}
 }
 
 func (m *Manager) ensureStatus(src annotated) *SourceStatus {
@@ -379,114 +456,42 @@ func (m *Manager) Status() []SourceStatus {
 	defer m.mu.Unlock()
 	sources := allSources(cfg)
 	out := make([]SourceStatus, 0, len(sources))
+	interval := cfg.Lists.RefreshInterval.Std()
 	for _, src := range sources {
+		var s SourceStatus
 		if st, ok := m.status[src.Name]; ok {
-			s := *st
-			s.Enabled = src.Enabled
-			s.Action = src.actionLabel()
-			s.Audit = src.Audit
-			out = append(out, s)
+			s = *st
 		} else {
-			out = append(out, SourceStatus{
-				Name: src.Name, URL: src.URL, Format: src.Format,
-				Action: src.actionLabel(), Enabled: src.Enabled, Audit: src.Audit,
-			})
+			s = SourceStatus{Name: src.Name, URL: src.URL, Format: src.Format}
 		}
+		s.Enabled = src.Enabled
+		s.Action = src.actionLabel()
+		s.Audit = src.Audit
+		_, s.hasBody = m.cached[src.Name]
+		s.State = s.state(interval, time.Now())
+		out = append(out, s)
 	}
 	return out
 }
 
-// refreshSource fetches one source (conditionally, when a body is already
-// held) and records the outcome. A failure keeps the last good body.
-func (m *Manager) refreshSource(ctx context.Context, src annotated) {
-	m.mu.Lock()
-	_, have := m.cached[src.Name]
-	prev := m.meta[src.Name]
-	m.mu.Unlock()
-	if !have {
-		prev = cacheMeta{} // no body to fall back on: must download it
+func (s *SourceStatus) state(interval time.Duration, now time.Time) ListState {
+	switch {
+	case !s.Enabled:
+		return ListDisabled
+	case s.failKind == failRetired:
+		return ListRetired
+	case s.failKind == failUnauthorized:
+		return ListUnauthorized
+	case s.failKind == failSuspicious:
+		return ListSuspicious
+	case s.failKind == failTransient && !s.hasBody:
+		return ListUnavailable
+	case s.failKind == failTransient && now.Sub(s.LastRefresh) > 2*interval:
+		return ListStale
+	case s.failKind == failTransient:
+		return ListFailing
+	case s.LastAttempt.IsZero() && s.LastRefresh.IsZero():
+		return ListPending
 	}
-	res, err := m.fetch(ctx, src.URL, prev)
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if err != nil {
-		slog.Warn("list fetch failed", "list", src.Name, "url", src.URL, "err", err)
-		m.setStatusError(src, err)
-		return
-	}
-	meta := cacheMeta{ETag: res.etag, LastModified: res.lastModified, FetchedAt: time.Now()}
-	if res.notModified {
-		if meta.ETag == "" {
-			meta.ETag = prev.ETag
-		}
-		if meta.LastModified == "" {
-			meta.LastModified = prev.LastModified
-		}
-		meta.SHA256 = prev.SHA256
-		if m.disk != nil {
-			if err := m.disk.touch(src.URL, meta); err != nil {
-				slog.Debug("list cache touch", "list", src.Name, "err", err)
-			}
-		}
-	} else {
-		m.cached[src.Name] = res.body
-		meta.SHA256 = bodyHash(res.body)
-		if m.disk != nil {
-			if err := m.disk.store(src.URL, res.body, meta); err != nil {
-				slog.Warn("list cache write failed", "list", src.Name, "err", err)
-			}
-		}
-	}
-	m.meta[src.Name] = meta
-	m.setStatusFetched(src)
-}
-
-// fetchResult is one download. notModified means a 304 answered a
-// conditional request: the held body is current and body is nil.
-type fetchResult struct {
-	body         []byte
-	notModified  bool
-	etag         string
-	lastModified string
-}
-
-// fetch downloads one list with a hard size cap and timeout. With validators
-// in prev it asks conditionally, so an unchanged list costs a 304 instead of
-// the whole download — most refreshes, for most lists.
-func (m *Manager) fetch(ctx context.Context, url string, prev cacheMeta) (fetchResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return fetchResult{}, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("User-Agent", m.ua)
-	if prev.ETag != "" {
-		req.Header.Set("If-None-Match", prev.ETag)
-	}
-	if prev.LastModified != "" {
-		req.Header.Set("If-Modified-Since", prev.LastModified)
-	}
-	resp, err := m.client.Do(req)
-	if err != nil {
-		return fetchResult{}, fmt.Errorf("fetch: %w", err)
-	}
-	defer resp.Body.Close()
-	res := fetchResult{etag: resp.Header.Get("ETag"), lastModified: resp.Header.Get("Last-Modified")}
-	if resp.StatusCode == http.StatusNotModified && (prev.ETag != "" || prev.LastModified != "") {
-		res.notModified = true
-		return res, nil
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fetchResult{}, fmt.Errorf("fetch: unexpected status %s", resp.Status)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxListBytes+1))
-	if err != nil {
-		return fetchResult{}, fmt.Errorf("read body: %w", err)
-	}
-	if len(body) > maxListBytes {
-		return fetchResult{}, fmt.Errorf("list exceeds %d byte cap", maxListBytes)
-	}
-	res.body = body
-	return res, nil
+	return ListOK
 }

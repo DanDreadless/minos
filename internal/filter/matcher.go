@@ -26,6 +26,11 @@ type Builder struct {
 	deny    map[string]int32 // reversed-label domain → index into lists
 	allow   map[string]int32
 	skipped int
+	// countOnly classifies and counts entries without storing them, for
+	// vetting a freshly downloaded list (did it shrink? is it empty?) without
+	// allocating a second full set of maps for it.
+	countOnly bool
+	counted   int
 }
 
 func NewBuilder() *Builder {
@@ -35,6 +40,16 @@ func NewBuilder() *Builder {
 		allow:   make(map[string]int32),
 	}
 }
+
+// NewCountingBuilder returns a Builder that applies the same validation and
+// AdBlock classification as a real one but keeps nothing: Counted reports
+// how many entries a list would contribute. Build on it is meaningless.
+func NewCountingBuilder() *Builder {
+	return &Builder{countOnly: true}
+}
+
+// Counted reports the valid entries a counting builder has seen.
+func (b *Builder) Counted() int { return b.counted }
 
 func (b *Builder) listIndex(list string) int32 {
 	if idx, ok := b.listIdx[list]; ok {
@@ -55,6 +70,10 @@ func (b *Builder) AddDeny(list, domain string) {
 		b.skipped++
 		return
 	}
+	if b.countOnly {
+		b.counted++
+		return
+	}
 	key := reverseLabels(norm)
 	if _, exists := b.deny[key]; !exists {
 		b.deny[key] = b.listIndex(list)
@@ -67,6 +86,10 @@ func (b *Builder) AddAllow(list, domain string) {
 	norm := NormalizeDomain(domain)
 	if norm == "" {
 		b.skipped++
+		return
+	}
+	if b.countOnly {
+		b.counted++
 		return
 	}
 	key := reverseLabels(norm)

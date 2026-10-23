@@ -304,7 +304,22 @@ always beats deny.
 ## Lists
 
 - `GET /api/lists` — per-list status: `{name, url, format, action, enabled,
-  audit, rules, skipped, last_refresh, last_error}`
+  audit, rules, skipped, state, last_refresh, last_attempt, last_error,
+  consecutive_failures}`. `last_refresh` is the last time the publisher was
+  reached (a 200 or a 304), so it is the age of the copy in force;
+  `last_attempt` is the latest try either way. `state` is the one verdict:
+
+  | state | meaning | still blocking? |
+  |---|---|---|
+  | `ok` | last check succeeded | yes |
+  | `pending` | not downloaded yet | no |
+  | `failing` | update failing (network, 5xx, 429, or the server sent a web page); retried on a 1 m → 1 h backoff | yes, last good copy |
+  | `stale` | failing for more than two refresh intervals | yes, but the copy is old |
+  | `unavailable` | failing and no copy was ever downloaded | **no** |
+  | `retired` | 404/410 — the publisher removed it; retried only at the normal interval | yes, last good copy |
+  | `unauthorized` | 401/403 — the feed now needs credentials | yes, last good copy |
+  | `suspicious` | a download was refused: under half the previous rule count (lists of 100+ rules). The same smaller body three refreshes running is accepted as the list's new size | yes, last good copy |
+  | `disabled` | switched off | no |
 - `POST /api/lists` — add: `{"name", "url", "format": "hosts|plain|adblock",
   "action": "block|allow", "audit": false, "enabled": true}` (fetches
   immediately). `audit: true` puts a blocklist in **audit mode**: its rules
