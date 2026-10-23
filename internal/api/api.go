@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"minos/internal/applog"
 	"minos/internal/clients"
 	"minos/internal/config"
 	"minos/internal/dnsproxy"
@@ -72,6 +73,8 @@ type Server struct {
 	installMethod string
 	started       time.Time
 	notifier      *notify.Notifier // may be nil
+	appLog        *applog.Ring     // may be nil: no Logs endpoints
+	logLevel      *slog.LevelVar
 }
 
 func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
@@ -118,6 +121,9 @@ func (s *Server) Router() http.Handler {
 		r.Get("/config", s.handleGetConfig)
 		r.Put("/config", s.handleUpdateConfig)
 		r.Post("/notifications/test", s.handleNotificationTest)
+		r.Get("/logs", s.handleLogs)
+		r.Get("/logs/stream", s.handleLogsStream)
+		r.Get("/logs/download", s.handleLogsDownload)
 		r.Get("/config/export", s.handleExportConfig)
 		r.Post("/config/import", s.handleImportConfig)
 		r.Post("/import/pihole", s.handleImportPihole)
@@ -206,6 +212,10 @@ type statusResponse struct {
 	// the card on absence rather than needing a separate enabled flag —
 	// the same gate /metrics uses.
 	DNSSEC *dnssecStatus `json:"dnssec,omitempty"`
+	// LogAlertSeq is the sequence number of the newest warning or error in
+	// the application log (0: none since start). The UI badges the Logs
+	// link while it is above the last one the user has looked at.
+	LogAlertSeq uint64 `json:"log_alert_seq"`
 }
 
 // dnssecStatus is the validation scoreboard for the dashboard. Counters
@@ -252,6 +262,9 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if paused && !until.IsZero() {
 		resp.PausedUntil = &until
+	}
+	if s.appLog != nil {
+		resp.LogAlertSeq = s.appLog.AlertSeq()
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

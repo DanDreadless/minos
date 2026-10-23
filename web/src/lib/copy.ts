@@ -23,6 +23,42 @@ export const copy = {
     lists: { label: 'The Codex', hint: 'blocklists' },
     domains: { label: 'Pardons & Sentences', hint: 'allow & deny domains' },
     settings: { label: 'Settings', hint: 'server configuration' },
+    logs: { label: 'Logs', hint: "Minos's own activity" },
+    logsAlert: 'new warnings or errors',
+  },
+
+  logs: {
+    title: 'Logs',
+    subtitle: "what Minos itself is doing — list updates, resolver trouble, errors",
+    searchPlaceholder: 'Search messages and details…',
+    showLabel: 'Show',
+    show: [
+      { level: 'debug', label: 'Everything' },
+      { level: 'info', label: 'Info and up' },
+      { level: 'warn', label: 'Warnings and errors' },
+      { level: 'error', label: 'Errors only' },
+    ] as { level: 'debug' | 'info' | 'warn' | 'error'; label: string }[],
+    recordLabel: 'Record',
+    recordHint:
+      'Which messages Minos keeps — in this page and in the system journal. Applies at once. Debug is very chatty (every query); use it briefly.',
+    recordLevels: { debug: 'debug (very detailed)', info: 'info (normal)', warn: 'warnings and errors', error: 'errors only' } as Record<string, string>,
+    live: 'Live',
+    paused: (n: number) => (n ? `Paused · ${n} new` : 'Paused'),
+    reconnecting: 'Reconnecting…',
+    pause: 'Pause',
+    resume: 'Resume',
+    download: 'Download',
+    downloadHint: 'everything held, as a text file — attach it to a bug report (secrets are already removed)',
+    copyLine: 'Copy',
+    copied: 'Copied the line.',
+    count: (shown: number, held: number) => `${shown} of ${held} held`,
+    heldNote:
+      'Only the newest 2,000 messages are kept in memory and they are cleared when Minos restarts. The full history is in the system journal (journalctl -u minos) or docker logs.',
+    empty: 'Nothing logged yet.',
+    noMatches: 'No messages match.',
+    belowLevel: (level: string) =>
+      `Messages below "${level}" are not being recorded. Change "Record" to see them from now on.`,
+    levelName: { debug: 'debug', info: 'info', warn: 'warning', error: 'error' } as Record<string, string>,
   },
 
   stats: {

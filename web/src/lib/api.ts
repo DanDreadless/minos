@@ -2,6 +2,9 @@
 // this module only — no reaching into backend internals.
 
 export interface Status {
+  // Sequence number of the newest warning/error in the application log
+  // (0: none since start) — the Logs nav badge compares it with the last seen.
+  log_alert_seq?: number;
   version: string;
   uptime_seconds: number;
   paused: boolean;
@@ -256,6 +259,7 @@ export interface SettingsUpdate {
     quiet_hours?: string;
     mute?: string[];
   };
+  log_level?: string;
   discovery?: { ssdp?: boolean; dhcp_listen?: boolean };
 }
 
@@ -518,6 +522,20 @@ export const api = {
 
   getConfig: () => request<ConfigView>('GET', '/api/config'),
   updateConfig: (upd: SettingsUpdate) => request<ConfigView>('PUT', '/api/config', upd),
+  appLogs: () => request<AppLogs>('GET', '/api/logs'),
+  // The held log as a text file, fetched so the token stays in a header.
+  appLogsDownload: async (): Promise<{ blob: Blob; filename: string }> => {
+    const headers: Record<string, string> = {};
+    const token = getToken();
+    if (token) headers['X-Api-Token'] = token;
+    const resp = await fetch('/api/logs/download', { headers });
+    if (!resp.ok) throw new ApiError(resp.status, resp.statusText);
+    const cd = resp.headers.get('Content-Disposition') ?? '';
+    return {
+      blob: await resp.blob(),
+      filename: /filename="([^"]+)"/.exec(cd)?.[1] ?? 'minos-log.txt',
+    };
+  },
   // Sends a test notification now; the result maps each destination
   // ("webhook", "ntfy") to "ok" or the reason it failed.
   testNotification: () => request<Record<string, string>>('POST', '/api/notifications/test'),
@@ -660,6 +678,37 @@ export async function exportConfig(): Promise<void> {
 
 // openStream connects to the live query log. Browsers cannot set headers on
 // WebSockets, so the token rides a query parameter (stream endpoint only).
+// One line of Minos's own application log (secrets redacted server-side).
+export interface AppLogRecord {
+  seq: number;
+  time: string;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  message: string;
+  attrs?: { key: string; value: string }[];
+}
+
+export interface AppLogs {
+  level: AppLogRecord['level']; // what is being recorded now
+  records: AppLogRecord[]; // oldest first
+  alert_seq: number;
+}
+
+export function openLogStream(onRecord: (r: AppLogRecord) => void, onDrop: () => void): WebSocket {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const token = getToken();
+  const qs = token ? `?token=${encodeURIComponent(token)}` : '';
+  const ws = new WebSocket(`${proto}//${location.host}/api/logs/stream${qs}`);
+  ws.onmessage = (ev) => {
+    try {
+      onRecord(JSON.parse(ev.data as string) as AppLogRecord);
+    } catch {
+      // ignore malformed frames
+    }
+  };
+  ws.onclose = onDrop;
+  return ws;
+}
+
 export function openStream(onEntry: (e: LogEntry) => void, onDrop: () => void): WebSocket {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const token = getToken();

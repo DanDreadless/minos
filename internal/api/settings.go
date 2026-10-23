@@ -51,7 +51,9 @@ type configView struct {
 		Listen   string `json:"listen"`
 		TokenSet bool   `json:"token_set"`
 	} `json:"api"`
-	UpdateCheck   bool `json:"update_check"`
+	UpdateCheck bool `json:"update_check"`
+	// LogLevel is the saved application log level ("" = the -log-level flag's).
+	LogLevel      string `json:"log_level"`
 	Notifications struct {
 		WebhookURL   string `json:"webhook_url"`
 		NtfyURL      string `json:"ntfy_url"`
@@ -106,6 +108,7 @@ func viewOf(c *config.Config) configView {
 	v.API.Listen = c.API.Listen
 	v.API.TokenSet = c.API.Token != ""
 	v.UpdateCheck = c.UpdateCheck
+	v.LogLevel = c.LogLevel
 	v.Notifications.WebhookURL = c.Notifications.WebhookURL
 	v.Notifications.NtfyURL = c.Notifications.NtfyURL
 	v.Notifications.NtfyTokenSet = c.Notifications.NtfyToken != ""
@@ -171,7 +174,8 @@ type settingsUpdate struct {
 	API *struct {
 		Token *string `json:"token"`
 	} `json:"api"`
-	UpdateCheck   *bool `json:"update_check"`
+	UpdateCheck   *bool   `json:"update_check"`
+	LogLevel      *string `json:"log_level"`
 	Notifications *struct {
 		WebhookURL *string   `json:"webhook_url"`
 		NtfyURL    *string   `json:"ntfy_url"`
@@ -278,6 +282,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if upd.UpdateCheck != nil {
 			c.UpdateCheck = *upd.UpdateCheck
+		}
+		if upd.LogLevel != nil {
+			c.LogLevel = strings.ToLower(strings.TrimSpace(*upd.LogLevel))
 		}
 		if upd.Notifications != nil {
 			if upd.Notifications.WebhookURL != nil {

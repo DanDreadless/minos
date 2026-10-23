@@ -564,6 +564,19 @@ This is security software; hold it to that standard.
   `{healthState(u, upstreamHealth, savedUpstreams)}` — which also makes it
   a signal. Check with `svelte/compiler`: the declaration must read
   `$.mutable_source(...)`.
+- **Application log in the UI** (fixed decisions, October 2026,
+  `internal/applog`, a stdlib-only leaf): the default slog handler tees the
+  journal's text handler into a 2,000-record ring under **one shared
+  `slog.LevelVar`**, so `Enabled` is a single gate and a debug line below the
+  level costs what it always did. Ring, subscribers and level are in-memory
+  only — no disk writes, a restart starts afresh, the journal keeps history.
+  Redaction happens **before** anything is written, in both sinks (the ring
+  via `appendAttr`, the journal via `applog.ReplaceAttr`): secret-named keys
+  wholesale, and passwords/credential query values inside URL-shaped values.
+  Slow WebSocket viewers drop lines rather than slow logging. `log_level` in
+  the config is applied on boot unless `-log-level` was passed explicitly,
+  and afterwards only when `log_level` itself changes. The menu dot keys
+  "seen" by server boot (start time to the minute) because `seq` restarts.
 - **Notification standard** (fixed decisions, October 2026, `internal/notify`):
   every event is built by a constructor in `events.go` — specific plain
   title, a body that says what happened / why it matters / what to do, a

@@ -53,6 +53,7 @@ minos pause 30m  # pause blocking (blank duration = until resumed)
 minos resume     # resume blocking
 minos import pihole /etc/pihole            # migrate Pi-hole settings
 minos import adguard AdGuardHome.yaml      # migrate AdGuard Home settings
+minos logs -f -level warn                  # follow the application log
 minos version
 ```
 
@@ -411,6 +412,20 @@ Open `http://<host>:8080`. Six pages, one per concern:
   A/AAAA/CNAME records (wildcards like `*.home.lab` included) that Minos
   answers itself — they beat the blocklists, never leave your network, and
   address records answer reverse (PTR) lookups automatically.
+- **Logs** — what Minos itself is doing: list downloads, resolver
+  failures, certificate renewals, errors. New lines stream in live; filter
+  by level (everything, info and up, warnings and errors, errors only) and
+  search messages and their details; **Pause** holds the view, **Copy**
+  copies a line, **Download** saves everything held as a text file for a
+  bug report. **Record** sets which messages Minos keeps — here and in the
+  system journal — and applies at once (debug is very chatty; use it
+  briefly). A red dot on **Logs** in the menu means a warning or error
+  arrived since you last looked. The page holds the newest 2,000 messages
+  and starts afresh when Minos restarts; the full history stays in the
+  journal (`journalctl -u minos`) or `docker logs`. Credentials never
+  appear: attributes named like tokens, keys or passwords, and passwords or
+  `token=`/`key=` parameters inside URLs, are replaced before anything is
+  written — in the journal too.
 - **Settings** — everything below is editable here and applies immediately,
   no restart: upstream resolvers and their order, conditional forwarding
   (send `lan` or your reverse zone to the router so DHCP hostnames keep

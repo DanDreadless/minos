@@ -9,6 +9,7 @@ export type Route =
   | 'device'
   | 'lists'
   | 'domains'
+  | 'logs'
   | 'settings';
 
 // The hash without its query string, e.g. '#/querylog?client=x' → '#/querylog'.
@@ -32,6 +33,8 @@ function parse(): Route {
       return 'domains';
     case '#/settings':
       return 'settings';
+    case '#/logs':
+      return 'logs';
     default:
       return 'dashboard';
   }
@@ -90,6 +93,7 @@ export const hrefFor: Record<Route, string> = {
   lists: '#/lists',
   domains: '#/domains',
   settings: '#/settings',
+  logs: '#/logs',
 };
 
 // deviceHref links to a device's detail page. key is the device's MAC when

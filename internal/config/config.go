@@ -452,6 +452,10 @@ type Config struct {
 	// sent beyond the request itself, and nothing is sent at all unless
 	// the user turns it on.
 	UpdateCheck bool `yaml:"update_check"`
+	// LogLevel is the application log level set from the UI: debug, info,
+	// warn or error. Empty keeps the -log-level flag's (default info). It
+	// applies live, to the journal and the UI's Logs page alike.
+	LogLevel string `yaml:"log_level,omitempty"`
 	// UpdateInstallMethod forces the install method the upgrade guidance
 	// assumes ("binary", "docker", or "source") for deployments the
 	// detection can't see — a distro package, a k8s manifest. Empty (the
@@ -988,6 +992,11 @@ func (c *Config) Validate() error {
 		if _, err := parseWeekday(s); err != nil {
 			return fmt.Errorf("notifications.digest_day: %w", err)
 		}
+	}
+	switch c.LogLevel {
+	case "", "debug", "info", "warn", "error":
+	default:
+		return fmt.Errorf("log_level: must be debug, info, warn, or error, got %q", c.LogLevel)
 	}
 	switch c.UpdateInstallMethod {
 	case "", "binary", "docker", "source":
