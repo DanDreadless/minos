@@ -170,10 +170,10 @@ complete 2026-07-12:
 Small UX corrections from real-world use, refining the shipped feature set
 above rather than adding capability:
 
-- **Two-state upstream health lights** — the Ferrymen breaker indicator now
-  reads green (healthy, including an idle backup) or red (failover tripped),
-  retiring the confusing grey "standby" state; the active-vs-standby detail
-  moved to the hover tooltip.
+- **Upstream health lights** — green (answering), red (failing), and since
+  October 2026 a hollow ring for a backup that has not been tested yet. The
+  July two-state version painted idle backups green, which hid one that had
+  never answered a query for 49 days.
 - **Themed scrollbars** — track sinks into the page background and the thumb
   is a muted laurel gold that brightens on hover, matching the app's accent
   instead of the browser-default grey.

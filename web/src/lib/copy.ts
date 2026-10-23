@@ -399,11 +399,14 @@ export const copy = {
     upstreamPreset: 'Known resolver…',
     upstreamCustom: 'Custom',
     upstreamHealthy: (requests: number, failures: number, avgMs: number) =>
-      `Active — ${requests.toLocaleString()} queries, ${failures.toLocaleString()} failed, ~${Math.round(avgMs)} ms average since the last restart.`,
-    upstreamSick:
-      'Failing — the failover breaker is sidestepping this resolver and retrying it every 30 seconds. Other upstreams are answering.',
-    upstreamReady:
-      'Ready — healthy and standing by. Nothing has needed it yet: the resolvers ahead of it are handling all the traffic.',
+      `Healthy — ${requests.toLocaleString()} queries, ${failures.toLocaleString()} failed, ~${Math.round(avgMs)} ms average since the last restart.`,
+    // Failing never claims the others are answering: they may be failing too.
+    upstreamFailing: (lastSuccess: string, error: string) =>
+      `Failing — ${lastSuccess ? `last answered ${lastSuccess}` : 'has not answered a single query since the last restart'}.` +
+      `${error ? ` Last error: ${error}.` : ''} Minos skips it and retries every 30 seconds.`,
+    upstreamUnused:
+      'Not used yet — the resolvers above it have answered everything, so this one has not been tested. It is tried if they fail.',
+    upstreamUnsaved: 'Not saved yet — save to start using this resolver.',
     dnssecLabel: 'DNSSEC validation',
     dnssecOff: 'Off — trust the upstream resolvers (default)',
     dnssecPermissive: 'Permissive — validate and count, never block',

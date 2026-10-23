@@ -192,3 +192,79 @@ func TestAllSickStillTried(t *testing.T) {
 		t.Errorf("sole dead upstream tried %d times, want %d (last resort must always try)", got, queries)
 	}
 }
+
+func upstreamStat(t *testing.T, srv *Server, name string) UpstreamStat {
+	t.Helper()
+	for _, u := range srv.UpstreamStats() {
+		if u.Name == name {
+			return u
+		}
+	}
+	t.Fatalf("no stats for %s", name)
+	return UpstreamStat{}
+}
+
+// TestUpstreamStaysFailingAfterCooldown is the v0.21.2 field bug: Sick was
+// reported only inside the 30 s cooldown, so a resolver that had failed every
+// exchange it was ever given read healthy (a green light) between trips.
+func TestUpstreamStaysFailingAfterCooldown(t *testing.T) {
+	oldCooldown := failoverCooldown
+	failoverCooldown = 10 * time.Millisecond
+	defer func() { failoverCooldown = oldCooldown }()
+
+	srv := &Server{}
+	for i := 0; i < failThreshold; i++ {
+		srv.trackUpstream("dead", time.Millisecond, fmt.Errorf("dial: connection refused"))
+	}
+	time.Sleep(3 * failoverCooldown) // cooldown lapses; nothing has succeeded
+	st := upstreamStat(t, srv, "dead")
+	if !st.Sick || st.State != UpstreamFailing {
+		t.Fatalf("after the cooldown: sick=%v state=%s, want sick and failing", st.Sick, st.State)
+	}
+	if st.LastError != "dial: connection refused" || st.LastFailure.IsZero() || !st.LastSuccess.IsZero() {
+		t.Errorf("last error/failure/success = %q %v %v", st.LastError, st.LastFailure, st.LastSuccess)
+	}
+
+	srv.trackUpstream("dead", time.Millisecond, nil) // the probe succeeds
+	st = upstreamStat(t, srv, "dead")
+	if st.Sick || st.State != UpstreamHealthy || st.LastSuccess.IsZero() {
+		t.Errorf("after recovery: sick=%v state=%s, want healthy", st.Sick, st.State)
+	}
+}
+
+// TestUpstreamThatNeverAnsweredIsFailing: a backup that fails the odd time it
+// is asked never reaches the breaker threshold, but it has never answered —
+// that must not read healthy either.
+func TestUpstreamThatNeverAnsweredIsFailing(t *testing.T) {
+	srv := &Server{}
+	srv.trackUpstream("backup", time.Millisecond, fmt.Errorf("tls: handshake failure"))
+	if st := upstreamStat(t, srv, "backup"); st.State != UpstreamFailing {
+		t.Errorf("one failure, no success: state=%s, want failing", st.State)
+	}
+	srv.counters("idle")
+	if st := upstreamStat(t, srv, "idle"); st.State != UpstreamUnused {
+		t.Errorf("never asked: state=%s, want unused", st.State)
+	}
+}
+
+// TestProtocolChangeResetsUpstreamCounters: health is keyed by address, so a
+// URL corrected from dot to doh must not inherit the broken entry's failures.
+func TestProtocolChangeResetsUpstreamCounters(t *testing.T) {
+	srv := &Server{}
+	cfg := config.Default()
+	cfg.DNS.Upstreams = []config.Upstream{{Address: "9.9.9.9:853", Protocol: "dot"}}
+	srv.resetChangedUpstreams(cfg)
+	srv.trackUpstream("9.9.9.9:853", time.Millisecond, fmt.Errorf("boom"))
+
+	cfg.DNS.Upstreams[0].Protocol = "tcp"
+	srv.resetChangedUpstreams(cfg)
+	if got := upstreamRequests(srv, "9.9.9.9:853"); got != 0 {
+		t.Errorf("requests after a protocol change = %d, want the counters reset", got)
+	}
+
+	srv.trackUpstream("9.9.9.9:853", time.Millisecond, nil)
+	srv.resetChangedUpstreams(cfg) // same protocol: history is kept
+	if got := upstreamRequests(srv, "9.9.9.9:853"); got != 1 {
+		t.Errorf("requests after an unchanged apply = %d, want 1 kept", got)
+	}
+}

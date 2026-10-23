@@ -198,20 +198,30 @@ Judge a name without querying it:
 
 ### `GET /api/upstreams`
 
-Live failover-breaker state per upstream, keyed by the configured address —
-the data behind the health lights next to each resolver in Settings:
+Live health per upstream, keyed by the configured address — the data behind
+the health lights next to each resolver in Settings:
 
 ```json
 [{"address": "https://1.1.1.1/dns-query", "requests": 5120, "failures": 2,
-  "avg_ms": 18.4, "sick": false}]
+  "avg_ms": 18.4, "sick": false, "state": "healthy",
+  "last_success": "2026-10-23T12:01:44Z", "last_failure": "2026-10-23T09:12:03Z",
+  "last_error": "doh request: context deadline exceeded"}]
 ```
 
-`sick` means the breaker is currently sidestepping the upstream (it is
-retried every 30 s). `requests: 0` means the upstream has not been needed
-since the last restart — normal for a backup behind healthy primaries, not
-an outage. The Settings health light is two-state: red when `sick`, green
-otherwise (a `requests: 0` backup is a healthy green, standing by); the
-tooltip carries the active-vs-standby detail.
+`state` is the one verdict to show:
+
+- `healthy` — has answered, and is not currently failing.
+- `failing` — the breaker tripped and nothing has succeeded since (it is
+  retried every 30 s), **or** the upstream has never answered a single
+  query. `sick` is the breaker half of that and stays true for the whole
+  outage, not only during the cooldown window.
+- `unused` — never asked since the last restart: normal for a backup behind
+  healthy primaries, and *untested* rather than healthy.
+
+`last_success`, `last_failure` and `last_error` are omitted until they
+happen. Counters are process-lifetime and reset for an address whose
+protocol changes, so a corrected entry does not inherit the broken one's
+failures. Settings shows green / red / a hollow ring for the three states.
 
 ## Query log
 

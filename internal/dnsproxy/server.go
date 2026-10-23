@@ -94,6 +94,7 @@ type Server struct {
 	// upstreamStats accumulates per-upstream counters for /metrics,
 	// keyed by upstream name so they survive config swaps.
 	upstreamStats sync.Map // string → *upstreamCounters
+	upstreamProto sync.Map // address → protocol, to reset counters on change
 
 	// inflight collapses concurrent identical forwards (and stale
 	// refreshes) into one upstream exchange, keyed like the cache.
@@ -219,9 +220,18 @@ type upstreamCounters struct {
 	// scraper can derive average latency from sum/count.
 	durationNs atomic.Int64
 	// consecutiveFails trips the breaker at failThreshold; sickUntil is
-	// unix nanos until which the upstream is sidestepped (0 = healthy).
+	// unix nanos until which the upstream is sidestepped. It stays non-zero
+	// after the cooldown lapses — only a success clears it — so "tripped and
+	// not yet recovered" is sickUntil != 0; the deadline itself only decides
+	// when the next probe may go out.
 	consecutiveFails atomic.Int32
 	sickUntil        atomic.Int64
+	// lastSuccess/lastFailure are unix nanos (0 = never); lastErr is the
+	// most recent transport error, for the health tooltip. Written on the
+	// exchange path only, after the upstream round trip.
+	lastSuccess atomic.Int64
+	lastFailure atomic.Int64
+	lastErr     atomic.Pointer[string]
 }
 
 // UpstreamStat is one upstream's counters, for the metrics endpoint.
@@ -230,8 +240,30 @@ type UpstreamStat struct {
 	Requests        uint64
 	Failures        uint64
 	DurationSeconds float64
-	Sick            bool
+	// Sick: the breaker tripped and no exchange has succeeded since — true
+	// for the whole outage, not only during the cooldown window.
+	Sick        bool
+	State       UpstreamState
+	LastSuccess time.Time // zero = never
+	LastFailure time.Time // zero = never
+	LastError   string
 }
+
+// UpstreamState is the one health word the API and UI share, so they
+// cannot disagree about what a light means.
+type UpstreamState string
+
+const (
+	// UpstreamUnused: never asked since start — healthy primaries starve
+	// the backups, so this says nothing about whether it works.
+	UpstreamUnused UpstreamState = "unused"
+	// UpstreamHealthy: has answered, and is not currently failing.
+	UpstreamHealthy UpstreamState = "healthy"
+	// UpstreamFailing: the breaker is open, or it has never answered at all
+	// (an upstream that fails once or twice and is never asked again must
+	// not read healthy — that is how a dead backup hid for 49 days).
+	UpstreamFailing UpstreamState = "failing"
+)
 
 func (s *Server) counters(name string) *upstreamCounters {
 	v, ok := s.upstreamStats.Load(name)
@@ -248,6 +280,9 @@ func (s *Server) trackUpstream(name string, took time.Duration, err error) {
 	c.durationNs.Add(took.Nanoseconds())
 	if err != nil {
 		c.failures.Add(1)
+		c.lastFailure.Store(time.Now().UnixNano())
+		msg := err.Error()
+		c.lastErr.Store(&msg)
 		if fails := c.consecutiveFails.Add(1); fails >= failThreshold {
 			c.sickUntil.Store(time.Now().Add(failoverCooldown).UnixNano())
 			// Notify on the trip itself, not every re-arm.
@@ -257,6 +292,7 @@ func (s *Server) trackUpstream(name string, took time.Duration, err error) {
 		}
 		return
 	}
+	c.lastSuccess.Store(time.Now().UnixNano())
 	wasSick := c.sickUntil.Load() != 0
 	c.consecutiveFails.Store(0)
 	c.sickUntil.Store(0)
@@ -283,22 +319,60 @@ func (s *Server) available(name string, now time.Time) bool {
 
 // UpstreamStats snapshots the per-upstream counters, sorted by name.
 func (s *Server) UpstreamStats() []UpstreamStat {
-	now := time.Now().UnixNano()
 	var out []UpstreamStat
 	s.upstreamStats.Range(func(k, v any) bool {
 		c := v.(*upstreamCounters)
-		until := c.sickUntil.Load()
-		out = append(out, UpstreamStat{
+		st := UpstreamStat{
 			Name:            k.(string),
 			Requests:        c.requests.Load(),
 			Failures:        c.failures.Load(),
 			DurationSeconds: float64(c.durationNs.Load()) / 1e9,
-			Sick:            until != 0 && now < until,
-		})
+			Sick:            c.sickUntil.Load() != 0,
+			LastSuccess:     unixNanoTime(c.lastSuccess.Load()),
+			LastFailure:     unixNanoTime(c.lastFailure.Load()),
+		}
+		if e := c.lastErr.Load(); e != nil {
+			st.LastError = *e
+		}
+		switch {
+		case st.Requests == 0:
+			st.State = UpstreamUnused
+		case st.Sick || st.LastSuccess.IsZero():
+			st.State = UpstreamFailing
+		default:
+			st.State = UpstreamHealthy
+		}
+		out = append(out, st)
 		return true
 	})
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+func unixNanoTime(n int64) time.Time {
+	if n == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, n)
+}
+
+// resetChangedUpstreams drops the counters of an address whose protocol
+// changed. Health is keyed by address (the stable /metrics label), so
+// without this a corrected entry — the same URL moved from dot to doh —
+// inherited every failure of the broken one and read as failing until a
+// restart. A counter reset is ordinary Prometheus semantics.
+func (s *Server) resetChangedUpstreams(cfg *config.Config) {
+	note := func(u config.Upstream) {
+		if prev, ok := s.upstreamProto.Swap(u.Address, u.Protocol); ok && prev.(string) != u.Protocol {
+			s.upstreamStats.Delete(u.Address)
+		}
+	}
+	for _, u := range cfg.DNS.Upstreams {
+		note(u)
+	}
+	for _, r := range cfg.DNS.Routes {
+		note(r.Upstream)
+	}
 }
 
 func New(cfg *config.Config, engine *filter.Engine, qlog *querylog.Log, reg *clients.Registry) (*Server, error) {
@@ -340,6 +414,7 @@ func (s *Server) ApplyConfig(cfg *config.Config) error {
 			}
 		}
 	}
+	s.resetChangedUpstreams(cfg)
 	s.fwd.Store(ft)
 	s.policy.Store(&blockingPolicy{
 		nxdomain: cfg.Blocking.Mode == "nxdomain",
