@@ -278,6 +278,20 @@ This is security software; hold it to that standard.
 - **Dashboard aggregates read SQLite** (or the ring in ephemeral mode),
   so entries buffered but not yet flushed (≤30s/500) are missing from
   charts. Accepted skew — do not "fix" it by flushing per query.
+- **Stats come from rollups, exactly** (fixed decisions, October 2026,
+  `aggregate.go`/`rollups.go`): `roll_10m` (verdict; kept 48 h),
+  `roll_hour` (client × verdict × list), `roll_hour_blocked` (qname; the
+  dashboard only ranks blocked names) and `roll_day_client` (client ×
+  verdict × qname), all maintained by the derived-table machinery (live in
+  the insert's transaction, backfilled exactly-once). Buckets align as the
+  raw Timeline always did (`ts / width * width`, UTC), and every dashboard
+  aggregate adds a raw read of the **partial leading bucket** — so the
+  rollup answer equals the raw answer; `TestRollupsAnswerExactlyLikeTheLog`
+  checks 30 aggregate/window shapes against the raw queries and fails all
+  30 without the head read. The one deliberate approximation: device-page
+  windows ≥ 48 h read `roll_day_client` over whole UTC days and report
+  `window_start`; never present `hours` as the window there. Audit,
+  new-client and hydration queries stay raw (indexed, fast).
 - **Device policy semantics** (fixed decisions): assignment is by **MAC
   when the device has one** (so a group/block follows it across DHCP
   leases) and by IP otherwise — the only option for a device Minos can't

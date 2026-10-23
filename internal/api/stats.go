@@ -46,6 +46,7 @@ func writeStatsErr(ctx context.Context, w http.ResponseWriter, err error, hours 
 
 type statsResponse struct {
 	WindowHours int                       `json:"window_hours"`
+	WindowStart time.Time                 `json:"window_start"`
 	Timeline    []querylog.TimelineBucket `json:"timeline"`
 	TopBlocked  []querylog.TopDomain      `json:"top_blocked"`
 	TopClients  []querylog.ClientStat     `json:"top_clients"`
@@ -108,6 +109,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 	out := statsResponse{
 		WindowHours: hours,
+		WindowStart: since,
 		Timeline:    timeline,
 		TopBlocked:  topBlocked,
 		TopClients:  topClients,

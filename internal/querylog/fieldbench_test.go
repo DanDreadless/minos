@@ -115,5 +115,13 @@ func TestFieldBench(t *testing.T) {
 			s, err := l.BlocksByList(ctx, since)
 			return len(s), err
 		})
+		// The device page, for the busiest client.
+		top, err := l.TopClients(ctx, since, 1)
+		if err == nil && len(top) == 1 {
+			timeIt("device overview "+time.Duration(hours*int(time.Hour)).String(), func() (int, error) {
+				o, err := l.ClientOverview(ctx, []string{top[0].Client}, since, 10)
+				return o.Total, err
+			})
+		}
 	}
 }

@@ -121,18 +121,20 @@ never runs the command itself.
 Dashboard aggregates for a 1–2160 hour window (up to 90 days): a
 `timeline` of `{time, total, blocked}` buckets (10-minute buckets up to
 24 h, hourly to 7 days, daily beyond), `top_blocked` as `{qname, count}`,
-and `top_clients` as `{client, total, blocked}`. Entries not yet flushed
-to disk (up to 30 s) are not included.
+and `top_clients` as `{client, total, blocked}`; `window_start` is when
+the counted window begins. Entries not yet flushed to disk (up to 30 s) are
+not included.
 
-These three aggregates group by time, domain and client, and no index
-answers "group the last 90 days by domain" — each one walks every row in
-the window. A wide window over a large log is therefore genuinely
-expensive, and the stats endpoints (`/api/stats`, `/api/stats/client`,
-`/api/stats/lists`) cap a single request at 20 seconds, answering
-`503` with a message naming the window rather than holding the connection
-open indefinitely. Ask for less history; the dashboard's own 24-hour window
-is unaffected. Reads use a separate SQLite connection pool from the writer,
-so a slow aggregate never stalls query logging or the rest of the API.
+The aggregates are answered from rollup tables Minos maintains as it logs
+(per 10 minutes, hour and day), plus the raw log for the partial hour at the
+front of the window, so the answer is exact and the cost no longer grows
+with the window: on a Raspberry Pi holding 13 million queries, 90 days takes
+about as long as 24 hours. Right after upgrading onto a large existing log,
+Minos fills the rollups in the background (minutes on a Pi); until then
+these endpoints read the raw log and a very wide window can still run into
+the 20-second cap, answering `503` with a message naming the window. Reads
+use a separate SQLite connection pool from the writer, so a slow aggregate
+never stalls query logging or the rest of the API.
 
 While `dns.dnssec` is on, the response also carries `dnssec`:
 
@@ -164,10 +166,15 @@ span several IPs across DHCP leases (pass everything from the device's
 retention.
 
 ```json
-{"window_hours": 24, "total": 1042, "blocked": 87,
+{"window_hours": 24, "window_start": "2026-10-22T14:03:11Z",
+ "total": 1042, "blocked": 87,
  "top_allowed": [{"qname": "github.com", "count": 120}],
  "top_blocked": [{"qname": "ads.example.com", "count": 33}]}
 ```
+
+For windows of 48 hours and more the figures come from daily rollups and
+cover whole UTC days, so `window_start` is the start of the first day
+counted — label the window from it rather than from `hours`.
 
 Like every aggregate, it reads the persisted log (or the ring in ephemeral
 mode), so entries not yet flushed (up to 30 s) are missing.

@@ -13,10 +13,10 @@ import (
 )
 
 // Derived tables are maintained from the query log so the reads users wait on
-// never have to walk millions of rows. Today that is the domain dictionary:
-// one row per distinct name with its hit counts and when it was last seen, so
-// a search can find which names match by scanning thousands of rows instead of
-// millions, and answer "nothing matches" instantly.
+// never have to walk millions of rows: the domain dictionary (one row per
+// distinct name with its hit counts and when it was last seen, so a search
+// scans thousands of rows instead of millions and can answer "nothing
+// matches" instantly), and the stats rollups in aggregate.go/rollups.go.
 //
 // Exactly-once is the invariant, because counts must not drift:
 //   - Live writes update the derived tables in the same transaction as the
@@ -32,7 +32,7 @@ import (
 
 // derivedVersion identifies the derived-table schema. Bump it whenever a
 // derived table is added or its meaning changes.
-const derivedVersion = 1
+const derivedVersion = 2 // 2: stats rollups
 
 // backfillChunkRows per transaction: small enough that the writer lock is
 // released often (the flush loop interleaves), large enough to be efficient.
@@ -57,7 +57,7 @@ type idRange [2]int64
 // prepareDerived runs on the startup path, so it does only instant work:
 // create the tables, reconcile the version, and record what is pending.
 func prepareDerived(db *sql.DB) error {
-	if _, err := db.Exec(derivedSchema); err != nil {
+	if _, err := db.Exec(derivedSchema + rollupSchema); err != nil {
 		return fmt.Errorf("create derived tables: %w", err)
 	}
 	var version int
@@ -74,15 +74,16 @@ func prepareDerived(db *sql.DB) error {
 		// New or changed derived schema: start the derived tables over and
 		// backfill the whole log (DROP is instant; the rebuild is not, and
 		// runs in the background).
-		for _, stmt := range []string{
-			`DELETE FROM querylog_meta`,
-			`DROP TABLE IF EXISTS qnames`,
-		} {
+		stmts := []string{`DELETE FROM querylog_meta`}
+		for _, t := range derivedTables {
+			stmts = append(stmts, `DROP TABLE IF EXISTS `+t)
+		}
+		for _, stmt := range stmts {
 			if _, err := db.Exec(stmt); err != nil {
 				return fmt.Errorf("reset derived tables: %w", err)
 			}
 		}
-		if _, err := db.Exec(derivedSchema); err != nil {
+		if _, err := db.Exec(derivedSchema + rollupSchema); err != nil {
 			return fmt.Errorf("recreate derived tables: %w", err)
 		}
 		var pending []idRange
@@ -151,25 +152,6 @@ type nameAgg struct {
 	lastTs        int64
 }
 
-func aggregateNames(add func(func(qname, verdict string, ts int64))) map[string]*nameAgg {
-	out := make(map[string]*nameAgg)
-	add(func(qname, verdict string, ts int64) {
-		a := out[qname]
-		if a == nil {
-			a = &nameAgg{}
-			out[qname] = a
-		}
-		a.hits++
-		if verdict == VerdictBlocked {
-			a.blocked++
-		}
-		if ts > a.lastTs {
-			a.lastTs = ts
-		}
-	})
-	return out
-}
-
 func upsertNames(tx *sql.Tx, names map[string]*nameAgg) error {
 	if len(names) == 0 {
 		return nil
@@ -192,12 +174,11 @@ func upsertNames(tx *sql.Tx, names map[string]*nameAgg) error {
 // writeDerivedLive folds a just-inserted batch into the derived tables, in
 // the batch's own transaction, and advances live_upto to lastID.
 func writeDerivedLive(tx *sql.Tx, batch []Entry, lastID int64) error {
-	names := aggregateNames(func(add func(string, string, int64)) {
-		for _, e := range batch {
-			add(e.QName, e.Verdict, e.Time.UnixMilli())
-		}
-	})
-	if err := upsertNames(tx, names); err != nil {
+	agg := newDerivedAgg()
+	for _, e := range batch {
+		agg.add(e.Time.UnixMilli(), e.Client, e.QName, e.Verdict, e.List)
+	}
+	if err := agg.upsert(tx); err != nil {
 		return err
 	}
 	return writeMeta(tx, map[string]any{"live_upto": lastID})
@@ -258,30 +239,27 @@ func (l *Log) backfillChunk() (rows int64, more bool, err error) {
 	}
 	lo := pending[0][0]
 	hi := min(lo+backfillChunkRows-1, pending[0][1])
-	var scanErr error
-	names := aggregateNames(func(add func(string, string, int64)) {
-		r, err := tx.Query(`SELECT qname, verdict, ts FROM querylog WHERE id BETWEEN ? AND ?`, lo, hi)
-		if err != nil {
-			scanErr = err
-			return
-		}
-		defer r.Close()
-		for r.Next() {
-			var q, v string
-			var ts int64
-			if err := r.Scan(&q, &v, &ts); err != nil {
-				scanErr = err
-				return
-			}
-			rows++
-			add(q, v, ts)
-		}
-		scanErr = r.Err()
-	})
-	if scanErr != nil {
-		return 0, false, fmt.Errorf("backfill read: %w", scanErr)
+	agg := newDerivedAgg()
+	r, err := tx.Query(`SELECT ts, client, qname, verdict, list FROM querylog WHERE id BETWEEN ? AND ?`, lo, hi)
+	if err != nil {
+		return 0, false, fmt.Errorf("backfill read: %w", err)
 	}
-	if err := upsertNames(tx, names); err != nil {
+	for r.Next() {
+		var ts int64
+		var c, q, v, list string
+		if err := r.Scan(&ts, &c, &q, &v, &list); err != nil {
+			r.Close()
+			return 0, false, fmt.Errorf("backfill scan: %w", err)
+		}
+		rows++
+		agg.add(ts, c, q, v, list)
+	}
+	if err := r.Err(); err != nil {
+		r.Close()
+		return 0, false, fmt.Errorf("backfill read: %w", err)
+	}
+	r.Close()
+	if err := agg.upsert(tx); err != nil {
 		return 0, false, err
 	}
 	pending[0][0] = hi + 1
@@ -299,8 +277,22 @@ func (l *Log) backfillChunk() (rows int64, more bool, err error) {
 // counts for surviving names may still include pruned rows; they are only
 // ever used as an upper-bound estimate, which errs towards the safe path.
 func (l *Log) pruneDerived(cutoffMs int64) {
-	if _, err := l.db.Exec(`DELETE FROM qnames WHERE last_ts < ?`, cutoffMs); err != nil {
-		slog.Warn("query log dictionary prune failed", "err", err)
+	now := time.Now().UnixMilli()
+	for _, p := range []struct {
+		sql string
+		arg int64
+	}{
+		{`DELETE FROM qnames WHERE last_ts < ?`, cutoffMs},
+		// Rollup buckets fully before the cutoff; the bucket straddling it
+		// stays, so rollups may hold up to one bucket more than the log.
+		{`DELETE FROM roll_hour WHERE bucket < ?`, cutoffMs/hourMs*hourMs - hourMs},
+		{`DELETE FROM roll_hour_blocked WHERE bucket < ?`, cutoffMs/hourMs*hourMs - hourMs},
+		{`DELETE FROM roll_day_client WHERE bucket < ?`, cutoffMs/dayMs*dayMs - dayMs},
+		{`DELETE FROM roll_10m WHERE bucket < ?`, now - roll10mKeepMs},
+	} {
+		if _, err := l.db.Exec(p.sql, p.arg); err != nil {
+			slog.Warn("query log derived prune failed", "err", err)
+		}
 	}
 }
 
