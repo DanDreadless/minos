@@ -827,6 +827,19 @@ type HistoryFilter struct {
 	// unindexed: callers always bound it by time, so it rides (ts), and the
 	// column is too low-selectivity for an index to earn its cost.
 	DNSSEC string
+	// Domain restricts to one exact name (normalized: lowercase, no
+	// trailing dot) — the click-to-filter on a Domain cell. It rides the
+	// dictionary like Search: absent → instant empty, rare → index lookups.
+	Domain string
+	// Exclude drops rows whose name contains any of these substrings
+	// (`-cdn` in the search box). A filter on the rows the plan returns.
+	Exclude []string
+	// QType and Upstream are exact matches on those columns.
+	QType    string
+	Upstream string
+	// Since, when set, drops rows older than it — the time-range picker.
+	// The upper bound is QueryHistory's `before`.
+	Since time.Time
 }
 
 // searchPlan is how QueryHistory will answer a free-text search.
@@ -854,6 +867,15 @@ func (l *Log) planSearch(ctx context.Context, f HistoryFilter) (searchPlan, []st
 	if !l.derivedReady.Load() || !l.indexed.Load() || len(f.Clients) > 0 || f.List != "" {
 		return planScan, nil, nil
 	}
+	if f.Domain != "" {
+		// One exact name: a point lookup in the dictionary. Search, if
+		// also given, is applied as a filter on that name's rows.
+		m, err := l.matchName(ctx, f.Domain)
+		if err != nil {
+			return planScan, nil, err
+		}
+		return choosePlan(m, f.Verdict), m.names, nil
+	}
 	m, err := l.matchNames(ctx, f.Search)
 	if err != nil {
 		return planScan, nil, err
@@ -872,8 +894,14 @@ func (l *Log) planSearch(ctx context.Context, f HistoryFilter) (searchPlan, []st
 	if m.capped {
 		return planScan, nil, nil
 	}
+	return choosePlan(m, f.Verdict), m.names, nil
+}
+
+// choosePlan turns a dictionary match into a plan: nothing relevant is an
+// instant empty answer, a few rows are fetched by name, many are scanned.
+func choosePlan(m nameMatch, verdict string) searchPlan {
 	relevant := m.hits
-	switch f.Verdict {
+	switch verdict {
 	case VerdictBlocked:
 		relevant = m.blocked
 	case VerdictAllowed:
@@ -881,11 +909,11 @@ func (l *Log) planSearch(ctx context.Context, f HistoryFilter) (searchPlan, []st
 	}
 	switch {
 	case len(m.names) == 0 || relevant == 0:
-		return planEmpty, nil, nil
+		return planEmpty
 	case relevant <= namesPlanMaxRows:
-		return planNames, m.names, nil
+		return planNames
 	}
-	return planScan, nil, nil
+	return planScan
 }
 
 // waitBackfill blocks until the derived-table backfill has finished (tests
@@ -905,23 +933,87 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 	if limit <= 0 || limit > 1000 {
 		limit = 1000
 	}
+	out := []Entry{}
+	err := l.eachHistory(ctx, f, limit, before, searchDeadline, func(e Entry) error {
+		out = append(out, e)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ExportMaxRows caps one export: enough for a month of a busy household's
+// matches, small enough that a Pi streams it in seconds.
+const ExportMaxRows = 100000
+
+// exportDeadline bounds an export's scan, which may legitimately read far
+// more of the log than one page of search results.
+const exportDeadline = 2 * time.Minute
+
+// ExportHistory streams up to max matching rows, newest first, to fn — the
+// same filter and plan as QueryHistory, in one statement, so no rows are
+// lost or repeated at page boundaries (rows have no unique key to page by).
+// Returns nil without calling fn in ephemeral mode.
+func (l *Log) ExportHistory(ctx context.Context, f HistoryFilter, max int, fn func(Entry) error) error {
+	if l.reader() == nil {
+		return nil
+	}
+	if max <= 0 || max > ExportMaxRows {
+		max = ExportMaxRows
+	}
+	return l.eachHistory(ctx, f, max, time.Time{}, exportDeadline, fn)
+}
+
+// eachHistory runs the history query and hands each row to fn. A plan that
+// may scan widely is bounded by deadline.
+func (l *Log) eachHistory(ctx context.Context, f HistoryFilter, limit int, before time.Time,
+	deadline time.Duration, fn func(Entry) error,
+) error {
 	if before.IsZero() {
 		before = time.Now().Add(time.Hour)
 	}
 
 	where := []string{"ts < ?"}
 	args := []any{before.UnixMilli()}
+	if !f.Since.IsZero() {
+		where = append(where, "ts >= ?")
+		args = append(args, f.Since.UnixMilli())
+	}
 	plan := planScan
-	if f.Search != "" {
+	if f.Domain != "" {
 		var names []string
 		var err error
 		plan, names, err = l.planSearch(ctx, f)
 		if err != nil {
-			return nil, historyErr(ctx, err)
+			return historyErr(ctx, err)
 		}
 		switch plan {
 		case planEmpty:
-			return []Entry{}, nil
+			return nil
+		case planNames:
+			where = append(where, "qname IN (?)")
+			args = append(args, names[0])
+		default:
+			where = append(where, "qname = ?")
+			args = append(args, f.Domain)
+		}
+		if f.Search != "" {
+			where = append(where, "(qname LIKE ? ESCAPE '\\' OR client LIKE ? ESCAPE '\\')")
+			like := "%" + escapeLike(f.Search) + "%"
+			args = append(args, like, like)
+		}
+	} else if f.Search != "" {
+		var names []string
+		var err error
+		plan, names, err = l.planSearch(ctx, f)
+		if err != nil {
+			return historyErr(ctx, err)
+		}
+		switch plan {
+		case planEmpty:
+			return nil
 		case planNames:
 			ph := make([]string, len(names))
 			for i, n := range names {
@@ -963,6 +1055,19 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 		where = append(where, "dnssec = ?")
 		args = append(args, f.DNSSEC)
 	}
+	// Like DNSSEC, these narrow the rows whichever plan produces them.
+	if f.QType != "" {
+		where = append(where, "qtype = ?")
+		args = append(args, f.QType)
+	}
+	if f.Upstream != "" {
+		where = append(where, "upstream = ?")
+		args = append(args, f.Upstream)
+	}
+	for _, x := range f.Exclude {
+		where = append(where, "qname NOT LIKE ? ESCAPE '\\'")
+		args = append(args, "%"+escapeLike(x)+"%")
+	}
 	const cols = `ts, client, qname, qtype, verdict, list, rule, upstream, duration_ms, audit_list, audit_rule, dnssec`
 	var query string
 	switch {
@@ -980,10 +1085,16 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 	case f.List == "":
 		args = append(args, limit)
 		from := "querylog"
-		if plan == planNames {
+		switch {
+		case plan == planNames:
 			// Name it: left alone, the planner may prefer walking (ts)
 			// newest-first, which is exactly the scan this plan avoids.
 			from = "querylog INDEXED BY idx_querylog_qname_verdict_ts"
+		case f.Domain != "" && l.indexed.Load():
+			// A busy exact name: walk newest-first and stop at the page,
+			// rather than let `qname = ?` tempt the planner into sorting
+			// every row the name ever had.
+			from = "querylog INDEXED BY idx_querylog_ts"
 		}
 		query = `SELECT ` + cols + ` FROM ` + from + ` WHERE ` + strings.Join(where, " AND ") +
 			` ORDER BY ts DESC LIMIT ?`
@@ -1008,33 +1119,35 @@ func (l *Log) QueryHistory(ctx context.Context, f HistoryFilter, limit int, befo
 	// few or no matches it scans the whole table (many seconds on Pi/SD).
 	// Bound it so the UI gets a prompt, explicit error instead of an
 	// apparently-hung "Searching…" — the caller surfaces the message.
-	if f.Search != "" && plan == planScan {
+	if (f.Search != "" || f.Domain != "" || len(f.Exclude) > 0 || f.QType != "" || f.Upstream != "") &&
+		plan == planScan {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, searchDeadline)
+		ctx, cancel = context.WithTimeout(ctx, deadline)
 		defer cancel()
 	}
 
 	rows, err := l.reader().QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, historyErr(ctx, err)
+		return historyErr(ctx, err)
 	}
 	defer rows.Close()
-	var out []Entry
 	for rows.Next() {
 		var e Entry
 		var ts int64
 		if err := rows.Scan(&ts, &e.Client, &e.QName, &e.QType, &e.Verdict,
 			&e.List, &e.Rule, &e.Upstream, &e.DurationMs,
 			&e.AuditList, &e.AuditRule, &e.DNSSEC); err != nil {
-			return nil, fmt.Errorf("scan history: %w", err)
+			return fmt.Errorf("scan history: %w", err)
 		}
 		e.Time = time.UnixMilli(ts)
-		out = append(out, e)
+		if err := fn(e); err != nil {
+			return err
+		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, historyErr(ctx, err)
+		return historyErr(ctx, err)
 	}
-	return out, nil
+	return nil
 }
 
 // historyErr translates a deadline-driven interrupt into the user-facing

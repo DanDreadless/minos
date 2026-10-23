@@ -334,6 +334,22 @@ func (l *Log) matchNames(ctx context.Context, term string) (nameMatch, error) {
 	return m, rows.Err()
 }
 
+// matchName is the dictionary entry for one exact name — no names when the
+// log never saw it.
+func (l *Log) matchName(ctx context.Context, name string) (nameMatch, error) {
+	var m nameMatch
+	err := l.reader().QueryRowContext(ctx, `SELECT hits, blocked FROM qnames WHERE name = ?`, name).
+		Scan(&m.hits, &m.blocked)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nameMatch{}, nil
+	case err != nil:
+		return nameMatch{}, fmt.Errorf("match name: %w", err)
+	}
+	m.names = []string{name}
+	return m, nil
+}
+
 // knownClients lists every distinct client in the log by skip-walking the
 // client index — O(clients) seeks, never O(rows). Cached briefly: the set
 // changes when a new device appears, not per search.
