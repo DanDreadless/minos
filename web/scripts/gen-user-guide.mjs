@@ -2,7 +2,7 @@
 // the in-app Help page renders — so the repository's guide and the app's
 // can never drift. Runs as part of `npm run build`; commit the result
 // (release.sh refuses to tag if the build changed it).
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -11,6 +11,14 @@ import { transformWithEsbuild } from 'vite';
 const here = dirname(fileURLToPath(import.meta.url));
 const src = resolve(here, '../src/lib/docs.ts');
 const out = resolve(here, '../../docs/user-guide.md');
+
+// Builds that see only web/ (the Docker image's frontend stage) have no
+// docs/ folder to write to. The guide is committed, so there is nothing to
+// do there; failing would stop the image building (it did, v0.27.0–0.28.0).
+if (!existsSync(dirname(out))) {
+  console.log('docs/ is not here (a web-only build); skipping the user guide');
+  process.exit(0);
+}
 
 const { code } = await transformWithEsbuild(readFileSync(src, 'utf8'), src, { loader: 'ts', format: 'esm' });
 const dir = mkdtempSync(join(tmpdir(), 'minos-docs-'));
