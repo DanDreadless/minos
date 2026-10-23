@@ -601,6 +601,16 @@ This is security software; hold it to that standard.
   was used. `BenchmarkHandleBlocked` measures handle() end to end: plain
   ~520 ns / 7 allocs (unchanged), EDNS0 ~655 ns / 12 allocs. The Firefox
   canary NXDOMAIN deliberately carries no EDE.
+- **DNS rebinding protection** (fixed decisions, October 2026, `rebind.go`):
+  opt-in `dns.rebind_protection`. A forwarded or cached answer whose A/AAAA
+  is RFC 1918, ULA, loopback or link-local, for a public name, is refused as
+  a block (list `rebinding`, EDE 15). Exempt: anything an allow rule decided
+  (the user's fix for Plex's plex.direct and the like), bypass devices,
+  single-label names and private suffixes (.lan, .local, .home.arpa, …),
+  and names a conditional route covers. 0.0.0.0/:: are not private —
+  upstream filters answer blocks with them. Checked on cache hits too,
+  because the leader caches before handle() sees the answer. Off costs one
+  atomic load on the answer path.
 - **Notification standard** (fixed decisions, October 2026, `internal/notify`):
   every event is built by a constructor in `events.go` — specific plain
   title, a body that says what happened / why it matters / what to do, a

@@ -87,6 +87,9 @@ type Server struct {
 	// allowFirefoxDoH disables the Firefox DoH-canary interception
 	// (dns.allow_firefox_doh).
 	allowFirefoxDoH atomic.Bool
+	// rebindProtect refuses public names answered with LAN addresses
+	// (dns.rebind_protection, opt-in). See rebind.go.
+	rebindProtect atomic.Bool
 	// forwardPrivateArpa opts out of answering RFC 6303 private reverse
 	// zones locally (dns.forward_private_reverse).
 	forwardPrivateArpa atomic.Bool
@@ -423,6 +426,7 @@ func (s *Server) ApplyConfig(cfg *config.Config) error {
 	s.local.Store(buildLocalZone(cfg))
 	s.safeSearch.Store(cfg.Blocking.SafeSearch)
 	s.allowFirefoxDoH.Store(cfg.DNS.AllowFirefoxDoH)
+	s.rebindProtect.Store(cfg.DNS.RebindProtection)
 	s.forwardPrivateArpa.Store(cfg.DNS.ForwardPrivateReverse)
 	s.applyDNSSEC(cfg.DNS.DNSSEC)
 	// A fresh cache on every config change doubles as the flush that keeps
@@ -714,6 +718,12 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 				entry.Upstream = "cache"
 			}
 			s.cacheHits.Add(1)
+			if !pol.Bypasses() {
+				if ip := s.rebinding(qname, verdict, resp); ip != nil {
+					s.refuseRebinding(w, req, q, entry, ip, start)
+					return
+				}
+			}
 			s.finishDNSSEC(req, resp, q.Qtype)
 			_ = w.WriteMsg(resp)
 			entry.Verdict = querylog.VerdictAllowed
@@ -754,6 +764,13 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		return
 	}
 	resp.Id = req.Id
+	if !pol.Bypasses() {
+		if ip := s.rebinding(qname, verdict, resp); ip != nil {
+			entry.Upstream = upstreamName
+			s.refuseRebinding(w, req, q, entry, ip, start)
+			return
+		}
+	}
 	s.finishDNSSEC(req, resp, q.Qtype)
 	_ = w.WriteMsg(resp)
 	entry.DNSSEC = dnssecMark.status
@@ -770,6 +787,17 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 	}
 	entry.Verdict = querylog.VerdictAllowed
 	entry.Upstream = upstreamName
+	s.record(entry, start)
+}
+
+// refuseRebinding answers a rebinding attempt as a block and records why.
+func (s *Server) refuseRebinding(w dns.ResponseWriter, req *dns.Msg, q dns.Question, entry querylog.Entry, ip net.IP, start time.Time) {
+	reply := s.blockedResponse(req, q)
+	withEDE(req, reply, dns.ExtendedErrorCodeBlocked, "Blocked by Minos: rebinding protection — a public name answered with ", ip.String())
+	_ = w.WriteMsg(reply)
+	entry.Verdict = querylog.VerdictBlocked
+	entry.List = ListRebinding
+	entry.Rule = "public name answered with private address " + ip.String()
 	s.record(entry, start)
 }
 

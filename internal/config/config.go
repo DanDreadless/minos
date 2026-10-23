@@ -81,6 +81,11 @@ type DNSConfig struct {
 	// Mozilla's documented signal that this network filters DNS — so Firefox
 	// keeps using the system resolver instead of its built-in DoH.
 	AllowFirefoxDoH bool `yaml:"allow_firefox_doh,omitempty"`
+	// RebindProtection refuses answers that point a public name at an address
+	// inside the network (RFC 1918, ULA, loopback, link-local) — the DNS
+	// rebinding attack. Opt-in: allowed domains, local records, routes and
+	// private suffixes (.lan, .home.arpa, …) are exempt. Applies live.
+	RebindProtection bool `yaml:"rebind_protection,omitempty"`
 	// DNSSEC controls local validation of forwarded answers against the
 	// DNSSEC chain of trust: "" or "off" (default), "permissive"
 	// (validate, count, and log — never blocks), or "enforce" (bogus

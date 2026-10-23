@@ -26,6 +26,7 @@
   let blockTTL = 60;
   let safeSearch = false;
   let firefoxCanary = true;
+  let rebindProtect = false;
   let blockPrivateRelay = false;
   let retentionDays = 90;
   let ringSize = 10000;
@@ -87,6 +88,7 @@
     mode = c.blocking.mode;
     safeSearch = c.blocking.safe_search;
     firefoxCanary = !c.dns.allow_firefox_doh;
+    rebindProtect = c.dns.rebind_protection;
     blockPrivateRelay = c.blocking.block_icloud_private_relay;
     blockTTL = c.dns.block_ttl;
     retentionDays = c.querylog.retention_days;
@@ -181,7 +183,7 @@
       case 'filtering':
         return {
           blocking: { mode, safe_search: safeSearch, block_icloud_private_relay: blockPrivateRelay },
-          dns: { block_ttl: blockTTL, allow_firefox_doh: !firefoxCanary },
+          dns: { block_ttl: blockTTL, allow_firefox_doh: !firefoxCanary, rebind_protection: rebindProtect },
         };
       case 'notifications':
         return {
@@ -219,7 +221,7 @@
   // Every draft is named here so the comparison re-runs when any changes
   // (Svelte tracks only what a reactive statement names).
   $: draftKey = JSON.stringify([
-    upstreams, dnssec, mode, blockTTL, safeSearch, firefoxCanary, blockPrivateRelay, retentionDays,
+    upstreams, dnssec, mode, blockTTL, safeSearch, firefoxCanary, rebindProtect, blockPrivateRelay, retentionDays,
     ringSize, memoryMB, cacheEnabled, cacheMaxEntries, cacheMinTTL, cacheMaxTTL, cacheServeStale,
     updateCheck, webhookURL, ntfyURL, ntfyToken, digest, digestTime, digestDay, uiURL, quiet,
     quietFrom, quietTo, mute, ssdp, dhcpListen, logLevel,
@@ -607,6 +609,11 @@
       {copy.settings.firefoxCanary}
     </label>
     <p class="note">{copy.settings.firefoxCanaryHint}</p>
+    <label class="radio safe-search">
+      <input type="checkbox" bind:checked={rebindProtect} />
+      {copy.settings.rebind}
+    </label>
+    <p class="note">{copy.settings.rebindHint}</p>
     <label class="radio safe-search">
       <input type="checkbox" bind:checked={blockPrivateRelay} />
       {copy.settings.privateRelay}

@@ -22,15 +22,16 @@ import (
 // marked read-only in the UI: they are the only settings needing a restart.
 type configView struct {
 	DNS struct {
-		Listen          string               `json:"listen"`
-		Upstreams       []config.Upstream    `json:"upstreams"`
-		BlockTTL        uint32               `json:"block_ttl"`
-		Cache           config.CacheConfig   `json:"cache"`
-		LocalRecords    []config.LocalRecord `json:"local_records"`
-		LocalTTL        uint32               `json:"local_ttl"`
-		Routes          []config.Route       `json:"routes"`
-		AllowFirefoxDoH bool                 `json:"allow_firefox_doh"`
-		DNSSEC          string               `json:"dnssec"`
+		Listen           string               `json:"listen"`
+		Upstreams        []config.Upstream    `json:"upstreams"`
+		BlockTTL         uint32               `json:"block_ttl"`
+		Cache            config.CacheConfig   `json:"cache"`
+		LocalRecords     []config.LocalRecord `json:"local_records"`
+		LocalTTL         uint32               `json:"local_ttl"`
+		Routes           []config.Route       `json:"routes"`
+		AllowFirefoxDoH  bool                 `json:"allow_firefox_doh"`
+		RebindProtection bool                 `json:"rebind_protection"`
+		DNSSEC           string               `json:"dnssec"`
 	} `json:"dns"`
 	Blocking struct {
 		Mode                    string `json:"mode"`
@@ -89,6 +90,7 @@ func viewOf(c *config.Config) configView {
 		v.DNS.Routes = []config.Route{}
 	}
 	v.DNS.AllowFirefoxDoH = c.DNS.AllowFirefoxDoH
+	v.DNS.RebindProtection = c.DNS.RebindProtection
 	v.DNS.DNSSEC = c.DNS.DNSSEC
 	if v.DNS.DNSSEC == "" {
 		v.DNS.DNSSEC = "off"
@@ -152,11 +154,12 @@ type settingsUpdate struct {
 			MaxTTL     *uint32 `json:"max_ttl"`
 			ServeStale *bool   `json:"serve_stale"`
 		} `json:"cache"`
-		LocalRecords    *[]config.LocalRecord `json:"local_records"`
-		LocalTTL        *uint32               `json:"local_ttl"`
-		Routes          *[]config.Route       `json:"routes"`
-		AllowFirefoxDoH *bool                 `json:"allow_firefox_doh"`
-		DNSSEC          *string               `json:"dnssec"`
+		LocalRecords     *[]config.LocalRecord `json:"local_records"`
+		LocalTTL         *uint32               `json:"local_ttl"`
+		Routes           *[]config.Route       `json:"routes"`
+		AllowFirefoxDoH  *bool                 `json:"allow_firefox_doh"`
+		RebindProtection *bool                 `json:"rebind_protection"`
+		DNSSEC           *string               `json:"dnssec"`
 	} `json:"dns"`
 	Blocking *struct {
 		Mode                    *string `json:"mode"`
@@ -247,6 +250,9 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			if upd.DNS.AllowFirefoxDoH != nil {
 				c.DNS.AllowFirefoxDoH = *upd.DNS.AllowFirefoxDoH
+			}
+			if upd.DNS.RebindProtection != nil {
+				c.DNS.RebindProtection = *upd.DNS.RebindProtection
 			}
 			if upd.DNS.DNSSEC != nil {
 				c.DNS.DNSSEC = *upd.DNS.DNSSEC
