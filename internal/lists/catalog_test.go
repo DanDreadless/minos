@@ -47,13 +47,20 @@ const sizeTolerance = 0.25
 
 type catalogEntry struct {
 	id, size, name, url, format string
+	mirrors                     []string
 }
+
+// mirrorTolerance: a mirror may lag its primary a little, never by much.
+const mirrorTolerance = 0.10
 
 // entryRe pulls the fields this check needs out of the TypeScript catalog.
 // Parsing TS from Go is not elegant, but the alternative — a second copy of
 // the catalog in another format — is a source of truth that can disagree
 // with the one the UI actually ships.
-var entryRe = regexp.MustCompile(`(?s)id:\s*'([^']*)'.*?size:\s*'([^']*)'.*?list:\s*\{\s*name:\s*'([^']*)',\s*url:\s*'([^']*)',\s*format:\s*'([^']*)'`)
+var (
+	entryRe  = regexp.MustCompile(`(?s)id:\s*'([^']*)'.*?size:\s*'([^']*)'.*?list:\s*\{\s*name:\s*'([^']*)',\s*url:\s*'([^']*)',\s*format:\s*'([^']*)',(\s*mirrors:\s*\[[^\]]*\],)?`)
+	quotedRe = regexp.MustCompile(`'([^']*)'`)
+)
 
 func loadCatalog(t *testing.T) []catalogEntry {
 	t.Helper()
@@ -74,7 +81,11 @@ func loadCatalog(t *testing.T) []catalogEntry {
 	}
 	out := make([]catalogEntry, 0, len(matches))
 	for _, m := range matches {
-		out = append(out, catalogEntry{id: m[1], size: m[2], name: m[3], url: m[4], format: m[5]})
+		e := catalogEntry{id: m[1], size: m[2], name: m[3], url: m[4], format: m[5]}
+		for _, q := range quotedRe.FindAllStringSubmatch(m[6], -1) {
+			e.mirrors = append(e.mirrors, q[1])
+		}
+		out = append(out, e)
 	}
 	return out
 }
@@ -159,6 +170,24 @@ func TestCatalogListsCompile(t *testing.T) {
 			if stats.Skipped > 0 {
 				t.Errorf("%s skipped %d lines parsing as %q — the format has probably "+
 					"changed.\n  URL: %s", e.name, stats.Skipped, e.format, e.url)
+			}
+
+			// Every mirror must serve the same list: parse clean and land
+			// within mirrorTolerance of the primary's rule count. A mirror
+			// that has drifted would hand a fallback user an old list.
+			for _, mu := range e.mirrors {
+				mbody, err := fetchList(t.Context(), mu)
+				if err != nil {
+					t.Errorf("%s mirror: %v\n  URL: %s", e.name, err, mu)
+					continue
+				}
+				ms, _ := Parse(e.format, e.name, false, strings.NewReader(string(mbody)), filter.NewBuilder())
+				drift := math.Abs(float64(ms.Rules)-float64(stats.Rules)) / math.Max(1, float64(stats.Rules))
+				t.Logf("  mirror %8d rules  %6d skipped  %s", ms.Rules, ms.Skipped, mu)
+				if ms.Skipped > 0 || drift > mirrorTolerance {
+					t.Errorf("%s mirror has %d rules (%d skipped) against the primary's %d — it is "+
+						"not serving the same list\n  URL: %s", e.name, ms.Rules, ms.Skipped, stats.Rules, mu)
+				}
 			}
 
 			switch {

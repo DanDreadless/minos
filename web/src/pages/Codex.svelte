@@ -133,6 +133,8 @@
   async function addPreset(p: BlocklistPreset): Promise<void> {
     busy = true;
     try {
+      // Catalog entries carry their mirrors, so a one-click subscription gets
+      // the fallbacks too.
       lists = await api.addList({ ...p.list, enabled: true });
       notify(`List "${p.list.name}" added.`);
     } catch (e) {
@@ -210,7 +212,14 @@
                 </span>
               {/if}
             </td>
-            <td class="url" title={l.url}>{l.url}</td>
+            <td
+              class="url"
+              title={l.mirrors?.length
+                ? `${l.url}\n${copy.lists.mirrorsHint(l.mirrors.length)}\n${l.mirrors.join('\n')}`
+                : l.url}
+            >
+              {l.url}{#if l.mirrors?.length}<span class="mirror-count"> +{l.mirrors.length}</span>{/if}
+            </td>
             <td>{l.format}</td>
             <td class="num">{l.rules.toLocaleString()}</td>
             <td class="num">{l.skipped ? l.skipped.toLocaleString() : ''}</td>
@@ -236,6 +245,13 @@
               title={`${copy.lists.stateHint(l.state, l.last_error ?? '')}${l.last_refresh ? ` Copy in force: ${fmtWhen(l.last_refresh)}.` : ''}`}
             >
               {copy.lists.state(l.state, fmtAgo(l.last_refresh))}
+              {#if l.served_by}
+                <span
+                  class="mirror-badge"
+                  title={copy.lists.viaMirrorHint(l.served_by, l.primary_error ?? '')}
+                  >{copy.lists.viaMirror}</span
+                >
+              {/if}
             </td>
             <td>
               <button class="row-action danger" on:click={() => remove(l)}>Remove</button>
@@ -343,6 +359,19 @@
   .state {
     font-size: 0.82rem;
     cursor: help;
+  }
+
+  .mirror-badge,
+  .mirror-count {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+
+  .mirror-badge {
+    margin-left: 0.35rem;
+    padding: 0 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 0.6rem;
   }
 
   /* Red only when the list is not protecting at all; amber when it is

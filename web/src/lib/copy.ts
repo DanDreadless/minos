@@ -242,6 +242,11 @@ export const copy = {
         suspicious: `Last download refused · still blocking with the copy from ${age}`,
         disabled: 'Off',
       })[state] ?? state,
+    viaMirror: 'via mirror',
+    viaMirrorHint: (mirror: string, primaryError: string) =>
+      `The main address failed (${primaryError}), so this copy came from the mirror ${mirror}. Minos tries the main address first on every refresh.`,
+    mirrorsHint: (n: number) =>
+      `${n} fallback ${n === 1 ? 'mirror' : 'mirrors'}, used only if the main address is gone or the copy gets old.`,
     stateHint: (state: string, error: string): string =>
       ({
         pending: 'Minos will download this list shortly.',

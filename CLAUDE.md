@@ -755,6 +755,18 @@ This is security software; hold it to that standard.
   classification, no maps), so it never doubles memory on a Pi. `state` is
   derived server-side in `Status()`; the UI never infers health from
   timestamps. Fetches run two at a time.
+- **List mirror semantics** (fixed decisions, October 2026): `mirrors:` is
+  an additive per-source key (≤ 5, deep-copied in `Clone`). A mirror is
+  tried only when it cannot make things worse — no copy held, primary
+  retired/unauthorized, or the copy in force is stale (> 2× interval) —
+  **never for a transient blip with a fresh copy**, because mirrors lag:
+  malware-filter's pages.dev mirror was nine days behind when checked.
+  Shrink rejections don't fall back either (a mirror may carry the same bad
+  publish). Every refresh tries the primary first. HTTP validators are sent
+  only to the URL that issued them (`cacheMeta.Source`). The disk cache is
+  keyed by the primary URL whichever host served it. Catalog mirrors must
+  be publisher-run or endorsed, and `TestCatalogListsCompile` compiles each
+  one, failing beyond 10% drift from its primary.
 - **Hosts preamble is not a skipped rule**: every hosts file opens with
   boilerplate mapping ignorable names to non-sinkhole addresses
   (`255.255.255.255 broadcasthost`, `ff02::1 ip6-allnodes`). The target

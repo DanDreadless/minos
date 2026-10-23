@@ -262,9 +262,24 @@ func (m *Manager) refreshSource(ctx context.Context, src annotated) {
 		prev = cacheMeta{} // no body to fall back on: must download it
 	}
 
-	res, err := m.fetchWithRetry(ctx, src.URL, prev)
+	res, err := m.fetchWithRetry(ctx, src.URL, validatorsFor("", prev))
 	if err == nil && !res.notModified {
 		err = m.vet(src, res.body, prevRules)
+	}
+	servedBy, primaryErr := "", err
+	if err != nil && len(src.Mirrors) > 0 && m.mirrorsAllowed(src, err, have) {
+		for _, mu := range src.Mirrors {
+			r, e := m.fetchWithRetry(ctx, mu, validatorsFor(mu, prev))
+			if e == nil && !r.notModified {
+				e = m.vet(src, r.body, prevRules)
+			}
+			if e == nil {
+				res, err, servedBy = r, nil, mu
+				slog.Info("list served by mirror", "list", src.Name, "mirror", mu, "primary_err", primaryErr)
+				break
+			}
+			slog.Warn("list mirror failed", "list", src.Name, "mirror", mu, "err", e)
+		}
 	}
 
 	m.mu.Lock()
@@ -278,7 +293,7 @@ func (m *Manager) refreshSource(ctx context.Context, src annotated) {
 		st.failKind = kindOf(err)
 		return
 	}
-	meta := cacheMeta{ETag: res.etag, LastModified: res.lastModified, FetchedAt: time.Now()}
+	meta := cacheMeta{ETag: res.etag, LastModified: res.lastModified, FetchedAt: time.Now(), Source: servedBy}
 	if res.notModified {
 		if meta.ETag == "" {
 			meta.ETag = prev.ETag
@@ -303,9 +318,46 @@ func (m *Manager) refreshSource(ctx context.Context, src annotated) {
 	}
 	m.meta[src.Name] = meta
 	st.LastRefresh = meta.FetchedAt
+	st.ServedBy = servedBy
+	st.PrimaryError = ""
+	if servedBy != "" {
+		st.PrimaryError = primaryErr.Error()
+	}
 	st.LastError = ""
 	st.ConsecutiveFailures = 0
 	st.failKind = failNone
+}
+
+// validatorsFor returns prev's conditional-request validators only when they
+// were issued by url ("" = the primary): an ETag from one host means nothing
+// to another, and sending it could only ever earn a needless full download.
+func validatorsFor(url string, prev cacheMeta) cacheMeta {
+	if prev.Source != url {
+		return cacheMeta{}
+	}
+	return prev
+}
+
+// mirrorsAllowed decides whether a primary failure justifies a mirror. A
+// mirror can lag its primary (one catalog mirror was nine days behind), so
+// it is used only when it cannot make things worse: nothing is held yet,
+// the primary is gone or now refuses us, or the copy in force is already
+// stale. A passing blip with a fresh copy in hand keeps that copy.
+func (m *Manager) mirrorsAllowed(src annotated, err error, have bool) bool {
+	if !have {
+		return true
+	}
+	switch kindOf(err) {
+	case failRetired, failUnauthorized:
+		return true
+	case failSuspicious:
+		return false // keep the vetted copy; a mirror may carry the same bad publish
+	}
+	interval := m.store.Get().Lists.RefreshInterval.Std()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	st := m.status[src.Name]
+	return st == nil || time.Since(st.LastRefresh) > 2*interval
 }
 
 // retryDelay is how long to wait before retrying the failing sources, or 0

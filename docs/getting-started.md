@@ -467,6 +467,15 @@ less than half the rules it had is refused, because that is far more often
 a broken publish than a real change; if the same smaller list is served
 three refreshes in a row, Minos accepts it as the list's new size.
 
+**Catalog lists come with mirrors.** Hagezi lists fall back to jsDelivr and
+Codeberg, StevenBlack to jsDelivr, URLhaus to its GitHub Pages copy — each
+verified weekly to serve the same rules as the original. A mirror is only
+used when the original is gone, refuses the download, or the copy Minos
+holds has gone stale; a short outage keeps the fresher copy you already
+have, because mirrors can lag behind. The Codex marks a list served by a
+mirror, with the reason on hover. Add `mirrors:` under any list in
+`minos.yaml` to give your own lists fallbacks.
+
 ## Bypass resistance — no side doors
 
 A sinkhole that devices can quietly sidestep is theatre. Modern browsers

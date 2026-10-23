@@ -19,6 +19,13 @@
 // Sizes are compiled rule counts, not the publisher's marketing figure,
 // and were re-measured 2026-08-27 (URLhaus replacement: 2026-10-23).
 //
+// Mirrors are fallbacks Minos uses only when the primary is retired, refuses
+// us, or the copy in force has gone stale — never for a passing blip, since
+// a mirror can lag. List only mirrors the publisher runs or endorses, and
+// check they serve the same content: a malware-filter pages.dev mirror was
+// nine days behind its primary when checked (2026-10-23), so it is not used.
+// The catalog test compiles every mirror too.
+//
 // To add or change an entry: add it here, then run
 //   go test -tags catalog -timeout 20m -v ./internal/lists
 // and record the rule count it reports.
@@ -31,7 +38,7 @@ export interface BlocklistPreset {
   note: string;
   size: string;
   tier: BlocklistTier;
-  list: { name: string; url: string; format: 'hosts' | 'plain' | 'adblock' };
+  list: { name: string; url: string; format: 'hosts' | 'plain' | 'adblock'; mirrors?: string[] };
 }
 
 export const blocklistTiers: BlocklistTier[] = ['balanced', 'strict', 'security', 'family'];
@@ -47,6 +54,7 @@ export const blocklistPresets: BlocklistPreset[] = [
       name: 'Hagezi Multi',
       url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/multi.txt',
       format: 'adblock',
+      mirrors: ['https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/multi.txt', 'https://codeberg.org/hagezi/mirror2/raw/branch/main/dns-blocklists/adblock/multi.txt'],
     },
   },
   {
@@ -71,6 +79,7 @@ export const blocklistPresets: BlocklistPreset[] = [
       name: 'Hagezi Pro',
       url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt',
       format: 'adblock',
+      mirrors: ['https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/pro.txt', 'https://codeberg.org/hagezi/mirror2/raw/branch/main/dns-blocklists/adblock/pro.txt'],
     },
   },
   {
@@ -95,6 +104,7 @@ export const blocklistPresets: BlocklistPreset[] = [
       name: 'StevenBlack',
       url: 'https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts',
       format: 'hosts',
+      mirrors: ['https://cdn.jsdelivr.net/gh/StevenBlack/hosts@master/hosts'],
     },
   },
   {
@@ -107,6 +117,7 @@ export const blocklistPresets: BlocklistPreset[] = [
       name: 'Hagezi TIF',
       url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.medium.txt',
       format: 'adblock',
+      mirrors: ['https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/tif.medium.txt', 'https://codeberg.org/hagezi/mirror2/raw/branch/main/dns-blocklists/adblock/tif.medium.txt'],
     },
   },
   {
@@ -119,6 +130,7 @@ export const blocklistPresets: BlocklistPreset[] = [
       name: 'Hagezi Bypass',
       url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/doh-vpn-proxy-bypass.txt',
       format: 'adblock',
+      mirrors: ['https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/doh-vpn-proxy-bypass.txt', 'https://codeberg.org/hagezi/mirror2/raw/branch/main/dns-blocklists/adblock/doh-vpn-proxy-bypass.txt'],
     },
   },
   {
@@ -135,6 +147,7 @@ export const blocklistPresets: BlocklistPreset[] = [
       name: 'URLhaus (malware-filter)',
       url: 'https://malware-filter.gitlab.io/urlhaus-filter/urlhaus-filter-hosts.txt',
       format: 'hosts',
+      mirrors: ['https://curbengh.github.io/urlhaus-filter/urlhaus-filter-hosts.txt'],
     },
   },
   {

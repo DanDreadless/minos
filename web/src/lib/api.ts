@@ -258,6 +258,11 @@ export interface ListStatus {
   state: ListState;
   last_attempt?: string;
   consecutive_failures?: number;
+  mirrors?: string[];
+  // served_by: the mirror the copy in force came from (absent = primary);
+  // primary_error: why the primary was passed over.
+  served_by?: string;
+  primary_error?: string;
 }
 
 // The server's single health verdict per list (internal/lists ListState).

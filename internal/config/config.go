@@ -307,6 +307,12 @@ type ListSource struct {
 	// but never enforced — try a strict list safely, then enforce it with
 	// one click. Meaningless on an allowlist (validation rejects it there).
 	Audit bool `yaml:"audit,omitempty"`
+	// Mirrors are alternative URLs serving the same list, tried in order
+	// when the primary is retired/unauthorized, when no copy is held yet,
+	// or when the copy in force has gone stale — never for a passing blip,
+	// because a mirror can lag and must not replace a fresher copy. An
+	// additive key: an older Minos ignores it and just uses the primary.
+	Mirrors []string `yaml:"mirrors,omitempty"`
 }
 
 type ListsConfig struct {
@@ -487,8 +493,8 @@ func (c *Config) Clone() *Config {
 		out.Blocking.CustomServices[i].Domains = append([]string(nil), cs.Domains...)
 		out.Blocking.CustomServices[i].AllowExtra = append([]string(nil), cs.AllowExtra...)
 	}
-	out.Lists.Sources = append([]ListSource(nil), c.Lists.Sources...)
-	out.Lists.AllowSources = append([]ListSource(nil), c.Lists.AllowSources...)
+	out.Lists.Sources = cloneSources(c.Lists.Sources)
+	out.Lists.AllowSources = cloneSources(c.Lists.AllowSources)
 	out.Groups = make([]Group, len(c.Groups))
 	for i, g := range c.Groups {
 		out.Groups[i] = g
@@ -521,6 +527,20 @@ func (c *Config) Clone() *Config {
 		out.DNS.TLS.ACME = &a
 	}
 	return &out
+}
+
+// cloneSources deep-copies list sources: Mirrors is a slice, and a shallow
+// copy would let one config snapshot's edit show through in another.
+func cloneSources(in []ListSource) []ListSource {
+	if in == nil {
+		return nil
+	}
+	out := make([]ListSource, len(in))
+	for i, s := range in {
+		out[i] = s
+		out[i].Mirrors = append([]string(nil), s.Mirrors...)
+	}
+	return out
 }
 
 // Validate checks the whole config and returns the first problem found.
@@ -817,6 +837,18 @@ func (c *Config) Validate() error {
 			case "hosts", "plain", "adblock":
 			default:
 				return fmt.Errorf("%s[%d].format: must be hosts, plain, or adblock, got %q", key, i, s.Format)
+			}
+			for j, mu := range s.Mirrors {
+				p, err := url.Parse(mu)
+				if err != nil || (p.Scheme != "http" && p.Scheme != "https") || p.Host == "" {
+					return fmt.Errorf("%s[%d].mirrors[%d]: must be an http(s) URL, got %q", key, i, j, mu)
+				}
+				if mu == s.URL {
+					return fmt.Errorf("%s[%d].mirrors[%d]: is the list's own url", key, i, j)
+				}
+			}
+			if len(s.Mirrors) > 5 {
+				return fmt.Errorf("%s[%d].mirrors: at most 5, got %d", key, i, len(s.Mirrors))
 			}
 			if s.Audit && key == "lists.allow_sources" {
 				return fmt.Errorf("%s[%d].audit: auditing an allowlist is meaningless — allows are never enforced against", key, i)

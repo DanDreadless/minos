@@ -305,7 +305,9 @@ always beats deny.
 
 - `GET /api/lists` — per-list status: `{name, url, format, action, enabled,
   audit, rules, skipped, state, last_refresh, last_attempt, last_error,
-  consecutive_failures}`. `last_refresh` is the last time the publisher was
+  consecutive_failures, mirrors, served_by, primary_error}`. `served_by` is
+  set when the copy in force came from a mirror, with `primary_error`
+  saying why the main URL was passed over. `last_refresh` is the last time the publisher was
   reached (a 200 or a 304), so it is the age of the copy in force;
   `last_attempt` is the latest try either way. `state` is the one verdict:
 
@@ -334,8 +336,14 @@ always beats deny.
   AdGuard whitelist filters and Pi-hole v6 antigravity lists). In the
   config file, allowlists live under `lists.allow_sources` (block lists
   under `lists.sources`); names are unique across both.
+- `mirrors` (on `POST` and `PUT`, up to 5 http(s) URLs) are fallbacks for
+  the same list, tried in order only when the main URL is retired (404/410)
+  or refuses (401/403), when no copy has ever been downloaded, or when the
+  copy in force is stale — never for a passing blip, because a mirror can
+  lag its primary. `PUT` with `"mirrors": []` clears them. Catalog entries
+  subscribe with their verified mirrors.
 - `PUT /api/lists/{name}` — change any of `url`, `format`, `action`,
-  `audit`, `enabled`; changing `action` moves the list between `sources` and
+  `audit`, `enabled`, `mirrors`; changing `action` moves the list between `sources` and
   `allow_sources`
 - `DELETE /api/lists/{name}`
 - `POST /api/lists/refresh` — refetch everything now (synchronous)
