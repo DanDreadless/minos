@@ -21,8 +21,7 @@ export const copy = {
     dashboard: { label: 'Dashboard', hint: 'what your network is doing' },
     querylog: { label: 'Query Log', hint: 'every lookup, live and searchable' },
     devices: { label: 'Devices', hint: 'devices, groups & schedules' },
-    lists: { label: 'Blocklists', hint: 'the lists that decide what is blocked' },
-    domains: { label: 'Allow & Block', hint: 'your own domains & services' },
+    lists: { label: 'Blocking', hint: 'blocklists & your own rules' },
     settings: { label: 'Settings', hint: 'resolvers, filtering, notifications…' },
     local: { label: 'Local DNS', hint: 'names on your own network' },
     logs: { label: 'Logs', hint: "Minos's own activity" },
@@ -323,7 +322,19 @@ export const copy = {
     leaveMessage: 'You have unsaved changes in Settings. Leave without saving them?',
   },
 
+  blocking: {
+    tabLists: 'Blocklists',
+    tabRules: 'Allow & Block',
+    rulesIntro: 'your own allowed and blocked domains and services — these beat the blocklists',
+  },
+
+  check: {
+    placeholder: 'example.com, or paste a link',
+    keys: 'Ctrl+K (⌘K on a Mac) opens this from any page. Esc closes it.',
+  },
+
   header: {
+    notBlockingShort: 'Not blocking',
     blocking: (rules: number) =>
       `Blocking · ${rules >= 10000 ? `${Math.round(rules / 1000).toLocaleString()}k` : rules.toLocaleString()} rules`,
     noRules: 'Not blocking — no blocklist rules loaded',

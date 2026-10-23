@@ -45,22 +45,22 @@ export const docs: Section[] = [
       'Minos is a DNS server for your home network that blocks ads, trackers and malware before they load. Every device that uses it as its DNS server has each lookup checked against your blocklists and your own rules: blocked names get an empty answer, everything else is looked up through your upstream resolvers.',
     howto: [
       "Point devices at Minos: set your router's DHCP DNS option to this machine's address, so every device follows, or set the DNS server on individual devices.",
-      'Choose blocklists on the Blocklists page — the catalog has curated picks; Balanced is the recommended start.',
+      'Choose blocklists on Blocking → Blocklists — the catalog has curated picks; Balanced is the recommended start.',
       'Watch the Query Log for a day. If something you use breaks, find its blocked lookup and press Allow.',
       'Optional: set an API token (Settings → Access & security), notifications, and the update check.',
     ],
     tasks: [
       {
-        q: 'Every page starts with a bar — what does it show?',
-        a: 'Whether Minos is blocking right now ("Blocking · 73k rules", "Blocking paused until 14:20", or in red "Not blocking — no blocklist rules loaded"), a Pause blocking menu, and Check a domain (Ctrl+K / ⌘K): paste a name or URL to see whether it is blocked and why, then allow or block it.',
+        q: 'What is at the bottom of the side menu?',
+        a: 'Whether Minos is blocking right now ("Blocking · 73k rules", "Blocking paused until 14:20", or in red "Not blocking — no blocklist rules loaded"), Pause blocking, and Check a domain (also Ctrl+K / ⌘K on any page): paste a name or URL to see whether it is blocked and why, then allow or block it. On a phone, a paused or not-blocking state also shows in the top bar.',
       },
       {
         q: 'Something broke and I think Minos blocked it.',
-        a: 'Open the Query Log, filter by the device or type the site\'s name, and look for Blocked rows around the time it broke. Press Allow on the row (or Check a domain in the top bar). Allowed domains include their subdomains.',
+        a: 'Open the Query Log, filter by the device or type the site\'s name, and look for Blocked rows around the time it broke. Press Allow on the row (or use Check a domain, Ctrl+K). Allowed domains include their subdomains.',
       },
       {
         q: 'How do I turn blocking off for a moment?',
-        a: 'Pause blocking in the top bar: 5 or 30 minutes, an hour, until you resume, or any duration such as 2h. Device-level blocks (Devices → Block DNS) still apply while paused.',
+        a: 'Pause blocking at the bottom of the side menu: 5 or 30 minutes, an hour, until you resume, or any duration such as 2h. Device-level blocks (Devices → Block DNS) still apply while paused.',
       },
     ],
   },
@@ -193,7 +193,7 @@ export const docs: Section[] = [
   },
   {
     id: 'blocklists',
-    title: 'Blocklists',
+    title: 'Blocking → Blocklists',
     page: '#/lists',
     summary:
       'The lists Minos blocks from, downloaded and kept up to date automatically. If a list\'s server is down, Minos keeps blocking with the last good copy (also after a restart).',
@@ -211,14 +211,14 @@ export const docs: Section[] = [
         default: '24h',
         effect: 'How often every list is downloaded again (minimum 5m). A list that fails is retried sooner, backing off from a minute to an hour.',
         applies: 'live',
-        where: 'Blocklists',
+        where: 'Blocking → Blocklists',
       },
       {
         label: 'Blocklists',
         key: 'lists.sources',
         effect: 'Subscribed blocklists.',
         applies: 'live',
-        where: 'Blocklists',
+        where: 'Blocking → Blocklists',
         fields: [
           { key: 'lists.sources.name', effect: 'A unique name, shown in the Query Log.' },
           { key: 'lists.sources.url', effect: 'Where it is downloaded from.' },
@@ -237,7 +237,7 @@ export const docs: Section[] = [
         key: 'lists.allow_sources',
         effect: 'Subscribed lists of always-allowed domains; same fields as blocklists.',
         applies: 'live',
-        where: 'Blocklists',
+        where: 'Blocking → Blocklists',
         fields: [
           { key: 'lists.allow_sources.name', effect: 'A unique name.' },
           { key: 'lists.allow_sources.url', effect: 'Where it is downloaded from.' },
@@ -252,7 +252,7 @@ export const docs: Section[] = [
   },
   {
     id: 'allowblock',
-    title: 'Allow & Block',
+    title: 'Blocking → Allow & Block',
     page: '#/domains',
     summary:
       'Your own rules, which beat the blocklists: domains you always allow or always block, and whole services (every domain an app uses) in one move.',
@@ -263,16 +263,16 @@ export const docs: Section[] = [
       'Your custom services: define your own bundle of domains, then block or allow it like any service.',
     ],
     settings: [
-      { label: 'Allowed domains', key: 'blocking.allowlist', effect: 'Always allowed, with subdomains.', applies: 'live', where: 'Allow & Block' },
-      { label: 'Blocked domains', key: 'blocking.denylist', effect: 'Always blocked, with subdomains.', applies: 'live', where: 'Allow & Block' },
-      { label: 'Blocked services', key: 'blocking.services', effect: 'Services blocked for everyone.', applies: 'live', where: 'Allow & Block → Services' },
-      { label: 'Allowed services', key: 'blocking.allowed_services', effect: 'Services allowed for everyone; allowing beats blocking.', applies: 'live', where: 'Allow & Block → Services' },
+      { label: 'Allowed domains', key: 'blocking.allowlist', effect: 'Always allowed, with subdomains.', applies: 'live', where: 'Blocking → Allow & Block' },
+      { label: 'Blocked domains', key: 'blocking.denylist', effect: 'Always blocked, with subdomains.', applies: 'live', where: 'Blocking → Allow & Block' },
+      { label: 'Blocked services', key: 'blocking.services', effect: 'Services blocked for everyone.', applies: 'live', where: 'Blocking → Allow & Block → Services' },
+      { label: 'Allowed services', key: 'blocking.allowed_services', effect: 'Services allowed for everyone; allowing beats blocking.', applies: 'live', where: 'Blocking → Allow & Block → Services' },
       {
         label: 'Your custom services',
         key: 'blocking.custom_services',
         effect: 'Your own service bundles.',
         applies: 'live',
-        where: 'Allow & Block → Your custom services',
+        where: 'Blocking → Allow & Block → Your custom services',
         fields: [
           { key: 'blocking.custom_services.name', effect: 'Its ID (derived from the label if not given).' },
           { key: 'blocking.custom_services.label', effect: 'Its display name.' },

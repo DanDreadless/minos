@@ -10,7 +10,6 @@
   import CustomServiceForm from '../lib/components/CustomServiceForm.svelte';
   import ServiceShuttle from '../lib/components/ServiceShuttle.svelte';
   import { confirmDialog } from '../lib/confirm';
-  import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
@@ -257,7 +256,7 @@
   onMount(() => void load());
 </script>
 
-<h1>{copy.nav.domains.label} <small>{copy.nav.domains.hint}</small><HelpLink section="allowblock" /></h1>
+<p class="intro">{copy.blocking.rulesIntro}</p>
 
 <section class="card check">
   <h2>{copy.domains.checkTitle} <small>{copy.domains.checkHint}</small></h2>
@@ -424,7 +423,6 @@
 </section>
 
 <style>
-  h1 small,
   h2 small {
     color: var(--text-dim);
     font-size: 0.78rem;
@@ -453,6 +451,12 @@
 
   .check-result.error {
     color: var(--blocked);
+  }
+
+  .intro {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    margin: 0 0 0.9rem;
   }
 
   .domain {

@@ -13,8 +13,8 @@ immediately. "After restart" settings live only in `minos.yaml`; restart Minos a
 - [Dashboard](#dashboard)
 - [Query Log](#querylog)
 - [Devices](#devices)
-- [Blocklists](#blocklists)
-- [Allow & Block](#allowblock)
+- [Blocking → Blocklists](#blocklists)
+- [Blocking → Allow & Block](#allowblock)
 - [Local DNS](#localdns)
 - [Logs](#logs)
 - [Settings → DNS](#settings-dns)
@@ -33,15 +33,15 @@ immediately. "After restart" settings live only in `minos.yaml`; restart Minos a
 Minos is a DNS server for your home network that blocks ads, trackers and malware before they load. Every device that uses it as its DNS server has each lookup checked against your blocklists and your own rules: blocked names get an empty answer, everything else is looked up through your upstream resolvers.
 
 - Point devices at Minos: set your router's DHCP DNS option to this machine's address, so every device follows, or set the DNS server on individual devices.
-- Choose blocklists on the Blocklists page — the catalog has curated picks; Balanced is the recommended start.
+- Choose blocklists on Blocking → Blocklists — the catalog has curated picks; Balanced is the recommended start.
 - Watch the Query Log for a day. If something you use breaks, find its blocked lookup and press Allow.
 - Optional: set an API token (Settings → Access & security), notifications, and the update check.
 
-**Every page starts with a bar — what does it show?** Whether Minos is blocking right now ("Blocking · 73k rules", "Blocking paused until 14:20", or in red "Not blocking — no blocklist rules loaded"), a Pause blocking menu, and Check a domain (Ctrl+K / ⌘K): paste a name or URL to see whether it is blocked and why, then allow or block it.
+**What is at the bottom of the side menu?** Whether Minos is blocking right now ("Blocking · 73k rules", "Blocking paused until 14:20", or in red "Not blocking — no blocklist rules loaded"), Pause blocking, and Check a domain (also Ctrl+K / ⌘K on any page): paste a name or URL to see whether it is blocked and why, then allow or block it. On a phone, a paused or not-blocking state also shows in the top bar.
 
-**Something broke and I think Minos blocked it.** Open the Query Log, filter by the device or type the site's name, and look for Blocked rows around the time it broke. Press Allow on the row (or Check a domain in the top bar). Allowed domains include their subdomains.
+**Something broke and I think Minos blocked it.** Open the Query Log, filter by the device or type the site's name, and look for Blocked rows around the time it broke. Press Allow on the row (or use Check a domain, Ctrl+K). Allowed domains include their subdomains.
 
-**How do I turn blocking off for a moment?** Pause blocking in the top bar: 5 or 30 minutes, an hour, until you resume, or any duration such as 2h. Device-level blocks (Devices → Block DNS) still apply while paused.
+**How do I turn blocking off for a moment?** Pause blocking at the bottom of the side menu: 5 or 30 minutes, an hour, until you resume, or any duration such as 2h. Device-level blocks (Devices → Block DNS) still apply while paused.
 
 <a id="dashboard"></a>
 
@@ -96,7 +96,7 @@ Every device that has used Minos, named where Minos could find out (router names
 
 <a id="blocklists"></a>
 
-## Blocklists
+## Blocking → Blocklists
 
 The lists Minos blocks from, downloaded and kept up to date automatically. If a list's server is down, Minos keeps blocking with the last good copy (also after a restart).
 
@@ -108,13 +108,13 @@ The lists Minos blocks from, downloaded and kept up to date automatically. If a 
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
-| Check for updates every<br><small>Blocklists</small> | `lists.refresh_interval` | 24h | How often every list is downloaded again (minimum 5m). A list that fails is retried sooner, backing off from a minute to an hour. | at once |
-| Blocklists<br><small>Blocklists</small> | `lists.sources` | — | Subscribed blocklists.<br>`name`: A unique name, shown in the Query Log.<br>`url`: Where it is downloaded from.<br>`format`: hosts, adblock or plain (one domain per line).<br>`enabled`: Off keeps the subscription but stops using it.<br>`audit`: Record matches as "would block" without blocking.<br>`mirrors`: Up to 5 fallback addresses, used only when the main one is gone or the copy is getting old.<br>`headers`: Extra request headers, e.g. an access key for a keyed feed. Config file only; never shown by the API and never sent to a mirror. | at once |
-| Allowlists<br><small>Blocklists</small> | `lists.allow_sources` | — | Subscribed lists of always-allowed domains; same fields as blocklists.<br>`name`: A unique name.<br>`url`: Where it is downloaded from.<br>`format`: hosts, adblock or plain.<br>`enabled`: Off stops using it.<br>`audit`: Not allowed on allowlists (a validation error).<br>`mirrors`: Fallback addresses.<br>`headers`: Extra request headers (config file only). | at once |
+| Check for updates every<br><small>Blocking → Blocklists</small> | `lists.refresh_interval` | 24h | How often every list is downloaded again (minimum 5m). A list that fails is retried sooner, backing off from a minute to an hour. | at once |
+| Blocklists<br><small>Blocking → Blocklists</small> | `lists.sources` | — | Subscribed blocklists.<br>`name`: A unique name, shown in the Query Log.<br>`url`: Where it is downloaded from.<br>`format`: hosts, adblock or plain (one domain per line).<br>`enabled`: Off keeps the subscription but stops using it.<br>`audit`: Record matches as "would block" without blocking.<br>`mirrors`: Up to 5 fallback addresses, used only when the main one is gone or the copy is getting old.<br>`headers`: Extra request headers, e.g. an access key for a keyed feed. Config file only; never shown by the API and never sent to a mirror. | at once |
+| Allowlists<br><small>Blocking → Blocklists</small> | `lists.allow_sources` | — | Subscribed lists of always-allowed domains; same fields as blocklists.<br>`name`: A unique name.<br>`url`: Where it is downloaded from.<br>`format`: hosts, adblock or plain.<br>`enabled`: Off stops using it.<br>`audit`: Not allowed on allowlists (a validation error).<br>`mirrors`: Fallback addresses.<br>`headers`: Extra request headers (config file only). | at once |
 
 <a id="allowblock"></a>
 
-## Allow & Block
+## Blocking → Allow & Block
 
 Your own rules, which beat the blocklists: domains you always allow or always block, and whole services (every domain an app uses) in one move.
 
@@ -125,11 +125,11 @@ Your own rules, which beat the blocklists: domains you always allow or always bl
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
-| Allowed domains<br><small>Allow & Block</small> | `blocking.allowlist` | — | Always allowed, with subdomains. | at once |
-| Blocked domains<br><small>Allow & Block</small> | `blocking.denylist` | — | Always blocked, with subdomains. | at once |
-| Blocked services<br><small>Allow & Block → Services</small> | `blocking.services` | — | Services blocked for everyone. | at once |
-| Allowed services<br><small>Allow & Block → Services</small> | `blocking.allowed_services` | — | Services allowed for everyone; allowing beats blocking. | at once |
-| Your custom services<br><small>Allow & Block → Your custom services</small> | `blocking.custom_services` | — | Your own service bundles.<br>`name`: Its ID (derived from the label if not given).<br>`label`: Its display name.<br>`domains`: The domains it covers.<br>`allow_extra`: Extra hosts allowed only while the service is allowed.<br>`blocked`: Blocked for everyone.<br>`allowed`: Allowed for everyone. | at once |
+| Allowed domains<br><small>Blocking → Allow & Block</small> | `blocking.allowlist` | — | Always allowed, with subdomains. | at once |
+| Blocked domains<br><small>Blocking → Allow & Block</small> | `blocking.denylist` | — | Always blocked, with subdomains. | at once |
+| Blocked services<br><small>Blocking → Allow & Block → Services</small> | `blocking.services` | — | Services blocked for everyone. | at once |
+| Allowed services<br><small>Blocking → Allow & Block → Services</small> | `blocking.allowed_services` | — | Services allowed for everyone; allowing beats blocking. | at once |
+| Your custom services<br><small>Blocking → Allow & Block → Your custom services</small> | `blocking.custom_services` | — | Your own service bundles.<br>`name`: Its ID (derived from the label if not given).<br>`label`: Its display name.<br>`domains`: The domains it covers.<br>`allow_extra`: Extra hosts allowed only while the service is allowed.<br>`blocked`: Blocked for everyone.<br>`allowed`: Allowed for everyone. | at once |
 
 <a id="localdns"></a>
 

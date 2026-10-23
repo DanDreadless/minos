@@ -330,13 +330,14 @@ Open `http://<host>:8080`. One page per concern — and **Help** in the menu
 (or the **?** beside any page title) explains each one and every setting;
 the same guide is [docs/user-guide.md](user-guide.md).
 
-Every page opens with the same bar: whether Minos is blocking right now
+The bottom of the side menu shows whether Minos is blocking right now
 ("Blocking · 73k rules", "Blocking paused until 14:20", or — in red — "Not
-blocking — no blocklist rules loaded"), a **Pause blocking** menu (5 or 30
-minutes, an hour, until you resume, or any duration), and **Check a
-domain** (Ctrl+K / ⌘K): type or paste a name or URL to see whether it is
-blocked and by which rule, then allow or block it, or open it in the
-Query Log.
+blocking — no blocklist rules loaded"), with **Pause blocking** (5 or 30
+minutes, an hour, until you resume, or any duration) and **Check a
+domain**, which also opens with Ctrl+K / ⌘K on any page: type or paste a
+name or URL to see whether it is blocked and by which rule, then allow or
+block it, or open it in the Query Log. On a phone, a paused or
+not-blocking state also shows in the top bar.
 
 - **Dashboard** — what your network did over the window you pick (24
   hours, 7, 30 or 90 days): queries, blocked, block rate, a volume chart,
@@ -397,7 +398,7 @@ Query Log.
   results are enforced by the provider itself and can't be switched off
   in the page settings. Only exact search hostnames are rewritten —
   Gmail, Maps, and other subdomains are untouched.
-- **Blocklists** — add, enable/disable, or remove list
+- **Blocking → Blocklists** — add, enable/disable, or remove list
   subscriptions, refresh them on demand or set how often they update
   ("Check for updates every", default 24h), with per-list rule counts and
   fetch errors. The **Choose your blocklists** catalog offers curated,
@@ -416,7 +417,7 @@ Query Log.
   a service only for some devices, or only at certain times, set it on a
   **group** on the Devices page instead — a group's blocked services apply
   to its members and obey the group's schedule.
-- **Allow & Block** (your own allowed and blocked domains) — manage both lists, plus a
+- **Blocking → Allow & Block** (your own allowed and blocked domains) — manage both lists, plus a
   **Check a domain** tool that shows exactly which rule decides any name
   before you ever query it. The **Allowed services** card fixes a
   streaming app a blocklist broke with one checkbox: allowing Netflix,
