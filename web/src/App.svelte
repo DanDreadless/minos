@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { api, ApiError, setToken, type Status, type UpdateInfo } from './lib/api';
+  import ConfirmHost from './lib/components/ConfirmHost.svelte';
   import HeaderBar from './lib/components/HeaderBar.svelte';
   import Nav from './lib/components/Nav.svelte';
   import { copy } from './lib/copy';
-  import { route } from './lib/router';
+  import { confirmDialog } from './lib/confirm';
+  import { leaveGuarded, route, setLeaveGuard } from './lib/router';
   import { notify, notifyError, toasts } from './lib/toast';
   import Blocklists from './pages/Blocklists.svelte';
   import Dashboard from './pages/Dashboard.svelte';
@@ -58,12 +60,27 @@
     }
   }
 
+  // Ask before an in-app link leaves a page with unsaved changes.
+  async function guardLinks(ev: MouseEvent): Promise<void> {
+    if (!leaveGuarded() || ev.defaultPrevented || ev.button !== 0 || ev.ctrlKey || ev.metaKey) return;
+    const a = (ev.target as HTMLElement | null)?.closest('a');
+    const href = a?.getAttribute('href') ?? '';
+    if (!href.startsWith('#/') || href.startsWith('#/settings')) return;
+    ev.preventDefault();
+    if (await confirmDialog({ message: copy.confirm.leaveMessage, confirm: copy.confirm.leave, danger: true })) {
+      setLeaveGuard(false);
+      location.hash = href;
+    }
+  }
+
   onMount(() => {
+    document.addEventListener('click', guardLinks, true);
     void refresh();
     pollTimer = setInterval(refresh, 5000);
   });
 
   onDestroy(() => {
+    document.removeEventListener('click', guardLinks, true);
     if (pollTimer) clearInterval(pollTimer);
   });
 </script>
@@ -128,6 +145,8 @@
     {/if}
   </main>
 </div>
+
+<ConfirmHost />
 
 <div class="toasts" aria-live="polite">
   {#each $toasts as t (t.id)}

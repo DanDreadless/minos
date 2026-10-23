@@ -113,3 +113,14 @@ export function currentDeviceKey(): string {
   if (!path.startsWith('#/device/')) return '';
   return decodeURIComponent(path.slice('#/device/'.length));
 }
+
+// A page with unsaved changes (Settings) sets the leave guard; App then asks
+// before an in-app link navigates away. Reloads are covered by the page's
+// own beforeunload handler.
+let leaveGuard = false;
+export function setLeaveGuard(on: boolean): void {
+  leaveGuard = on;
+}
+export function leaveGuarded(): boolean {
+  return leaveGuard;
+}

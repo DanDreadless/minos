@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { api, type Device, type Group } from '../lib/api';
+  import { confirmDialog } from '../lib/confirm';
   import { copy } from '../lib/copy';
   import { deviceHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
@@ -176,7 +177,8 @@
   }
 
   async function removeGroup(g: Group): Promise<void> {
-    if (!window.confirm(copy.devices.confirmDelete(g.name))) return;
+    if (!(await confirmDialog({ message: copy.devices.confirmDelete(g.name), confirm: copy.confirm.deleteGroup, danger: true })))
+      return;
     try {
       groups = await api.deleteGroup(g.name);
       await load();

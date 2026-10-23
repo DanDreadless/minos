@@ -9,10 +9,11 @@
     type Upstream,
     type UpstreamHealth,
   } from '../lib/api';
+  import { confirmDialog } from '../lib/confirm';
   import { copy } from '../lib/copy';
   import { fmtBytes, fmtLogTime } from '../lib/format';
   import { resolverPresets, matchPreset } from '../lib/resolvers';
-  import { currentParams } from '../lib/router';
+  import { currentParams, setLeaveGuard } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
   let cfg: ConfigView | null = null;
@@ -111,6 +112,7 @@
     logLevel = c.log_level || 'info';
     ssdp = c.discovery.ssdp;
     dhcpListen = c.discovery.dhcp_listen;
+    snapshot();
   }
 
   async function load(): Promise<void> {
@@ -153,30 +155,116 @@
     }
   }
 
-  const saveUpstreams = () => save({ dns: { upstreams, dnssec } });
-  const saveBlocking = () =>
-    save({
-      blocking: {
-        mode,
-        safe_search: safeSearch,
-        block_icloud_private_relay: blockPrivateRelay,
-      },
-      dns: { block_ttl: blockTTL, allow_firefox_doh: !firefoxCanary },
-    });
-  const saveCache = () =>
-    save({
-      dns: {
-        cache: {
-          enabled: cacheEnabled,
-          max_entries: cacheMaxEntries,
-          min_ttl: cacheMinTTL,
-          max_ttl: cacheMaxTTL,
-          serve_stale: cacheServeStale,
-        },
-      },
-    });
-  const saveQuerylog = () =>
-    save({ querylog: { retention_days: retentionDays, ring_size: ringSize, memory_mb: memoryMB } });
+  // One save model for every tab: fields (toggles included) are drafts
+  // until "Save changes" in the bar at the bottom, which saves every tab
+  // with changes in one request. Actions that are not settings — setting
+  // the API token, restoring a backup — stay immediate buttons.
+  type Upd = Parameters<typeof api.updateConfig>[0];
+
+  function tabUpdate(t: TabKey): Upd | null {
+    switch (t) {
+      case 'dns':
+        return {
+          dns: {
+            upstreams,
+            dnssec,
+            cache: {
+              enabled: cacheEnabled,
+              max_entries: cacheMaxEntries,
+              min_ttl: cacheMinTTL,
+              max_ttl: cacheMaxTTL,
+              serve_stale: cacheServeStale,
+            },
+          },
+        };
+      case 'filtering':
+        return {
+          blocking: { mode, safe_search: safeSearch, block_icloud_private_relay: blockPrivateRelay },
+          dns: { block_ttl: blockTTL, allow_firefox_doh: !firefoxCanary },
+        };
+      case 'notifications':
+        return {
+          notifications: {
+            webhook_url: webhookURL.trim(),
+            ntfy_url: ntfyURL.trim(),
+            digest,
+            digest_time: digestTime,
+            digest_day: digestDay,
+            ui_url: uiURL.trim(),
+            quiet_hours: quiet ? `${quietFrom}-${quietTo}` : '',
+            mute,
+            // Only send a typed token; an untouched field never clobbers
+            // the stored one. Clearing ntfy_url makes any token inert.
+            ...(ntfyToken.trim() ? { ntfy_token: ntfyToken.trim() } : {}),
+          },
+        };
+      case 'discovery':
+        return { discovery: { ssdp, dhcp_listen: dhcpListen } };
+      case 'system':
+        return {
+          querylog: { retention_days: retentionDays, ring_size: ringSize, memory_mb: memoryMB },
+          log_level: logLevel,
+          update_check: updateCheck,
+        };
+    }
+    return null;
+  }
+
+  let baseline: Record<string, string> = {};
+  function snapshot(): void {
+    baseline = Object.fromEntries(tabs.map((t) => [t.key, JSON.stringify(tabUpdate(t.key))]));
+  }
+
+  // Every draft is named here so the comparison re-runs when any changes
+  // (Svelte tracks only what a reactive statement names).
+  $: draftKey = JSON.stringify([
+    upstreams, dnssec, mode, blockTTL, safeSearch, firefoxCanary, blockPrivateRelay, retentionDays,
+    ringSize, memoryMB, cacheEnabled, cacheMaxEntries, cacheMinTTL, cacheMaxTTL, cacheServeStale,
+    updateCheck, webhookURL, ntfyURL, ntfyToken, digest, digestTime, digestDay, uiURL, quiet,
+    quietFrom, quietTo, mute, ssdp, dhcpListen, logLevel,
+  ]);
+  $: dirtyTabs = changedTabs(draftKey, baseline);
+  $: setLeaveGuard(dirtyTabs.length > 0);
+
+  function changedTabs(_key: string, base: Record<string, string>): TabKey[] {
+    if (!cfg) return [];
+    return tabs.map((t) => t.key).filter((k) => JSON.stringify(tabUpdate(k)) !== base[k]);
+  }
+
+  // Deep-merges tab updates (two tabs both write under dns); arrays replace.
+  function merge(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = { ...a };
+    for (const [k, v] of Object.entries(b)) {
+      const cur = out[k];
+      out[k] =
+        v && typeof v === 'object' && !Array.isArray(v) && cur && typeof cur === 'object' && !Array.isArray(cur)
+          ? merge(cur as Record<string, unknown>, v as Record<string, unknown>)
+          : v;
+    }
+    return out;
+  }
+
+  let saving = false;
+  async function saveAll(): Promise<void> {
+    let upd: Record<string, unknown> = {};
+    for (const t of dirtyTabs) upd = merge(upd, (tabUpdate(t) ?? {}) as Record<string, unknown>);
+    saving = true;
+    await save(upd as Upd);
+    saving = false;
+  }
+
+  function discard(): void {
+    if (cfg) initFrom(cfg);
+  }
+
+  function tabLabel(k: TabKey): string {
+    return tabs.find((t) => t.key === k)?.label ?? k;
+  }
+
+  // Reloading or closing the page with unsaved changes asks first.
+  function onBeforeUnload(ev: BeforeUnloadEvent): void {
+    if (dirtyTabs.length) ev.preventDefault();
+  }
 
   function addUpstream(): void {
     upstreams = [...upstreams, { address: '', protocol: 'doh' }];
@@ -230,7 +318,7 @@
       const updated = await api.updateConfig({ api: { token: t } });
       // Adopt the new token locally before the next request needs it.
       setToken(t);
-      initFrom(updated);
+      cfg = updated; // only the token changed: other tabs' drafts survive
       newToken = '';
       notify(copy.settings.saved);
     } catch (e) {
@@ -239,11 +327,12 @@
   }
 
   async function clearToken(): Promise<void> {
-    if (!window.confirm(copy.settings.tokenConfirmClear)) return;
+    if (!(await confirmDialog({ message: copy.settings.tokenConfirmClear, confirm: copy.settings.tokenClear, danger: true })))
+      return;
     try {
       const updated = await api.updateConfig({ api: { token: '' } });
       setToken('');
-      initFrom(updated);
+      cfg = updated;
       notify(copy.settings.saved);
     } catch (e) {
       notifyError(e);
@@ -302,7 +391,8 @@
 
   async function doRestore(): Promise<void> {
     if (!restoreFile?.[0]) return;
-    if (!window.confirm(copy.settings.restoreConfirm)) return;
+    if (!(await confirmDialog({ message: copy.settings.restoreConfirm, confirm: copy.settings.restoreButton, danger: true })))
+      return;
     importing = true;
     try {
       initFrom(await api.importConfig(restoreFile[0]));
@@ -384,11 +474,14 @@
       .catch(() => {});
     healthTimer = setInterval(loadUpstreamHealth, 10000);
     window.addEventListener('hashchange', onHashChange);
+    window.addEventListener('beforeunload', onBeforeUnload);
   });
 
   onDestroy(() => {
     if (healthTimer) clearInterval(healthTimer);
     window.removeEventListener('hashchange', onHashChange);
+    window.removeEventListener('beforeunload', onBeforeUnload);
+    setLeaveGuard(false);
   });
 </script>
 
@@ -398,7 +491,7 @@
   <div class="tabs" role="tablist">
     {#each tabs as t (t.key)}
       <button role="tab" class:active={tab === t.key} aria-selected={tab === t.key} on:click={() => selectTab(t.key)}
-        >{t.label}</button
+        >{t.label}{#if dirtyTabs.includes(t.key)}<span class="dirty" title={copy.settings.unsavedTab}></span>{/if}</button
       >
     {/each}
   </div>
@@ -458,7 +551,6 @@
     <p class="note">{copy.settings.dnssecNote}</p>
     <div class="section-actions">
       <button on:click={addUpstream}>Add upstream</button>
-      <button class="primary" on:click={saveUpstreams}>{copy.settings.save}</button>
     </div>
   </section>
   <section class="card">
@@ -486,9 +578,6 @@
       </label>
       <p class="note">{copy.settings.cacheServeStaleHint}</p>
     {/if}
-    <div class="section-actions">
-      <button class="primary" on:click={saveCache}>{copy.settings.save}</button>
-    </div>
   </section>
   {/if}
 
@@ -522,9 +611,6 @@
       {copy.settings.privateRelay}
     </label>
     <p class="note">{copy.settings.privateRelayHint}</p>
-    <div class="section-actions">
-      <button class="primary" on:click={saveBlocking}>{copy.settings.save}</button>
-    </div>
   </section>
   {/if}
 
@@ -614,27 +700,10 @@
     </div>
     <div class="section-actions">
       <button
-        class="primary"
-        on:click={() =>
-          void save({
-            notifications: {
-              webhook_url: webhookURL.trim(),
-              ntfy_url: ntfyURL.trim(),
-              digest,
-              digest_time: digestTime,
-              digest_day: digestDay,
-              ui_url: uiURL.trim(),
-              quiet_hours: quiet ? `${quietFrom}-${quietTo}` : '',
-              mute,
-              // Only send a typed token; an untouched field never clobbers
-              // the stored one. Clearing ntfy_url makes any token inert.
-              ...(ntfyToken.trim() ? { ntfy_token: ntfyToken.trim() } : {}),
-            },
-          })}
+        on:click={sendTest}
+        disabled={testing || dirtyTabs.includes('notifications')}
+        title={copy.settings.testSaveFirst}
       >
-        {copy.settings.save}
-      </button>
-      <button on:click={sendTest} disabled={testing} title={copy.settings.testSaveFirst}>
         {testing ? copy.settings.testSending : copy.settings.testAction}
       </button>
       {#if testResult}<span class="test-result">{testResult}</span>{/if}
@@ -649,7 +718,6 @@
       <input
         type="checkbox"
         bind:checked={ssdp}
-        on:change={() => void save({ discovery: { ssdp } })}
       />
       {copy.settings.discoverySSDP}
     </label>
@@ -658,7 +726,6 @@
       <input
         type="checkbox"
         bind:checked={dhcpListen}
-        on:change={() => void save({ discovery: { dhcp_listen: dhcpListen } })}
       />
       {copy.settings.discoveryDHCP}
     </label>
@@ -714,15 +781,12 @@
         <p class="note">{copy.settings.procRSS(fmtBytes(procRSS))}</p>
       {/if}
     {/if}
-    <div class="section-actions">
-      <button class="primary" on:click={saveQuerylog}>{copy.settings.save}</button>
-    </div>
   </section>
   <section class="card">
     <h2>{copy.settings.logLevelTitle} <small>{copy.settings.logLevelHint}</small></h2>
     <label class="field">
       <span>{copy.logs.recordLabel}</span>
-      <select bind:value={logLevel} on:change={() => void save({ log_level: logLevel })}>
+      <select bind:value={logLevel}>
         {#each ['debug', 'info', 'warn', 'error'] as l (l)}
           <option value={l}>{copy.logs.recordLevels[l]}</option>
         {/each}
@@ -736,7 +800,6 @@
       <input
         type="checkbox"
         bind:checked={updateCheck}
-        on:change={() => void save({ update_check: updateCheck })}
       />
       {copy.settings.updateCheck}
     </label>
@@ -806,9 +869,47 @@
     {/if}
   </section>
   {/if}
+  {#if dirtyTabs.length}
+    <div class="savebar" role="status">
+      <span>{copy.settings.unsaved(dirtyTabs.map(tabLabel))}</span>
+      <button on:click={discard} disabled={saving}>{copy.settings.discard}</button>
+      <button class="primary" on:click={saveAll} disabled={saving}>{copy.settings.save}</button>
+    </div>
+  {/if}
 {/if}
 
 <style>
+  .savebar {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 1.25rem;
+    padding: 0.7rem 1rem;
+    background: var(--bg-raised);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.35);
+  }
+
+  .savebar span {
+    flex: 1;
+    font-size: 0.88rem;
+  }
+
+  .tabs .dirty {
+    display: inline-block;
+    width: 0.4rem;
+    height: 0.4rem;
+    margin-left: 0.35rem;
+    border-radius: 50%;
+    background: var(--accent);
+    vertical-align: middle;
+  }
+
   h2 small {
     color: var(--text-dim);
     font-size: 0.75rem;

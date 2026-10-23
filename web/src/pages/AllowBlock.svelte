@@ -9,6 +9,7 @@
   } from '../lib/api';
   import CustomServiceForm from '../lib/components/CustomServiceForm.svelte';
   import ServiceShuttle from '../lib/components/ServiceShuttle.svelte';
+  import { confirmDialog } from '../lib/confirm';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
@@ -180,7 +181,14 @@
   }
 
   async function removeCustom(c: CustomService): Promise<void> {
-    if (!window.confirm(copy.lists.customConfirmDelete(c.label || c.name))) return;
+    if (
+      !(await confirmDialog({
+        message: copy.lists.customConfirmDelete(c.label || c.name),
+        confirm: copy.confirm.removeService,
+        danger: true,
+      }))
+    )
+      return;
     try {
       applyServicesView(await api.deleteCustomService(c.name));
       if (editingCustom?.name === c.name) closeCustomForm();
