@@ -43,6 +43,11 @@ func (s *Server) startEncrypted(handler dns.Handler) error {
 		getCert = func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 			return &cert, nil
 		}
+		if len(cert.Certificate) > 0 {
+			s.ddrTarget = certName(cert.Certificate[0])
+		}
+	} else if t.ACME != nil {
+		s.ddrTarget = t.ACME.Domain
 	}
 	tcfg := &tls.Config{
 		GetCertificate: getCert,

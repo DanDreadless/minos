@@ -605,6 +605,14 @@ This is security software; hold it to that standard.
   was used. `BenchmarkHandleBlocked` measures handle() end to end: plain
   ~520 ns / 7 allocs (unchanged), EDNS0 ~655 ns / 12 allocs. The Firefox
   canary NXDOMAIN deliberately carries no EDE.
+- **DDR** (fixed decisions, October 2026, `ddr.go`): `_dns.resolver.arpa`
+  is always answered locally, authoritative, **never forwarded** — an
+  upstream's own DDR answer could move devices' DNS off Minos. With DoT/DoH
+  listeners it returns SVCB records (alpn dot / h2, ports from the bound
+  listeners, dohpath /dns-query{?dns}) targeting the certificate's first
+  DNS name (or the ACME domain); without them, NODATA. Clients verify the
+  upgrade against an IP SAN, so a hostname-only certificate means they
+  stay on plain DNS — documented, not worked around.
 - **Access control and rate limiting** (fixed decisions, October 2026,
   `access.go`): the first thing `handle()` does. `dns.allowed_networks`
   empty (the default) answers private networks (RFC 1918, CGNAT, loopback,

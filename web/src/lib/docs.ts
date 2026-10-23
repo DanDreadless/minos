@@ -420,7 +420,8 @@ export const docs: Section[] = [
       {
         label: 'Encrypted DNS for your devices (DoT/DoH)',
         key: 'dns.tls',
-        effect: 'Lets devices reach Minos itself over DNS over TLS and DNS over HTTPS. Needs a certificate: files, or one issued automatically (ACME, DNS-01).',
+        effect:
+          'Lets devices reach Minos itself over DNS over TLS and DNS over HTTPS. Needs a certificate: files, or one issued automatically (ACME, DNS-01). With either on, Minos also advertises them over DDR, so Windows 11, iOS and macOS can switch to encrypted DNS by themselves — when the certificate covers the address they use for Minos.',
         applies: 'file',
         where: 'minos.yaml',
         fields: [
