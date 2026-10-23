@@ -12,6 +12,7 @@
   import { copy } from '../lib/copy';
   import { fmtBytes, fmtLogTime } from '../lib/format';
   import { resolverPresets, matchPreset } from '../lib/resolvers';
+  import { currentParams } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
   let cfg: ConfigView | null = null;
@@ -24,7 +25,6 @@
   let safeSearch = false;
   let firefoxCanary = true;
   let blockPrivateRelay = false;
-  let refreshInterval = '24h';
   let retentionDays = 90;
   let ringSize = 10000;
   let memoryMB = 32;
@@ -53,14 +53,29 @@
   let testing = false;
   let testResult = '';
   let ssdp = true;
-  let dhcpListen = true;
+  let logLevel = 'info';
 
-  interface RouteRow {
-    domains: string;
-    address: string;
-    protocol: Upstream['protocol'];
+  // Tabs keep Settings to one subject at a time; the tab lives in the URL
+  // (#/settings?tab=notifications) so links and reloads land on it.
+  const tabs = copy.settings.tabs;
+  type TabKey = (typeof tabs)[number]['key'];
+  let tab: TabKey = initialTab();
+
+  function initialTab(): TabKey {
+    const t = currentParams().tab;
+    return tabs.some((x) => x.key === t) ? (t as TabKey) : 'dns';
   }
-  let routeRows: RouteRow[] = [];
+
+  function selectTab(t: TabKey): void {
+    tab = t;
+    window.history.replaceState(null, '', `#/settings?tab=${t}`);
+  }
+
+  // A link to another tab while Settings is already open.
+  function onHashChange(): void {
+    if (location.hash.startsWith('#/settings')) tab = initialTab();
+  }
+  let dhcpListen = true;
 
   function initFrom(c: ConfigView): void {
     cfg = c;
@@ -72,7 +87,6 @@
     firefoxCanary = !c.dns.allow_firefox_doh;
     blockPrivateRelay = c.blocking.block_icloud_private_relay;
     blockTTL = c.dns.block_ttl;
-    refreshInterval = c.lists.refresh_interval;
     retentionDays = c.querylog.retention_days;
     ringSize = c.querylog.ring_size;
     memoryMB = c.querylog.memory_mb;
@@ -94,13 +108,9 @@
     quiet = c.notifications.quiet_hours !== '';
     if (quiet) [quietFrom, quietTo] = c.notifications.quiet_hours.split('-');
     mute = [...c.notifications.mute];
+    logLevel = c.log_level || 'info';
     ssdp = c.discovery.ssdp;
     dhcpListen = c.discovery.dhcp_listen;
-    routeRows = c.dns.routes.map((r) => ({
-      domains: r.domains.join(', '),
-      address: r.upstream.address,
-      protocol: r.upstream.protocol,
-    }));
   }
 
   async function load(): Promise<void> {
@@ -153,7 +163,6 @@
       },
       dns: { block_ttl: blockTTL, allow_firefox_doh: !firefoxCanary },
     });
-  const saveLists = () => save({ lists: { refresh_interval: refreshInterval } });
   const saveCache = () =>
     save({
       dns: {
@@ -191,7 +200,6 @@
     if (/^https:\/\//i.test(row.address.trim()) && row.protocol !== 'doh') {
       row.protocol = 'doh';
       upstreams = upstreams;
-      routeRows = routeRows;
     }
   }
 
@@ -201,27 +209,6 @@
     if (i === 0) return 'Primary';
     if (i === 1) return 'Secondary';
     return `${i + 1}.`;
-  }
-
-  const saveRoutes = () =>
-    save({
-      dns: {
-        routes: routeRows.map((r) => ({
-          domains: r.domains
-            .split(/[\s,]+/)
-            .map((s) => s.trim())
-            .filter(Boolean),
-          upstream: { address: r.address.trim(), protocol: r.protocol },
-        })),
-      },
-    });
-
-  function addRoute(): void {
-    routeRows = [...routeRows, { domains: '', address: '', protocol: 'udp' }];
-  }
-
-  function removeRoute(i: number): void {
-    routeRows = routeRows.filter((_, idx) => idx !== i);
   }
 
   function removeUpstream(i: number): void {
@@ -396,16 +383,27 @@
       .then((h) => (procRSS = h.sample?.proc_rss))
       .catch(() => {});
     healthTimer = setInterval(loadUpstreamHealth, 10000);
+    window.addEventListener('hashchange', onHashChange);
   });
 
   onDestroy(() => {
     if (healthTimer) clearInterval(healthTimer);
+    window.removeEventListener('hashchange', onHashChange);
   });
 </script>
 
 <h1>{copy.settings.title}</h1>
 
 {#if cfg}
+  <div class="tabs" role="tablist">
+    {#each tabs as t (t.key)}
+      <button role="tab" class:active={tab === t.key} aria-selected={tab === t.key} on:click={() => selectTab(t.key)}
+        >{t.label}</button
+      >
+    {/each}
+  </div>
+
+  {#if tab === 'dns'}
   <section class="card">
     <h2>{copy.settings.upstreamsTitle} <small>{copy.settings.upstreamsHint}</small></h2>
     {#each upstreams as u, i (i)}
@@ -463,7 +461,38 @@
       <button class="primary" on:click={saveUpstreams}>{copy.settings.save}</button>
     </div>
   </section>
+  <section class="card">
+    <h2>{copy.settings.cacheTitle} <small>{copy.settings.cacheHint}</small></h2>
+    <label class="radio">
+      <input type="checkbox" bind:checked={cacheEnabled} />
+      {copy.settings.cacheEnabled}
+    </label>
+    {#if cacheEnabled}
+      <label class="field">
+        <span>{copy.settings.cacheMaxEntries}</span>
+        <input type="number" min="100" max="1000000" step="100" bind:value={cacheMaxEntries} />
+      </label>
+      <label class="field">
+        <span>{copy.settings.cacheMinTTL} <small>{copy.settings.cacheMinTTLHint}</small></span>
+        <input type="number" min="0" max="86400" bind:value={cacheMinTTL} />
+      </label>
+      <label class="field">
+        <span>{copy.settings.cacheMaxTTL} <small>{copy.settings.cacheMaxTTLHint}</small></span>
+        <input type="number" min="1" max="604800" bind:value={cacheMaxTTL} />
+      </label>
+      <label class="radio">
+        <input type="checkbox" bind:checked={cacheServeStale} />
+        {copy.settings.cacheServeStale}
+      </label>
+      <p class="note">{copy.settings.cacheServeStaleHint}</p>
+    {/if}
+    <div class="section-actions">
+      <button class="primary" on:click={saveCache}>{copy.settings.save}</button>
+    </div>
+  </section>
+  {/if}
 
+  {#if tab === 'filtering'}
   <section class="card">
     <h2>{copy.settings.blockingTitle}</h2>
     <label class="radio">
@@ -497,133 +526,9 @@
       <button class="primary" on:click={saveBlocking}>{copy.settings.save}</button>
     </div>
   </section>
+  {/if}
 
-  <section class="card">
-    <h2>{copy.settings.routesTitle} <small>{copy.settings.routesHint}</small></h2>
-    {#if routeRows.length === 0}
-      <p class="note">{copy.settings.routesEmpty}</p>
-    {/if}
-    {#each routeRows as r, i (i)}
-      <div class="upstream-row">
-        <input
-          class="grow"
-          placeholder={copy.settings.routesDomainsPlaceholder}
-          title={copy.settings.routesDomains}
-          bind:value={r.domains}
-        />
-        <span class="route-arrow" aria-hidden="true">→</span>
-        <input
-          placeholder={r.protocol === 'doh' ? 'https://resolver/dns-query' : 'host:port'}
-          bind:value={r.address}
-          on:input={() => matchProtocol(r)}
-        />
-        <select bind:value={r.protocol} title="protocol">
-          <option value="udp">UDP</option>
-          <option value="tcp">TCP</option>
-          <option value="dot">DoT</option>
-          <option value="doh">DoH</option>
-        </select>
-        <button class="danger" title="remove route" on:click={() => removeRoute(i)}>✕</button>
-      </div>
-    {/each}
-    <p class="note">{copy.settings.routesNote}</p>
-    <div class="section-actions">
-      <button on:click={addRoute}>{copy.settings.routesAdd}</button>
-      <button class="primary" on:click={saveRoutes}>{copy.settings.save}</button>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>{copy.settings.cacheTitle} <small>{copy.settings.cacheHint}</small></h2>
-    <label class="radio">
-      <input type="checkbox" bind:checked={cacheEnabled} />
-      {copy.settings.cacheEnabled}
-    </label>
-    {#if cacheEnabled}
-      <label class="field">
-        <span>{copy.settings.cacheMaxEntries}</span>
-        <input type="number" min="100" max="1000000" step="100" bind:value={cacheMaxEntries} />
-      </label>
-      <label class="field">
-        <span>{copy.settings.cacheMinTTL} <small>{copy.settings.cacheMinTTLHint}</small></span>
-        <input type="number" min="0" max="86400" bind:value={cacheMinTTL} />
-      </label>
-      <label class="field">
-        <span>{copy.settings.cacheMaxTTL} <small>{copy.settings.cacheMaxTTLHint}</small></span>
-        <input type="number" min="1" max="604800" bind:value={cacheMaxTTL} />
-      </label>
-      <label class="radio">
-        <input type="checkbox" bind:checked={cacheServeStale} />
-        {copy.settings.cacheServeStale}
-      </label>
-      <p class="note">{copy.settings.cacheServeStaleHint}</p>
-    {/if}
-    <div class="section-actions">
-      <button class="primary" on:click={saveCache}>{copy.settings.save}</button>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>{copy.settings.listsTitle}</h2>
-    <label class="field">
-      <span>{copy.settings.refreshInterval} <small>{copy.settings.refreshIntervalHint}</small></span>
-      <input bind:value={refreshInterval} size="8" />
-    </label>
-    <div class="section-actions">
-      <button class="primary" on:click={saveLists}>{copy.settings.save}</button>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>{copy.settings.querylogTitle}</h2>
-    {#if cfg.querylog.ephemeral}
-      <p class="note">{copy.settings.ephemeralNote}</p>
-    {:else}
-      <p class="note">{copy.settings.dbPathNote(cfg.querylog.db_path)}</p>
-    {/if}
-    <label class="field">
-      <span>{copy.settings.retention}</span>
-      <input type="number" min="1" max="3650" bind:value={retentionDays} />
-    </label>
-    <label class="field">
-      <span>{copy.settings.ringSize}</span>
-      <input type="number" min="100" max="1000000" step="100" bind:value={ringSize} />
-    </label>
-    {#if !cfg.querylog.ephemeral}
-      <label class="field">
-        <span>{copy.settings.memoryMB}</span>
-        <input type="number" min="8" max="4096" step="8" bind:value={memoryMB} />
-        <small>{copy.settings.memoryMBHint}</small>
-      </label>
-      {#if procRSS !== undefined}
-        <p class="note">{copy.settings.procRSS(fmtBytes(procRSS))}</p>
-      {/if}
-    {/if}
-    <div class="section-actions">
-      <button class="primary" on:click={saveQuerylog}>{copy.settings.save}</button>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>{copy.settings.apiTitle}</h2>
-    <p class="note">{cfg.api.token_set ? copy.settings.tokenSet : copy.settings.tokenUnset}</p>
-    <div class="token-row">
-      <input
-        type="password"
-        placeholder={copy.settings.tokenPlaceholder}
-        bind:value={newToken}
-        autocomplete="new-password"
-      />
-      <button class="primary" disabled={!newToken.trim()} on:click={saveToken}>
-        {copy.settings.tokenSave}
-      </button>
-      {#if cfg.api.token_set}
-        <button class="danger" on:click={clearToken}>{copy.settings.tokenClear}</button>
-      {/if}
-    </div>
-    <p class="note">{copy.settings.listenNote(cfg.dns.listen, cfg.api.listen)}</p>
-  </section>
-
+  {#if tab === 'notifications'}
   <section class="card">
     <h2>{copy.settings.notificationsTitle} <small>{copy.settings.notificationsHint}</small></h2>
     <p class="note">{copy.settings.notificationsNote}</p>
@@ -735,7 +640,9 @@
       {#if testResult}<span class="test-result">{testResult}</span>{/if}
     </div>
   </section>
+  {/if}
 
+  {#if tab === 'discovery'}
   <section class="card">
     <h2>{copy.settings.discoveryTitle} <small>{copy.settings.discoveryHint}</small></h2>
     <label class="radio">
@@ -757,7 +664,72 @@
     </label>
     <p class="note">{copy.settings.discoveryDHCPHint}</p>
   </section>
+  {/if}
 
+  {#if tab === 'access'}
+  <section class="card">
+    <h2>{copy.settings.apiTitle}</h2>
+    <p class="note">{cfg.api.token_set ? copy.settings.tokenSet : copy.settings.tokenUnset}</p>
+    <div class="token-row">
+      <input
+        type="password"
+        placeholder={copy.settings.tokenPlaceholder}
+        bind:value={newToken}
+        autocomplete="new-password"
+      />
+      <button class="primary" disabled={!newToken.trim()} on:click={saveToken}>
+        {copy.settings.tokenSave}
+      </button>
+      {#if cfg.api.token_set}
+        <button class="danger" on:click={clearToken}>{copy.settings.tokenClear}</button>
+      {/if}
+    </div>
+    <p class="note">{copy.settings.listenNote(cfg.dns.listen, cfg.api.listen)}</p>
+  </section>
+  {/if}
+
+  {#if tab === 'system'}
+  <section class="card">
+    <h2>{copy.settings.querylogTitle}</h2>
+    {#if cfg.querylog.ephemeral}
+      <p class="note">{copy.settings.ephemeralNote}</p>
+    {:else}
+      <p class="note">{copy.settings.dbPathNote(cfg.querylog.db_path)}</p>
+    {/if}
+    <label class="field">
+      <span>{copy.settings.retention}</span>
+      <input type="number" min="1" max="3650" bind:value={retentionDays} />
+    </label>
+    <label class="field">
+      <span>{copy.settings.ringSize}</span>
+      <input type="number" min="100" max="1000000" step="100" bind:value={ringSize} />
+    </label>
+    {#if !cfg.querylog.ephemeral}
+      <label class="field">
+        <span>{copy.settings.memoryMB}</span>
+        <input type="number" min="8" max="4096" step="8" bind:value={memoryMB} />
+        <small>{copy.settings.memoryMBHint}</small>
+      </label>
+      {#if procRSS !== undefined}
+        <p class="note">{copy.settings.procRSS(fmtBytes(procRSS))}</p>
+      {/if}
+    {/if}
+    <div class="section-actions">
+      <button class="primary" on:click={saveQuerylog}>{copy.settings.save}</button>
+    </div>
+  </section>
+  <section class="card">
+    <h2>{copy.settings.logLevelTitle} <small>{copy.settings.logLevelHint}</small></h2>
+    <label class="field">
+      <span>{copy.logs.recordLabel}</span>
+      <select bind:value={logLevel} on:change={() => void save({ log_level: logLevel })}>
+        {#each ['debug', 'info', 'warn', 'error'] as l (l)}
+          <option value={l}>{copy.logs.recordLevels[l]}</option>
+        {/each}
+      </select>
+    </label>
+    <p class="note">{copy.settings.logLevelNote} <a href="#/logs">{copy.settings.logLevelLink}</a></p>
+  </section>
   <section class="card">
     <h2>{copy.settings.updatesTitle}</h2>
     <label class="radio">
@@ -770,7 +742,9 @@
     </label>
     <p class="note">{copy.settings.updateCheckHint}</p>
   </section>
+  {/if}
 
+  {#if tab === 'backup'}
   <section class="card">
     <h2>{copy.settings.backupTitle} <small>{copy.settings.backupHint}</small></h2>
     <div class="section-actions">
@@ -786,7 +760,6 @@
       </button>
     </div>
   </section>
-
   <section class="card">
     <h2>{copy.settings.importTitle} <small>{copy.settings.importHint}</small></h2>
     <div class="import-grid">
@@ -832,6 +805,7 @@
       </div>
     {/if}
   </section>
+  {/if}
 {/if}
 
 <style>
@@ -995,9 +969,6 @@
     font-size: 0.85rem;
   }
 
-  .route-arrow {
-    color: var(--text-dim);
-  }
 
   .safe-search {
     margin-top: 0.75rem;
@@ -1048,5 +1019,26 @@
     align-self: center;
     font-size: 0.82rem;
     color: var(--text-dim);
+  }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-bottom: 1.1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tabs button {
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 0.45rem 0.8rem;
+    color: var(--text-dim);
+  }
+
+  .tabs button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
   }
 </style>

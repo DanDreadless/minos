@@ -121,7 +121,7 @@ func TestNtfyDeliveryIsJSON(t *testing.T) {
 		!slices.Equal(m.Tags, []string{"warning"}) || m.Priority != PriorityDefault {
 		t.Errorf("ntfy message = %+v", m)
 	}
-	if m.Click != "http://minos.lan:8080/#/settings" || len(m.Actions) != 1 || m.Actions[0].Action != "view" {
+	if m.Click != "http://minos.lan:8080/#/settings?tab=dns" || len(m.Actions) != 1 || m.Actions[0].Action != "view" {
 		t.Errorf("click = %q, actions = %+v", m.Click, m.Actions)
 	}
 	if got.auth != "Bearer sekrit" {

@@ -225,6 +225,7 @@ export interface ConfigView {
     types: string[];
   };
   discovery: { ssdp: boolean; dhcp_listen: boolean };
+  log_level: string; // '' = the -log-level flag's (info by default)
 }
 
 // Partial settings update; omitted fields are left untouched by the server.

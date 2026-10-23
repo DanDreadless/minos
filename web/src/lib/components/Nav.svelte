@@ -13,6 +13,7 @@
     { key: 'devices', ...copy.nav.devices },
     { key: 'lists', ...copy.nav.lists },
     { key: 'domains', ...copy.nav.domains },
+    { key: 'local', ...copy.nav.local },
     { key: 'logs', ...copy.nav.logs },
     { key: 'settings', ...copy.nav.settings },
   ];

@@ -68,6 +68,29 @@
     }
   }
 
+  // How often every list is re-downloaded. Lives here, beside the lists it
+  // governs, rather than in Settings.
+  let refreshInterval = '';
+  let savedInterval = '';
+
+  async function loadInterval(): Promise<void> {
+    try {
+      refreshInterval = savedInterval = (await api.getConfig()).lists.refresh_interval;
+    } catch {
+      // cosmetic: the field simply stays empty
+    }
+  }
+
+  async function saveInterval(): Promise<void> {
+    try {
+      const cfg = await api.updateConfig({ lists: { refresh_interval: refreshInterval.trim() } });
+      refreshInterval = savedInterval = cfg.lists.refresh_interval;
+      notify(copy.settings.saved);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
   async function refreshAll(): Promise<void> {
     busy = true;
     try {
@@ -195,6 +218,7 @@
     void load();
     void loadCatalog();
     void loadStats();
+    void loadInterval();
   });
 </script>
 
@@ -204,6 +228,15 @@
   <button class="primary" on:click={refreshAll} disabled={busy}>
     {busy ? copy.lists.refreshing : copy.lists.refreshAll}
   </button>
+  <form class="interval" on:submit|preventDefault={saveInterval}>
+    <label title={copy.settings.refreshIntervalHint}>
+      {copy.lists.refreshEvery}
+      <input bind:value={refreshInterval} size="6" aria-label={copy.settings.refreshInterval} />
+    </label>
+    {#if refreshInterval.trim() && refreshInterval.trim() !== savedInterval}
+      <button type="submit">{copy.settings.save}</button>
+    {/if}
+  </form>
 </div>
 
 {#if lists.length === 0}
@@ -398,6 +431,21 @@
     color: var(--text-dim);
     font-size: 0.85rem;
     margin-left: 0.5rem;
+  }
+
+  .interval {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: 1rem;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+
+  .interval label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
   }
 
   .actions {

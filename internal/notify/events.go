@@ -140,8 +140,8 @@ func ListEvent(name, state, detail string) Event {
 // network has no DNS at all and the event is DNSDownEvent instead.
 func UpstreamEvent(name string, sick bool, working []string) Event {
 	e := Event{
-		Link:    "#/settings",
-		Actions: []Action{{Label: "Open resolver settings", URL: "#/settings"}},
+		Link:    "#/settings?tab=dns",
+		Actions: []Action{{Label: "Open resolver settings", URL: "#/settings?tab=dns"}},
 	}
 	if !sick {
 		e.Type = TypeUpstreamRecovered
@@ -172,8 +172,8 @@ func DNSDownEvent(last string) Event {
 		Message: "Every upstream resolver has stopped answering (the last was " + last + "), so devices " +
 			"cannot look up websites. Check this server's internet connection, or add a backup " +
 			"resolver in Settings.",
-		Link:    "#/settings",
-		Actions: []Action{{Label: "Open resolver settings", URL: "#/settings"}},
+		Link:    "#/settings?tab=dns",
+		Actions: []Action{{Label: "Open resolver settings", URL: "#/settings?tab=dns"}},
 	}
 }
 
@@ -188,7 +188,7 @@ func UpdateEvent(current, latest string) Event {
 		Message: fmt.Sprintf("This server runs v%s. Read what changed in the release notes, "+
 			"then upgrade the way you installed Minos.", strings.TrimPrefix(current, "v")),
 		Link:    notes,
-		Actions: []Action{{Label: "Release notes", URL: notes}, {Label: "Open Minos", URL: "#/settings"}},
+		Actions: []Action{{Label: "Release notes", URL: notes}, {Label: "Open Minos", URL: "#/settings?tab=system"}},
 	}
 }
 
@@ -200,7 +200,7 @@ func ACMEEvent(domain string, err error) Event {
 		Title:    "Certificate renewal failing for " + domain,
 		Message: "Minos cannot get a certificate for " + domain + " and will retry hourly: " + err.Error() +
 			". Encrypted DNS (DoT/DoH) keeps the current certificate until it expires.",
-		Link: "#/settings",
+		Link: "#/settings?tab=dns",
 	}
 }
 

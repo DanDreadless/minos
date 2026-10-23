@@ -273,7 +273,7 @@ func (n *Notifier) SendTest(ctx context.Context) (map[string]error, error) {
 		Message:  "Notifications from Minos reach you here. Tap to open Minos.",
 		Time:     n.now(),
 		Priority: PriorityDefault,
-		Link:     "#/settings",
+		Link:     "#/settings?tab=notifications",
 	}
 	return n.deliver(ctx, cfg, n.finish(cfg, e)), nil
 }
