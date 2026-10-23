@@ -10,6 +10,7 @@
   import CustomServiceForm from '../lib/components/CustomServiceForm.svelte';
   import ServiceShuttle from '../lib/components/ServiceShuttle.svelte';
   import { confirmDialog } from '../lib/confirm';
+  import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
@@ -256,7 +257,7 @@
   onMount(() => void load());
 </script>
 
-<h1>{copy.nav.domains.label} <small>{copy.nav.domains.hint}</small></h1>
+<h1>{copy.nav.domains.label} <small>{copy.nav.domains.hint}</small><HelpLink section="allowblock" /></h1>
 
 <section class="card check">
   <h2>{copy.domains.checkTitle} <small>{copy.domains.checkHint}</small></h2>

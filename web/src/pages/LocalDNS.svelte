@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api, type LocalRecord, type Upstream } from '../lib/api';
+  import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
   import { notify, notifyError } from '../lib/toast';
 
@@ -170,7 +171,7 @@
   onMount(() => void load());
 </script>
 
-<h1>{copy.nav.local.label} <small>{copy.nav.local.hint}</small></h1>
+<h1>{copy.nav.local.label} <small>{copy.nav.local.hint}</small><HelpLink section="localdns" /></h1>
 
 <section class="card">
   <h2>{copy.domains.localTitle} <small>{copy.domains.localHint}</small></h2>

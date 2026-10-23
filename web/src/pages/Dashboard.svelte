@@ -6,6 +6,7 @@
   import SetupCard from '../lib/components/SetupCard.svelte';
   import StatTile from '../lib/components/StatTile.svelte';
   import TimelineChart from '../lib/components/TimelineChart.svelte';
+  import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
   import {
     fmtBytes,
@@ -143,6 +144,7 @@
       >{w.label}</button
     >
   {/each}
+  <HelpLink section="dashboard" />
 </div>
 
 {#if status}

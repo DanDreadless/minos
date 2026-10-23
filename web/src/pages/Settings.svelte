@@ -10,6 +10,7 @@
     type UpstreamHealth,
   } from '../lib/api';
   import { confirmDialog } from '../lib/confirm';
+  import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
   import { fmtBytes, fmtLogTime } from '../lib/format';
   import { resolverPresets, matchPreset } from '../lib/resolvers';
@@ -485,7 +486,7 @@
   });
 </script>
 
-<h1>{copy.settings.title}</h1>
+<h1>{copy.settings.title}<HelpLink section={`settings-${tab}`} /></h1>
 
 {#if cfg}
   <div class="tabs" role="tablist">

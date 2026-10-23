@@ -326,7 +326,9 @@ sudo ufw allow from 192.168.1.0/24 to any port 8443 proto tcp
 
 ## The web interface
 
-Open `http://<host>:8080`. Six pages, one per concern:
+Open `http://<host>:8080`. One page per concern — and **Help** in the menu
+(or the **?** beside any page title) explains each one and every setting;
+the same guide is [docs/user-guide.md](user-guide.md).
 
 Every page opens with the same bar: whether Minos is blocking right now
 ("Blocking · 73k rules", "Blocking paused until 14:20", or — in red — "Not

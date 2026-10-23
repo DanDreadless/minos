@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/gen-user-guide.mjs && vite build",
+    "docs": "node scripts/gen-user-guide.mjs",
     "check": "svelte-check --tsconfig ./tsconfig.json"
   },
   "devDependencies": {

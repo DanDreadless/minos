@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { api, openLogStream, type AppLogRecord } from '../lib/api';
+  import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
   import { fmtLogTimeFull } from '../lib/format';
   import { bootOf, markLogsSeen } from '../lib/logseen';
@@ -134,7 +135,7 @@
   });
 </script>
 
-<h1>{copy.logs.title} <small>{copy.logs.subtitle}</small></h1>
+<h1>{copy.logs.title} <small>{copy.logs.subtitle}</small><HelpLink section="logs" /></h1>
 
 <div class="toolbar">
   <input

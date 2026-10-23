@@ -26,7 +26,28 @@ export const copy = {
     settings: { label: 'Settings', hint: 'resolvers, filtering, notifications…' },
     local: { label: 'Local DNS', hint: 'names on your own network' },
     logs: { label: 'Logs', hint: "Minos's own activity" },
+    help: { label: 'Help', hint: 'how everything works, every setting' },
     logsAlert: 'new warnings or errors',
+  },
+
+  help: {
+    title: 'Help',
+    subtitle: 'what each page is for, how to use it, and every setting',
+    contents: 'Contents',
+    searchPlaceholder: 'Search the guide…',
+    noMatches: 'Nothing in the guide matches.',
+    openPage: 'Open this page',
+    settings: 'Settings',
+    colSetting: 'Setting',
+    colDefault: 'Default',
+    colEffect: 'What it does',
+    colApplies: 'Applies',
+    applies: { live: 'at once', file: 'after restart' } as Record<string, string>,
+    appliesHint: {
+      live: 'Change it in the UI (or the API) and it applies immediately — no restart.',
+      file: 'Set in minos.yaml only; restart Minos after editing the file.',
+    } as Record<string, string>,
+    linkTitle: 'Help for this page',
   },
 
   logs: {

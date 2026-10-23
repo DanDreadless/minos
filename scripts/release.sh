@@ -134,8 +134,8 @@ if [ "$assets_only" -eq 0 ]; then
       echo "warning: golangci-lint not found, skipping lint" >&2
     fi
     (cd web && npx --yes svelte-check --output human >/dev/null && npm run build >/dev/null)
-    [ -z "$(git status --porcelain web/dist)" ] ||
-      die "web/dist changed during build — commit the rebuilt bundle first"
+    [ -z "$(git status --porcelain web/dist docs/user-guide.md)" ] ||
+      die "web/dist or docs/user-guide.md changed during build — commit the rebuilt files first"
   fi
 
   say "tagging $tag"

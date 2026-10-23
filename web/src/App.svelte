@@ -14,6 +14,7 @@
   import Devices from './pages/Devices.svelte';
   import QueryLog from './pages/QueryLog.svelte';
   import AllowBlock from './pages/AllowBlock.svelte';
+  import Help from './pages/Help.svelte';
   import LocalDNS from './pages/LocalDNS.svelte';
   import Logs from './pages/Logs.svelte';
   import Settings from './pages/Settings.svelte';
@@ -141,6 +142,8 @@
         <Logs />
       {:else if $route === 'settings'}
         <Settings />
+      {:else if $route === 'help'}
+        <Help />
       {/if}
     {/if}
   </main>
