@@ -116,7 +116,11 @@ Rules:
   (the acme package only — Go-team maintained; chosen over lego's
   ~100-module tree), `golang.org/x/sys` (host metrics on darwin/windows;
   approved August 2026 — it was already an indirect dependency, so making
-  it direct added no modules, and the alternative was gopsutil's tree).
+  it direct added no modules, and the alternative was gopsutil's tree),
+  `github.com/quic-go/quic-go` (DNS over QUIC and HTTP/3, client and
+  server; approved October 2026 — the Go QUIC implementation, maintained,
+  pure Go so CGO_ENABLED=0 builds keep working; pulls `quic-go/qpack` for
+  HTTP/3 headers. Pinned to a release at least a few weeks old).
 
 ## Dev environment & commands
 
@@ -605,6 +609,20 @@ This is security software; hold it to that standard.
   was used. `BenchmarkHandleBlocked` measures handle() end to end: plain
   ~520 ns / 7 allocs (unchanged), EDNS0 ~655 ns / 12 allocs. The Firefox
   canary NXDOMAIN deliberately carries no EDE.
+- **DNS over QUIC / HTTP/3** (fixed decisions, October 2026, `doq.go`):
+  the DoQ listener (`dns.tls.doq_listen`, file-only) shares the listeners'
+  TLS config (TLS 1.3 forced, ALPN "doq") and answers each stream through
+  `handle()` via the DoH capture writer, so every policy applies; stream
+  reads/writes are bounded by 10 s. HTTP/3 runs beside DoH on the **port
+  TCP actually bound** (`s.dohAddr`, which matters for `:0` in tests),
+  HTTP/2 answers carry Alt-Svc, and a taken UDP port costs DoH3, never DoH.
+  The `doq` upstream keeps one connection in an atomic pointer and opens a
+  stream per query; a dead connection is redialled once under a dial-only
+  mutex (queries never wait on it). `doh3` is the RFC 8484 client on an
+  http3.Transport. Presets stay IP literals; the presets test now
+  exchanges with doh/doh3/doq through `NewUpstream`. An older binary
+  loading a config with a doq/doh3 upstream drops it in `healUpstreams`
+  (defaults return if none survive) — an accepted downgrade.
 - **Regex rules** (fixed decisions, October 2026, `internal/filter/regex.go`):
   a `/pattern/` entry in any allow/deny list (global, group, AdBlock list,
   imports) compiles as RE2 with `(?i)`, at most 1000 per side and 512

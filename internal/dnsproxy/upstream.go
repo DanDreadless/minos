@@ -61,6 +61,10 @@ func NewUpstream(u config.Upstream) (Upstream, error) {
 		}, nil
 	case "doh":
 		return newDoHUpstream(u.Address, nil), nil
+	case "doh3":
+		return newDoH3Upstream(u.Address, nil), nil
+	case "doq":
+		return newDoQUpstream(u.Address, nil)
 	default:
 		return nil, fmt.Errorf("unknown upstream protocol %q", u.Protocol)
 	}

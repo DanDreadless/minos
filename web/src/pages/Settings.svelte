@@ -551,6 +551,8 @@
         />
         <select bind:value={u.protocol} title="Protocol">
           <option value="doh">DoH (encrypted, HTTPS)</option>
+          <option value="doh3">DoH3 (encrypted, HTTP/3 over QUIC)</option>
+          <option value="doq">DoQ (encrypted, DNS over QUIC)</option>
           <option value="dot">DoT (encrypted, TLS)</option>
           <option value="udp">UDP (plaintext)</option>
           <option value="tcp">TCP (plaintext)</option>

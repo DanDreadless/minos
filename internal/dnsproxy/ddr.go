@@ -49,11 +49,22 @@ func (s *Server) answerDDR(req *dns.Msg, q dns.Question) *dns.Msg {
 		})
 		prio++
 	}
+	if s.doqAddr != nil {
+		reply.Answer = append(reply.Answer, &dns.SVCB{
+			Hdr: hdr, Priority: prio, Target: dns.Fqdn(target),
+			Value: []dns.SVCBKeyValue{&dns.SVCBAlpn{Alpn: []string{doqALPN}}, &dns.SVCBPort{Port: portOf(s.doqAddr)}},
+		})
+		prio++
+	}
 	if s.dohAddr != nil {
+		alpn := []string{"h2"}
+		if s.doh3 != nil {
+			alpn = []string{"h2", "h3"}
+		}
 		reply.Answer = append(reply.Answer, &dns.SVCB{
 			Hdr: hdr, Priority: prio, Target: dns.Fqdn(target),
 			Value: []dns.SVCBKeyValue{
-				&dns.SVCBAlpn{Alpn: []string{"h2"}},
+				&dns.SVCBAlpn{Alpn: alpn},
 				&dns.SVCBPort{Port: portOf(s.dohAddr)},
 				&dns.SVCBDoHPath{Template: "/dns-query{?dns}"},
 			},

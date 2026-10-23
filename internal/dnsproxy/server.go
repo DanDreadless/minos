@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 
 	"minos/internal/clients"
 	"minos/internal/config"
@@ -55,6 +57,11 @@ type Server struct {
 	dot     *dns.Server
 	doh     *http.Server
 	dotAddr net.Addr
+	// doq is the DNS-over-QUIC listener and doh3 the HTTP/3 side of DoH
+	// (doq.go); nil when not running.
+	doq     *quic.Listener
+	doqAddr net.Addr
+	doh3    *http3.Server
 	// ddrTarget is the name the encrypted listeners' certificate covers,
 	// advertised over DDR (ddr.go); "" when there are no listeners. Set
 	// once in Start, read-only afterwards.

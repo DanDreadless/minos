@@ -334,7 +334,7 @@ export const docs: Section[] = [
           { key: 'dns.routes.domains', effect: 'Domains it covers, with their subdomains.' },
           { key: 'dns.routes.upstream', effect: 'The resolver to use.' },
           { key: 'dns.routes.upstream.address', effect: 'host:port, or a URL for DoH.' },
-          { key: 'dns.routes.upstream.protocol', effect: 'udp, tcp, dot or doh.' },
+          { key: 'dns.routes.upstream.protocol', effect: 'udp, tcp, dot, doh, doh3 or doq.' },
         ],
       },
       {
@@ -389,8 +389,8 @@ export const docs: Section[] = [
         applies: 'live',
         where: 'Settings → DNS',
         fields: [
-          { key: 'dns.upstreams.address', effect: 'host:port for udp/tcp/dot; a https:// URL for doh.' },
-          { key: 'dns.upstreams.protocol', effect: 'udp, tcp, dot (DNS over TLS) or doh (DNS over HTTPS).' },
+          { key: 'dns.upstreams.address', effect: 'host:port for udp, tcp, dot and doq; an https:// URL for doh and doh3.' },
+          { key: 'dns.upstreams.protocol', effect: 'udp, tcp, dot (DNS over TLS), doh (DNS over HTTPS), doh3 (DNS over HTTPS on HTTP/3) or doq (DNS over QUIC).' },
         ],
       },
       {
@@ -433,7 +433,8 @@ export const docs: Section[] = [
         where: 'minos.yaml',
         fields: [
           { key: 'dns.tls.dot_listen', effect: 'Address for DNS over TLS, usually :853 (empty: off).' },
-          { key: 'dns.tls.doh_listen', effect: 'Address for DNS over HTTPS at /dns-query, usually :443 (empty: off).' },
+          { key: 'dns.tls.doh_listen', effect: 'Address for DNS over HTTPS at /dns-query, usually :443 (empty: off). HTTP/3 is served on the same port over UDP and advertised, so clients that speak it upgrade.' },
+          { key: 'dns.tls.doq_listen', effect: 'Address for DNS over QUIC (RFC 9250), usually :853 — UDP, so it can share the number with DoT (empty: off).' },
           { key: 'dns.tls.cert_file', effect: 'Certificate file (instead of acme).' },
           { key: 'dns.tls.key_file', effect: 'Its private key.' },
           { key: 'dns.tls.acme', effect: 'Issue and renew a certificate automatically.' },

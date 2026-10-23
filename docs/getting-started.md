@@ -258,6 +258,18 @@ stay on plain DNS, which keeps working as before. Minos never forwards
 `resolver.arpa`, so an upstream resolver cannot hand your devices its own
 encrypted endpoint and move them off Minos.
 
+**DNS over QUIC and HTTP/3.** Add `doq_listen: ":853"` to serve DNS over
+QUIC (RFC 9250 — UDP, so it shares the number with DoT's TCP port; clients
+such as AdGuard and the Android/iOS apps that support it get TLS 1.3
+encryption without TCP's head-of-line stalls, and keep working as a phone
+moves between Wi-Fi and mobile data). The DoH listener also serves HTTP/3
+on the same port over UDP and advertises it, so browsers and clients that
+speak it upgrade by themselves; if that UDP port is taken, DoH carries on
+over HTTP/2 and the log says why. DDR advertises DoQ and HTTP/3 too.
+Upstreams can use them as well: protocol `doq` with `host:port`, or `doh3`
+with an `https://` URL (the Cloudflare HTTP/3 and AdGuard DNS-over-QUIC
+presets are in the picker).
+
 ```yaml
 dns:
   tls:
@@ -841,7 +853,8 @@ dns:
     cert_file: /var/lib/minos/fullchain.pem   # or an acme: block — see above
     key_file: /var/lib/minos/privkey.pem
     dot_listen: ":853"      # DNS-over-TLS (Android Private DNS); empty = off
-    doh_listen: ":8443"     # DNS-over-HTTPS at /dns-query; empty = off
+    doh_listen: ":8443"     # DNS-over-HTTPS at /dns-query (+ HTTP/3 on UDP); empty = off
+    doq_listen: ":853"      # DNS-over-QUIC (UDP); empty = off
 blocking:
   mode: zero_ip             # or nxdomain
   allowlist: []             # always allowed (with subdomains)

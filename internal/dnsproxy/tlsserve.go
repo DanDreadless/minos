@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 )
 
 // maxDoHRequest caps an incoming DoH body; a DNS message cannot legally
@@ -77,6 +80,19 @@ func (s *Server) startEncrypted(handler dns.Handler) error {
 		s.dohAddr = ln.Addr()
 		mux := http.NewServeMux()
 		mux.HandleFunc("/dns-query", s.serveDoH)
+		// HTTP/3 on the same port over UDP; HTTP/2 answers advertise it
+		// (Alt-Svc) so clients that speak it upgrade. A UDP port already
+		// taken costs DoH3, not DoH.
+		if pc, err := net.ListenPacket("udp", s.dohAddr.String()); err != nil { // the port TCP got (matters for :0)
+			slog.Warn("doh3 (HTTP/3) not available: UDP port is taken; DoH over HTTP/2 still serves", "addr", t.DoHListen, "err", err)
+		} else {
+			s.doh3 = &http3.Server{Handler: mux, TLSConfig: http3.ConfigureTLSConfig(tcfg.Clone()), QUICConfig: doqQUICConfig()}
+			go func() {
+				if err := s.doh3.Serve(pc); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, quic.ErrServerClosed) {
+					slog.Error("doh3 server stopped", "err", err)
+				}
+			}()
+		}
 		s.doh = &http.Server{
 			Handler:           mux,
 			TLSConfig:         tcfg.Clone(), // ServeTLS adds h2 to NextProtos
@@ -88,7 +104,13 @@ func (s *Server) startEncrypted(handler dns.Handler) error {
 				slog.Error("doh server stopped", "err", err)
 			}
 		}()
-		slog.Info("doh server listening", "addr", s.dohAddr.String(), "path", "/dns-query")
+		slog.Info("doh server listening", "addr", s.dohAddr.String(), "path", "/dns-query", "http3", s.doh3 != nil)
+	}
+
+	if t.DoQListen != "" {
+		if err := s.startDoQ(t.DoQListen, tcfg); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -147,6 +169,9 @@ func (s *Server) serveDoH(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/dns-message")
+	if s.doh3 != nil && r.ProtoMajor < 3 {
+		_ = s.doh3.SetQUICHeaders(w.Header()) // Alt-Svc: h3 on this port
+	}
 	// RFC 8484 §5.1: HTTP caching honors the answer's remaining TTL.
 	if ttl, ok := minAnswerTTL(dw.msg); ok {
 		w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", ttl))
@@ -221,6 +246,16 @@ func (s *Server) shutdownEncrypted(ctx context.Context) error {
 	}
 	if s.doh != nil {
 		if err := s.doh.Shutdown(ctx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if s.doh3 != nil {
+		if err := s.doh3.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if s.doq != nil {
+		if err := s.doq.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
