@@ -1386,7 +1386,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
-    min-width: 0;
+    min-width: min(100%, 15rem);
     flex: 1;
   }
 

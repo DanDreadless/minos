@@ -17,5 +17,8 @@ function push(kind: Toast['kind'], text: string): void {
 }
 
 export const notify = (text: string): void => push('notice', text);
-export const notifyError = (e: unknown): void =>
+// A 401 is not shown: the sign-in screen takes over instead.
+export const notifyError = (e: unknown): void => {
+  if ((e as { status?: unknown } | null)?.status === 401) return;
   push('error', e instanceof Error ? e.message : String(e));
+};
