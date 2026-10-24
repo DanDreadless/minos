@@ -24,6 +24,12 @@ export function fmtLogTimeFull(iso: string): string {
 // it. These helpers take undefined and return an em dash, so absence is
 // rendered as "not measured" rather than silently becoming a zero.
 
+// TidyDuration drops the zero units Go prints ("24h0m0s" → "24h",
+// "1h30m0s" → "1h30m"); the result still parses as a Go duration.
+export function tidyDuration(d: string): string {
+  return d.replace(/(\d)m0s$/, '$1m').replace(/(\d)h0m$/, '$1h');
+}
+
 export function fmtBytes(v: number | undefined): string {
   if (v === undefined) return '—';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];

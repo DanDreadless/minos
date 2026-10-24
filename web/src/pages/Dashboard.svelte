@@ -8,6 +8,7 @@
   import TimelineChart from '../lib/components/TimelineChart.svelte';
   import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
+  import { deviceNames } from '../lib/devicenames';
   import {
     fmtBytes,
     fmtCelsius,
@@ -370,9 +371,9 @@
         tone="accent"
         empty={copy.dashboard.noData}
         items={stats.top_clients.map((c) => ({
-          label: c.client,
+          label: $deviceNames[c.client] ?? c.client,
           count: c.total,
-          sub: `${c.blocked} blocked`,
+          sub: $deviceNames[c.client] ? `${c.client} · ${c.blocked} blocked` : `${c.blocked} blocked`,
           href: docketHref({ client: c.client, range: win.range }),
         }))}
       />

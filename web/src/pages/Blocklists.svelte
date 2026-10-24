@@ -4,7 +4,7 @@
   import { blocklistPresets, blocklistTiers, type BlocklistPreset } from '../lib/blocklists';
   import { confirmDialog } from '../lib/confirm';
   import { copy } from '../lib/copy';
-  import { fmtAgo } from '../lib/format';
+  import { fmtAgo, tidyDuration } from '../lib/format';
   import { docketHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
@@ -76,7 +76,7 @@
 
   async function loadInterval(): Promise<void> {
     try {
-      refreshInterval = savedInterval = (await api.getConfig()).lists.refresh_interval;
+      refreshInterval = savedInterval = tidyDuration((await api.getConfig()).lists.refresh_interval);
     } catch {
       // Cosmetic: the field simply stays empty
     }
@@ -85,7 +85,7 @@
   async function saveInterval(): Promise<void> {
     try {
       const cfg = await api.updateConfig({ lists: { refresh_interval: refreshInterval.trim() } });
-      refreshInterval = savedInterval = cfg.lists.refresh_interval;
+      refreshInterval = savedInterval = tidyDuration(cfg.lists.refresh_interval);
       notify(copy.settings.saved);
     } catch (e) {
       notifyError(e);
@@ -158,6 +158,15 @@
   // A catalog card is "Added" when a subscribed source carries its exact URL,
   // like the resolver picker matches presets by exact fields.
   $: subscribedURLs = new Set(lists.map((l) => l.url));
+
+  // The table shows where a list comes from; the full URL is in the tooltip.
+  function urlHost(u: string): string {
+    try {
+      return new URL(u).host;
+    } catch {
+      return u;
+    }
+  }
 
   // A subscription to a URL a catalog entry supersedes (a retired list).
   function replacementFor(l: ListStatus): BlocklistPreset | undefined {
@@ -300,7 +309,7 @@
                 ? `${l.url}\n${copy.lists.mirrorsHint(l.mirrors.length)}\n${l.mirrors.join('\n')}`
                 : l.url}
             >
-              {l.url}{#if l.mirrors?.length}<span class="mirror-count"> +{l.mirrors.length}</span>{/if}
+              {urlHost(l.url)}{#if l.mirrors?.length}<span class="mirror-count"> +{l.mirrors.length}</span>{/if}
             </td>
             <td>{l.format}</td>
             <td class="num" data-label="Rules">{l.rules.toLocaleString()}</td>
@@ -464,7 +473,15 @@
   }
 
   td.url {
-    max-width: 18rem;
+    max-width: 14rem;
+  }
+
+  /* The status sentence wraps rather than pushing the row actions off the
+     table's right edge. */
+  td.state {
+    white-space: normal;
+    min-width: 9rem;
+    max-width: 15rem;
   }
 
   td.num {
@@ -483,6 +500,19 @@
 
   .row-actions .row-action + .row-action {
     margin-left: 0.35rem;
+  }
+
+  /* On wide screens the actions stack in their cell, so a row with several
+     (Add mirrors, Remove) never runs past the table's edge. */
+  @media (min-width: 641px) {
+    .row-actions .row-action {
+      display: block;
+      width: 100%;
+    }
+
+    .row-actions .row-action + .row-action {
+      margin: 0.3rem 0 0;
+    }
   }
 
   .mirror-badge,

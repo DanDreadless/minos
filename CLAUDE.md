@@ -49,8 +49,8 @@ state or two, where it can't be misread.
 | Always-allow entry | Allow (allowed domain)| `allowlist`              |
 | Always-block entry | Block (blocked domain)| `denylist`               |
 | Query log          | Query Log             | `querylog`               |
-| Blocklists         | Blocklists            | `lists`                  |
-| Your own rules     | Allow & Block         | `domains` (route)        |
+| Blocklists         | Blocking → Blocklists | `lists`                  |
+| Your own rules     | Blocking → Allowed / Blocked | `allowed` / `blocked` (routes) |
 | Pause blocking     | Pause blocking        | `pause`                  |
 | Dashboard          | Dashboard             | `dashboard`              |
 | Upstream resolvers | Upstream resolvers    | `upstreams`              |
@@ -93,6 +93,9 @@ internal/lists/        blocklist fetching, refresh scheduling, format parsers
 internal/services/     curated blocked-services catalog (static data, leaf pkg)
 internal/importer/     Pi-hole / AdGuard Home migration (append-only merges)
 internal/acme/         DNS-01 certificate issuance/renewal for DoT/DoH
+internal/auth/         web sign-in: argon2id passwords, signed sessions, TOTP (leaf pkg)
+internal/release/      release-signature verification for the one-click updater (leaf pkg)
+internal/applog/       application log ring + redaction (leaf pkg)
 internal/notify/       webhook/ntfy event delivery (off the query path)
 internal/updates/      opt-in GitHub release check (release builds only)
 internal/querylog/     ring buffer + batched SQLite flush
@@ -101,7 +104,7 @@ internal/config/       config load/validate/persist (YAML)
 web/                   frontend source (Svelte + Vite)
 web/dist/              built assets, embedded via go:embed (never edit by hand)
 deploy/                Dockerfile, compose example, systemd unit
-scripts/               maintainer tooling (release.sh — see docs/releasing.md)
+scripts/               maintainer tooling (release.sh, signrelease — see docs/releasing.md)
 docs/                  user-facing docs
 ```
 

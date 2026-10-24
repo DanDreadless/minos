@@ -9,7 +9,7 @@ field: Pi-hole v6, AdGuard Home, Blocky, and Technitium.
 At or beyond parity with the field:
 
 - Blocklist engine with hosts/plain/AdBlock formats and exact "why was this
-  blocked" attribution on every entry — with a one-click pardon never more
+  blocked" attribution on every entry — with a one-click allow never more
   than two clicks away
 - Per-device groups (filter/bypass/block with per-group overlays) — more
   capable than Pi-hole's groups, simpler than AdGuard's per-client rules
@@ -19,12 +19,12 @@ At or beyond parity with the field:
 - **Conditional forwarding** to route `lan`/reverse zones at the router *(shipped)*
 - **Family controls** — one-click blocked services (57-service catalog),
   per-group schedules, Safe Search enforcement *(shipped)*
-- **Service pardons** — one-click "always allow" for a whole service
+- **Allowed services** — one-click "always allow" for a whole service
   (global or per group), with the extra playback/CDN hosts streaming apps
   need; unbreaks Netflix/Disney+/Prime Video without hand-adding domains
   *(shipped)*
 - **Custom services** — define your own named domain bundle and block or
-  pardon it like any catalog service, globally or per group *(shipped)*
+  allow it like any catalog service, globally or per group *(shipped)*
 - **Device pages** — a detail page per physical device: identity, every
   IP it has held, persistent notes, activity windows up to 90 days, and
   its full retained query history across all its addresses *(shipped)*
@@ -40,8 +40,8 @@ At or beyond parity with the field:
   and a checksum-verifying install script *(shipped)*
 - **Upstream failover health** — per-upstream circuit breaker: 3 transport
   failures sidestep it, half-open probe every 30 s, always tried as last
-  resort; surfaced in Settings as a two-state health light per Ferryman
-  (green healthy, red failing), with per-upstream counts on hover
+  resort; surfaced in Settings as a health light per upstream resolver, with
+  per-upstream counts on hover
   *(shipped)*
 - **Private reverse zones answered locally** — RFC 6303 + CGNAT: private
   PTR lookups never leak upstream; local records and routes take
@@ -52,13 +52,13 @@ At or beyond parity with the field:
 - **DNSSEC validation** — in-process chain-of-trust validation
   (RRSIG/DNSKEY/DS to the root anchors, NSEC/NSEC3 denial proofs,
   KeyTrap-bounded), `dns.dnssec: off | permissive | enforce`: permissive
-  counts without blocking, enforce SERVFAILs forged answers with docket
+  counts without blocking, enforce SERVFAILs forged answers with Query Log
   attribution, and unjudgeable answers always pass so a non-DNSSEC
   upstream can never break resolution. Neither Pi-hole nor AdGuard Home
   validates in-process — this is a differentiator *(shipped, August 2026)*
 - **DNSSEC visibility** — permissive mode is only useful if you can read
-  it, so a failed answer it lets through is now recorded in the Docket the
-  way an audit list is, and the Tribunal answers the question permissive
+  it, so a failed answer it lets through is now recorded in the Query Log the
+  way an audit list is, and the Dashboard answers the question permissive
   exists for: *"N answers would have been refused in enforce mode"*, with
   the domains, linked. The card also flags the quiet failure where an
   upstream returns no DNSSEC records at all and validation is doing
@@ -92,13 +92,13 @@ A second July 2026 pass from real-world use, shipped across v0.7.0 and the
 releases after it (verified complete 2026-07-11). Engineering detail lives
 outside the repo (`../.claude/minos-improvements-plan.md`, now an archived
 ledger). Shipped: bootstrap-free default upstream (IP-literal DoH), curated
-Ferrymen picker, full-width layout + internal Docket scroll, Tribunal
-drill-downs, Docket drill-downs reading the full persisted history
+resolver picker, full-width layout + internal Query Log scroll, Dashboard
+drill-downs, Query Log drill-downs reading the full persisted history
 (`GET /api/querylog/history`, server-side filters + pagination), devices
-sorted by IP, device IP → filtered Docket, gateway-first PTR enrichment with
+sorted by IP, device IP → filtered Query Log, gateway-first PTR enrichment with
 NetBIOS and mDNS fallbacks, MAC-OUI vendor labels, MAC-based device identity
-(one row and one policy per physical device across DHCP leases), service
-pardons (global + per group), in-app per-install-method upgrade guidance,
+(one row and one policy per physical device across DHCP leases), allowed
+services (global + per group), in-app per-install-method upgrade guidance,
 rollback-safe config loading with `minos.yaml.bak` backups, and the
 Svelte 5 / Vite 6 toolchain move.
 
@@ -123,7 +123,7 @@ The engineering plan is archived outside the repo
 complete 2026-07-12:
 
 - **Curated blocklist catalog** — Hagezi / OISD / StevenBlack / threat-feed
-  tiers on the Codex, every URL verified through the real fetch/parse
+  tiers on the Blocklists page, every URL verified through the real fetch/parse
   pipeline, one-click subscribe
 - **Subscribed allowlists** — `action: allow` sources; Pi-hole v6
   "antigravity" parity, importer-aware
@@ -137,7 +137,7 @@ complete 2026-07-12:
 - **Per-client dashboard** — top allowed/blocked per device across all its
   IPs
 - **Traffic digest** — opt-in daily/weekly summary through webhook/ntfy
-- **First-run checklist** — the Tribunal walks a fresh install to a
+- **First-run checklist** — the Dashboard walks a fresh install to a
   working, blocking resolver
 - **Install-method build stamp** — release/Docker builds stamp upgrade
   guidance
@@ -156,7 +156,7 @@ complete 2026-07-12:
   tier, the parental-filtering gap every comparable resolver fills.
 ## Host health — shipped (August 2026)
 
-- **The Tribunal reports the machine Minos runs on** — CPU, load, memory,
+- **The Dashboard reports the machine Minos runs on** — CPU, load, memory,
   disk, temperature, uptime and Minos's own footprint, plus Prometheus
   gauges. The disk figure is the query log's filesystem (the SD card on a
   Pi) and warns past 90%, because a full disk stops Minos recording.
@@ -197,14 +197,44 @@ traffic-pattern OS hints as a clearly-labelled last resort *(shipped)*.
 
 Maintainer-gated (explicit decision needed before any code): **replica
 config sync** (bounded one-way push; the docs-only keepalived + API-sync
-recipe can ship anytime), **DNS-over-QUIC** (parked on the quic-go
-dependency weight), and **router-assisted identity** (UPnP IGD/SNMP to the
-gateway — scope decision needed).
+recipe can ship anytime) and **router-assisted identity** (UPnP IGD/SNMP to
+the gateway — scope decision needed).
+
+## Best-in-class round — shipped (v0.21.3–v0.31.0, October 2026)
+
+A full audit against Pi-hole v6, AdGuard Home, Technitium and Blocky, and
+the work it led to:
+
+- **Plain names** — the themed labels (Tribunal, Docket, Codex, Ferrymen…)
+  retired for plain words; Minos keeps its name, logo and tagline
+- **Reliable blocklists** — bodies kept on disk and used at boot,
+  conditional refreshes, classified failures with quick retries, a
+  shrink guard against bad publishes, publisher mirrors, and alerts when a
+  list stops updating or is retired
+- **Fast search and stats** — a domain dictionary makes Query Log search
+  answer in milliseconds on millions of rows; exact rollups make 90-day
+  dashboards fast; SQLite memory capped (`querylog.memory_mb`)
+- **Application log in the UI** — live, filterable, secrets redacted
+- **Reorganised interface** — status, pause and Check a domain in the side
+  menu, a Needs attention panel, tabbed Settings with unsaved-changes
+  protection, Blocking split into Blocklists / Allowed / Blocked, and every
+  page reflowing to a phone
+- **Help built in** — every page and setting documented in the app, with a
+  test that fails when a config key ships undocumented
+- **Useful notifications** — each says what happened and what to do, links
+  into Minos, and a total DNS outage cannot be muted
+- **Extended DNS Errors**, **CNAME-cloak inspection** (default on), **DNS
+  rebinding protection**, **access control and rate limiting**, **DDR**,
+  **regex rules**, **DNS over QUIC and HTTP/3** (both directions)
+- **Password sign-in** — argon2id, signed sessions, optional authenticator
+  codes, sign out everywhere; API tokens kept for automation
+- **One-click update** — signed releases (Ed25519), a root helper that
+  verifies, refuses downgrades and rolls back a release that does not start
 
 ## Under consideration
 
-- DNS-over-QUIC / DoH3, client-facing and upstream (parked: needs quic-go,
-  a heavy dependency against the blessed-set rule)
+- Replica config sync (see above)
+- Query Log search by device *name*, not only address
 
 ## Not building (pre-1.0)
 

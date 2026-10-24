@@ -35,7 +35,7 @@ Minos is a DNS server for your home network that blocks ads, trackers and malwar
 - Point devices at Minos: set your router's DHCP DNS option to this machine's address, so every device follows, or set the DNS server on individual devices.
 - Choose blocklists on Blocking → Blocklists — the catalog has curated picks; Balanced is the recommended start.
 - Watch the Query Log for a day. If something you use breaks, find its blocked lookup and press Allow.
-- Optional: set an API token (Settings → Access & security), notifications, and the update check.
+- Set a password (Settings → Access & security) so only you can change Minos. Then, optionally, notifications and the update check.
 
 **What is at the bottom of the side menu?** Whether Minos is blocking right now ("Blocking · 73k rules", "Blocking paused until 14:20", or in red "Not blocking — no blocklist rules loaded"), Pause blocking, and Check a domain (also Ctrl+K / ⌘K on any page): paste a name or URL to see whether it is blocked and why, then allow or block it. On a phone, a paused or not-blocking state also shows in the top bar.
 
@@ -51,7 +51,7 @@ What your network did over a window you choose: queries, blocked, block rate, a 
 
 - Pick the window at the top (24 hours, 7, 30 or 90 days). It is remembered in this browser.
 - Click any number, domain or device to open exactly those queries in the Query Log.
-- Needs attention appears only when something does: no rules loaded, a list failing or retired, a resolver not answering, no API token, a nearly full disk, DNSSEC unable to check answers, or new warnings in Logs. Each line links to its fix.
+- Needs attention appears only when something does: no rules loaded, a list failing or retired, a resolver not answering, no password or API token, a nearly full disk, DNSSEC unable to check answers, or new warnings in Logs. Each line links to its fix.
 - The line under the tiles gives totals since Minos last started; the cache hit rate is also since the last start.
 - The Host card (not shown in containers) reports the machine Minos runs on; the disk figure is the filesystem holding the query log.
 - The DNSSEC card appears when validation is on: in permissive mode it lists answers that enforce mode would have refused.
@@ -233,7 +233,13 @@ How Minos learns the names of the devices on your network. Everything stays on y
 
 ## Settings → Access & security
 
-Who can use this interface and the API.
+Who can use this interface and the API, and which devices may use Minos for DNS.
+
+**I forgot the password.** On the Minos machine, delete the password_hash line (and totp_secret, if you set up an authenticator app) from minos.yaml, then restart Minos. The interface is open again until you set a new password.
+
+**I lost the phone with my authenticator app.** Delete totp_secret from minos.yaml and restart Minos; signing in then asks only for the password. Set the app up again afterwards.
+
+**Home Assistant or a script stopped working after I set a password.** Scripts cannot sign in with a password. Set an API token here as well and send it as X-Api-Token (or Authorization: Bearer); both work side by side.
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
@@ -266,7 +272,7 @@ Download the whole configuration (minos.yaml) as a backup, restore one, or bring
 
 ## Command line
 
-The minos command talks to the running server through its API (using -config to find the address and token).
+The minos command talks to the running server through its API, using -config to find the address and credentials — the API token, or with only a password set, a sign-in it makes from the config file itself.
 
 - minos status — counters, rules and pause state.
 - minos pause 30m / minos resume — pause and resume blocking.
