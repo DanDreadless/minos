@@ -47,7 +47,7 @@ export const docs: Section[] = [
       "Point devices at Minos: set your router's DHCP DNS option to this machine's address, so every device follows, or set the DNS server on individual devices.",
       'Choose blocklists on Blocking → Blocklists — the catalog has curated picks; Balanced is the recommended start.',
       'Watch the Query Log for a day. If something you use breaks, find its blocked lookup and press Allow.',
-      'Optional: set an API token (Settings → Access & security), notifications, and the update check.',
+      'Set a password (Settings → Access & security) so only you can change Minos. Then, optionally, notifications and the update check.',
     ],
     tasks: [
       {
@@ -73,7 +73,7 @@ export const docs: Section[] = [
     howto: [
       'Pick the window at the top (24 hours, 7, 30 or 90 days). It is remembered in this browser.',
       'Click any number, domain or device to open exactly those queries in the Query Log.',
-      'Needs attention appears only when something does: no rules loaded, a list failing or retired, a resolver not answering, no API token, a nearly full disk, DNSSEC unable to check answers, or new warnings in Logs. Each line links to its fix.',
+      'Needs attention appears only when something does: no rules loaded, a list failing or retired, a resolver not answering, no password or API token, a nearly full disk, DNSSEC unable to check answers, or new warnings in Logs. Each line links to its fix.',
       'The line under the tiles gives totals since Minos last started; the cache hit rate is also since the last start.',
       'The Host card (not shown in containers) reports the machine Minos runs on; the disk figure is the filesystem holding the query log.',
       'The DNSSEC card appears when validation is on: in permissive mode it lists answers that enforce mode would have refused.',
@@ -582,7 +582,21 @@ export const docs: Section[] = [
     id: 'settings-access',
     title: 'Settings → Access & security',
     page: '#/settings?tab=access',
-    summary: 'Who can use this interface and the API.',
+    summary: 'Who can use this interface and the API, and which devices may use Minos for DNS.',
+    tasks: [
+      {
+        q: 'I forgot the password.',
+        a: 'On the Minos machine, delete the password_hash line (and totp_secret, if you set up an authenticator app) from minos.yaml, then restart Minos. The interface is open again until you set a new password.',
+      },
+      {
+        q: 'I lost the phone with my authenticator app.',
+        a: 'Delete totp_secret from minos.yaml and restart Minos; signing in then asks only for the password. Set the app up again afterwards.',
+      },
+      {
+        q: 'Home Assistant or a script stopped working after I set a password.',
+        a: 'Scripts cannot sign in with a password. Set an API token here as well and send it as X-Api-Token (or Authorization: Bearer); both work side by side.',
+      },
+    ],
     settings: [
       {
         label: 'Password',
@@ -681,7 +695,8 @@ export const docs: Section[] = [
   {
     id: 'cli',
     title: 'Command line',
-    summary: 'The minos command talks to the running server through its API (using -config to find the address and token).',
+    summary:
+      'The minos command talks to the running server through its API, using -config to find the address and credentials — the API token, or with only a password set, a sign-in it makes from the config file itself.',
     howto: [
       'minos status — counters, rules and pause state.',
       'minos pause 30m / minos resume — pause and resume blocking.',

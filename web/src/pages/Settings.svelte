@@ -1334,6 +1334,18 @@
     align-items: end;
   }
 
+  /* Labels above their inputs, so a hint never squeezes the field. */
+  .pw-grid .field {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.3rem;
+    margin-top: 0;
+  }
+
+  .pw-grid .field input {
+    width: 100%;
+  }
+
   .pw-actions {
     display: flex;
     gap: 0.6rem;

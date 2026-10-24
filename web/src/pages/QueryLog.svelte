@@ -3,6 +3,7 @@
   import { api, openStream, type LogEntry } from '../lib/api';
   import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
+  import { deviceNames } from '../lib/devicenames';
   import { fmtLogTime, fmtLogTimeFull } from '../lib/format';
   import { currentParams } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
@@ -511,8 +512,10 @@
           <tr>
             <td class="when" title={fmtLogTimeFull(e.time)}>{fmtLogTime(e.time)}</td>
             <td>
-              <button class="cell" title={copy.querylog.filterHint} on:click={() => narrow({ clients: [e.client] })}
-                >{e.client}</button
+              <button
+                class="cell"
+                title={$deviceNames[e.client] ? `${e.client} — ${copy.querylog.filterHint}` : copy.querylog.filterHint}
+                on:click={() => narrow({ clients: [e.client] })}>{$deviceNames[e.client] ?? e.client}</button
               >
             </td>
             <td class="domain primary" title={e.qname}>
