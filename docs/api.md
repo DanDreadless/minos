@@ -2,20 +2,45 @@
 
 Everything the web UI does goes through this API, so everything the UI can
 do, your scripts can do. The base URL is the API listener (default
-`http://<host>:8080`). All field names are plain and literal — the themed
-labels live only in the UI.
+`http://<host>:8080`). All field names are plain and literal.
 
 ## Authentication
 
-When `api.token` is set, every endpoint requires it. Send either header:
+With neither a password nor `api.token` set, the API is open to your
+network. Once either is set, every endpoint below needs credentials, except
+`GET /api/auth` and the sign-in calls.
+
+**API token** — for scripts and automation. Send either header:
 
 ```sh
 curl -H "X-Api-Token: $TOKEN"        http://minos:8080/api/status
 curl -H "Authorization: Bearer $TOKEN" http://minos:8080/api/status
 ```
 
-The WebSocket stream also accepts `?token=` (browsers cannot set headers on
+The WebSocket streams also accept `?token=` (browsers cannot set headers on
 WebSockets); no other endpoint reads the query parameter.
+
+**Password** — for people. `POST /api/auth/login` with
+`{"password": "...", "code": "123456"}` sets the `minos_session` cookie
+(HttpOnly, SameSite=Strict, 30 days). A cookie-authenticated request must
+also come from the same origin, so another site cannot ride the cookie.
+Five failed attempts from one address in a minute answer `429` with
+`Retry-After`.
+
+| Endpoint | |
+|---|---|
+| `GET /api/auth` | `{"password_set", "totp_enabled", "token_set", "authenticated"}` — no credentials needed |
+| `POST /api/auth/login` | Sign in. `401` with `"need_code": true` when an authenticator code is required or wrong |
+| `POST /api/auth/logout` | Clear this browser's session |
+| `PUT /api/auth/password` | `{"current", "new"}` — set or change the password (8+ characters); ends every other session |
+| `DELETE /api/auth/password` | `{"current"}` — remove the password (and authenticator codes) |
+| `POST /api/auth/signout-all` | End every session except this one |
+| `POST /api/auth/totp/setup` | Start authenticator setup: `{"secret", "uri"}` (the `otpauth://` link) |
+| `POST /api/auth/totp/enable` | `{"code"}` — confirm a code from the app to turn it on |
+| `DELETE /api/auth/totp` | `{"current"}` — turn authenticator codes off |
+
+Neither the password hash nor any secret is ever returned; settings report
+only `password_set` and `totp_enabled`.
 
 ## Status & statistics
 

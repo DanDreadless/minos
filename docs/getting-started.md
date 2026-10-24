@@ -377,7 +377,7 @@ not-blocking state also shows in the top bar.
   queries. A line underneath gives the totals since Minos last started.
   **Needs attention** appears at the top only when something does — no
   rules loaded, a list retired or failing, a resolver not answering (or all
-  of them), no API token, the disk nearly full, DNSSEC unable to check
+  of them), no password or API token, the disk nearly full, DNSSEC unable to check
   answers, or new warnings in the Logs — each with a link to the fix.
 - Answers also carry the reason for tools that can read it (RFC 8914
   Extended DNS Errors, sent only to clients that use EDNS0): `dig` shows
@@ -500,12 +500,18 @@ not-blocking state also shows in the top bar.
   the dashboard shows the hit rate), blocking mode and TTL, network-wide
   Safe Search, the Firefox DoH canary and the iCloud Private Relay block
   (see Bypass resistance below), query-log retention and buffer
-  size, the API token, a one-click YAML config backup, and an opt-in
-  daily update check (a "vX.Y.Z available" link appears in the sidebar
-  when a newer release exists — nothing is sent beyond the request).
+  size, the password and API token, a one-click YAML config backup, and an
+  opt-in daily update check (a banner announces a newer release, with
+  **Update now** on script installs — nothing is sent beyond the request).
 
-If you set `api.token` (in the config file or from Settings), the UI and
-CLI require it.
+**Sign-in.** Set a password under Settings → Access & security and opening
+the interface asks for it; a sign-in lasts 30 days on that browser, and
+"Sign out everywhere else" ends the others. An authenticator app (any TOTP
+app) can add a 6-digit code as a second step. Scripts and Home Assistant
+use an API token instead (`X-Api-Token` or `Authorization: Bearer`); both
+can be set at once. The `minos` command on the same machine needs neither:
+it reads the config file. Forgot the password? Delete `password_hash` (and
+`totp_secret`) from `minos.yaml` and restart.
 
 ## Choosing blocklists
 
@@ -732,10 +738,10 @@ own limits are not the host. A number confidently about the wrong
 subject is worse than no number, so Docker installs get no card. Use
 your container platform's own metrics for that layer.
 
-If no API token is set, the card points that out. It is the first part
-of the UI to expose the machine's identity rather than DNS activity, so
-it is worth deciding consciously — see `api.token` in the configuration
-reference.
+If no password or API token is set, the card points that out. It is the
+first part of the UI to expose the machine's identity rather than DNS
+activity, so it is worth deciding consciously — see Settings → Access &
+security.
 
 ## Monitoring with Prometheus / Grafana
 

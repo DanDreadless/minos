@@ -8,93 +8,154 @@
 
 > Every query gets judged.
 
-Minos is a modern, user-friendly DNS sinkhole (a Pi-hole alternative) written
-in Go — a single static binary with an embedded web UI, light enough for a
-Raspberry Pi. Named for the judge of the underworld: every DNS query that
-arrives is judged against your blocklists — and anything you choose to
-allow or block yourself.
+Minos is a network-wide ad, tracker and malware blocker for your home — a
+modern alternative to Pi-hole and AdGuard Home, written in Go. It is one
+static binary with the web interface built in, light enough for a
+Raspberry Pi. Point your router's DNS at it and every device on the network
+is protected, with a clear answer to "why was this blocked?" one click away.
 
-## What it does
+<p align="center">
+  <img src="docs/assets/screenshots/dashboard.png" alt="The Minos dashboard: queries, blocks, a 24-hour chart, the most blocked domains and the busiest devices" width="900" />
+</p>
 
-**Filtering**
+## Why Minos
 
-- Listens for DNS queries on `:53` (UDP + TCP) and judges each one against
-  compiled blocklists (hosts, plain, and AdBlock formats)
-- Blocked queries get `0.0.0.0`/`::` or `NXDOMAIN` (your choice); allowed
-  queries are forwarded upstream over DoH or DoT (plaintext optional)
-- Every blocked query shows *which list and rule* blocked it, with a
-  one-click Allow from the live log — never more than two clicks from
-  seeing a block to allowing it
-- Repeat queries answered from a built-in response cache — no upstream trip;
-  concurrent identical queries collapse into one, and stale answers are
-  served instantly while a fresh one is fetched behind them (RFC 8767)
-- A failing upstream is sidestepped automatically and re-probed until it
-  recovers — one dead resolver never slows the whole network
-- Optional in-process DNSSEC validation against the root of trust —
-  permissive (validate and record) or enforce (refuse forged answers,
-  attributed in the query log); answers that can't be judged always pass,
-  so it can never break resolution
-- Permissive mode tells you what enforcing would cost *before* you enforce:
-  the dashboard names the answers that would have been refused, and warns
-  when an upstream returns no DNSSEC records so validation is doing nothing
+- **Every block explains itself.** Each blocked lookup names the list and
+  the rule that caught it, and **Allow** is right there on the row — never
+  more than two clicks from seeing a block to fixing it.
+- **Try a list before you trust it.** Audit mode shows what a new blocklist
+  *would* block without blocking anything, so you can add a strict list
+  without breaking the house.
+- **Knows your devices.** Names come from DHCP, mDNS, UPnP, NetBIOS and the
+  MAC vendor registry, and rules follow a device across address changes.
+- **Modern DNS, both ways.** Upstreams over DoH, DoH3, DoT or DNS-over-QUIC;
+  devices can use Minos over DoT, DoH, HTTP/3 or QUIC, and Windows 11, iOS
+  and macOS find the encrypted endpoints by themselves (DDR).
+- **Validates DNSSEC itself** — and tells you what enforcing it would cost
+  before you turn it on.
+- **Updates itself, safely.** One click installs a signed release and puts
+  the old one back if the new one does not start.
+- **No telemetry. Ever.**
+
+## Features
+
+**Blocking**
+
+- Hosts, plain-domain and AdBlock-syntax blocklists, with a curated catalog
+  (balanced, strict, security, family) verified to compile; lists keep
+  working from a local copy when their host is down, retry sensibly, refuse
+  a suspiciously shrunken update, and fall back to publisher mirrors
+- Your own allowed and blocked domains, including `/regex/` rules, and
+  subscribed allowlists
+- **CNAME-cloak inspection**: a tracker hiding behind a first-party name
+  (`metrics.shop.com → tracker.net`) is still blocked
+- One-click blocked services (TikTok, YouTube, Discord…) and your own
+  custom services, globally or per group
+- Blocked answers as `0.0.0.0`/`::` or NXDOMAIN, with Extended DNS Errors
+  (RFC 8914) naming the list for clients that ask
+- Pause blocking for 5 minutes, an hour, or until you resume — from the
+  menu, the CLI or the API
 
 **For the household**
 
-- Device identity — IP, MAC, vendor (from the MAC's OUI), and hostname
-  (reverse DNS aimed at the gateway, with an mDNS `.local` fallback) — with
-  per-device groups: extra rules, full bypass, or no DNS at all, plus a
-  one-click block for any device
-- One-click blocked services (TikTok, YouTube, Discord…) — globally or
-  per group, with optional schedules ("no social media after 21:00")
-- Safe Search enforcement (Google, Bing, DuckDuckGo, YouTube) — network-wide
-  or per group, enforced by the provider so it can't be switched off
+- Device groups with their own extra rules, full bypass, or no DNS at all,
+  on schedules ("no social media after 21:00 on school nights")
+- Safe Search enforced for Google, Bing, DuckDuckGo and YouTube — network
+  wide or per group
+- Firefox's automatic DNS-over-HTTPS switched off network-wide, and iCloud
+  Private Relay blockable, so filtering can't be bypassed quietly
 
 **For the network**
 
-- Local DNS records for your LAN (`nas.home.lab`, wildcards, CNAMEs, PTR)
-- Conditional forwarding: route `lan` or your reverse zone to the router
-- Private reverse zones answered locally (RFC 6303) — `192.168.x.x`
-  lookups never leak to public resolvers
-- Serves encrypted DNS to clients: DoT for Android Private DNS, DoH at
-  `/dns-query` — bring a certificate, or let Minos fetch and renew one
-  automatically (Let's Encrypt via Cloudflare, deSEC, DuckDNS, or RFC 2136)
+- Local DNS records (`nas.home.arpa`, wildcards, CNAMEs, automatic PTR) and
+  conditional forwarding to your router
+- Private reverse lookups answered locally (RFC 6303) — `192.168.x.x`
+  never leaks to public resolvers
+- DNS rebinding protection, per-device rate limiting, and an open-resolver
+  guard that answers only your own networks
+- A response cache with request collapsing and serve-stale (RFC 8767), and
+  failing upstreams sidestepped automatically
+- Certificates for encrypted DNS fetched and renewed for you (Let's Encrypt
+  via Cloudflare, deSEC, DuckDNS or RFC 2136)
 
 **Running it**
 
-- Web dashboard with query charts, top blocked domains, and busiest clients
-  — all clickable to drill straight into the matching (full-history) log —
-  cache hit rate, and a live query log streamed over WebSocket
-- Host health on the dashboard for non-container installs — CPU, memory,
-  temperature, and free space on the disk holding the query log, which is
-  the number that actually bites on a Pi
-- Full management from the UI: blocklists, allow/deny domains, upstreams,
-  blocking mode, retention, API token — all applied live, no restarts
-- Migrate in one command (`minos import pihole /etc/pihole`) or by
-  uploading `gravity.db`/`AdGuardHome.yaml` in the UI; export and restore
-  the whole config as YAML
-- Prometheus `/metrics` with a ready-made [Grafana dashboard](deploy/grafana-dashboard.json)
-  — scrape-only, never pushes
-- A fully [documented REST API](docs/api.md) with
-  [Home Assistant recipes](docs/home-assistant.md) — everything the UI
-  does, your automations can do
-- Webhook / [ntfy](https://ntfy.sh) notifications: a new device on your
-  network, an upstream failing or recovering, a new release
-- Opt-in update check — when enabled, an in-app banner shows the exact
-  upgrade command for how you installed (quick-install, Docker, or source);
-  off by default, and nothing is sent beyond the request itself
-- Batched SQLite persistence that respects SD cards
-- No telemetry. Ever.
+- A fast Query Log over the full history: search by domain or device, by
+  result, list, type or time, with filters you can type (`blocked
+  type:AAAA -cdn`) — results in milliseconds on millions of rows
+- Dashboard windows from 24 hours to 90 days, every number clickable into
+  the matching queries; host health (CPU, memory, temperature, disk) on
+  non-container installs
+- Minos's own application log in the browser, live, with secrets redacted
+- **Help** built in: every page and every setting explained, the same guide
+  as [docs/user-guide.md](docs/user-guide.md)
+- Password sign-in with optional authenticator-app codes, plus API tokens
+  for automation
+- Notifications by webhook or [ntfy](https://ntfy.sh) that say what
+  happened and what to do: a new device, a failing list or resolver, DNS
+  down, an update installed
+- Migrate from Pi-hole or AdGuard Home in one command or one upload; export
+  and restore the whole configuration
+- Prometheus `/metrics` with a ready-made
+  [Grafana dashboard](deploy/grafana-dashboard.json), a
+  [documented REST API](docs/api.md) and
+  [Home Assistant recipes](docs/home-assistant.md)
+- Built for SD cards: query-log writes are batched, memory use is capped,
+  and nothing slow ever stands between a reboot and working DNS
+- Works on a phone: every page reflows to a phone screen
+
+<p align="center">
+  <img src="docs/assets/screenshots/querylog.png" alt="The Query Log: every lookup with its device, result and the list that blocked it" width="900" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshots/phone-dashboard.png" alt="The dashboard on a phone" width="260" />
+  &nbsp;
+  <img src="docs/assets/screenshots/phone-querylog.png" alt="The Query Log on a phone" width="260" />
+</p>
+
+## How it compares
+
+As of October 2026, against each project's current release. ✅ yes ·
+— no · ◐ partly.
+
+| | Minos | Pi-hole v6 | AdGuard Home |
+|---|:-:|:-:|:-:|
+| Names the list *and rule* behind every block, with one-click allow | ✅ | ◐ | ✅ |
+| Audit (dry-run) blocklists | ✅ | — | — |
+| In-process DNSSEC validation | ✅ | — | — |
+| One-click update from the web interface | ✅ signed, auto-rollback | — | ✅ |
+| Encrypted DNS for devices (DoT / DoH / DoQ / HTTP/3) | ✅ | — | ✅ |
+| DDR — devices upgrade to encrypted DNS automatically | ✅ | — | ✅ |
+| CNAME-cloak inspection | ✅ | ✅ | ✅ |
+| Regex rules | ✅ | ✅ | ✅ |
+| Per-device rate limiting & open-resolver guard | ✅ | ◐ | ✅ |
+| Device groups with schedules | ✅ | ◐ | ◐ |
+| Blocked-services catalog & Safe Search | ✅ | — | ✅ |
+| Password login with two-step codes | ✅ | ✅ | ◐ |
+| Application log in the web interface | ✅ | ✅ | — |
+| DHCP server | — by design | ✅ | ✅ |
+| Recursive resolver | — by design | add-on | — |
+
+Minos forwards to the upstream resolvers you choose rather than resolving
+recursively itself, and leaves DHCP to your router.
 
 ## Quick start
 
-On a Raspberry Pi or any Linux box — amd64, arm64, or 32-bit ARM (Pi
-Zero through Pi 4 on 32-bit Pi OS) — one line installs the latest
-release and the systemd unit:
+On a Raspberry Pi or any Linux box — amd64, arm64, or 32-bit ARM (Pi Zero
+through Pi 4 on 32-bit Pi OS) — one line installs the latest release, the
+systemd unit and the updater:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/DanDreadless/minos/main/deploy/install.sh | sudo sh
 sudo systemctl enable --now minos
 ```
+
+Then open `http://<host>:8080`, set a password (Settings → Access &
+security), and point your router's DHCP DNS option at the machine. Before
+the first start, free port 53 (the `systemd-resolved` stub or `dnsmasq`)
+— the walkthrough in [docs/getting-started.md](docs/getting-started.md)
+covers it, along with a fixed IP and a firewall for ports 53 and 8080.
 
 Prefer Docker? Multi-arch images are on GHCR:
 
@@ -106,76 +167,53 @@ docker run -d --name minos -p 53:53/udp -p 53:53/tcp -p 8080:8080 \
 Or build from source (Go 1.22+, Node 20+):
 
 ```sh
-make build          # builds web UI + single binary into bin/minos
-./bin/minos serve   # starts DNS on :53 and the web UI on :8080
+make build          # builds the web interface and one binary into bin/minos
+./bin/minos serve   # DNS on :53 and the web interface on :8080
 ```
 
-First run writes a commented default config to `minos.yaml`. Point a device's
-DNS at the machine running Minos and open `http://<host>:8080`.
+The first run writes a commented default config to `minos.yaml`.
 
-CLI verbs talk to the running instance:
+The `minos` command talks to the running instance:
 
 ```sh
-minos status        # counters, rules, pause state
-minos pause 5m      # pause blocking for five minutes
-minos resume        # resume blocking
+minos status                      # counters, rules, pause state
+minos pause 5m                    # pause blocking for five minutes
+minos resume                      # resume blocking
 minos import pihole /etc/pihole   # bring your Pi-hole settings with you
-minos logs -f       # follow Minos's own log (also on the Logs page)
+minos logs -f                     # follow Minos's own log (also on the Logs page)
 ```
 
-For local development without root, set `dns.listen: ":5353"` in the config
-and test with `dig @127.0.0.1 -p 5353 doubleclick.net`.
+## Updating
 
-## Deploying on a Raspberry Pi (or any Linux box)
-
-The install script above puts the binary in `/usr/local/bin` and installs
-the hardened systemd unit (built from source instead? `sudo install -m 755
-bin/minos /usr/local/bin/minos && sudo cp deploy/minos.service
-/etc/systemd/system/`).
-
-Before first start, free port 53 (disable the `systemd-resolved` stub
-listener or `dnsmasq`), give the machine a fixed IP, and firewall ports
-53/8080 to your LAN only — the step-by-step walkthrough is in
-[docs/getting-started.md](docs/getting-started.md), including host tuning
-notes for busy networks. Then point your router's DHCP DNS option at the
-machine and every device follows.
-
-`deploy/` also has a multi-arch Dockerfile and compose example
-(`restart: unless-stopped` gives the same boot behavior).
+With the update check on (Settings → System), a banner announces new
+releases. On installs made with the script above, **Update now** downloads
+the release, checks its signature and that it is newer, installs it and
+restarts — and puts the previous version back by itself if the new one does
+not answer within 30 seconds. Minos itself never runs as root: a small
+systemd helper does the installing. Docker installs update with
+`docker compose pull && docker compose up -d`.
 
 ## Documentation
 
 - [User guide](docs/user-guide.md) — every page and every setting, with
   defaults and config keys (the same guide is built into Minos: **Help**)
-- [Getting started](docs/getting-started.md) — install, host prep,
-  systemd, encrypted DNS, monitoring, and the full config reference
+- [Getting started](docs/getting-started.md) — install, host preparation,
+  encrypted DNS, monitoring, upgrading, and the full config reference
 - [REST API reference](docs/api.md) — every endpoint, with examples
-- [Home Assistant recipes](docs/home-assistant.md) — blocking switch,
+- [Home Assistant recipes](docs/home-assistant.md) — a blocking switch,
   sensors, bedtime automations, events on your phone
-- [Roadmap](docs/roadmap.md) — what shipped, what's under consideration
-
-## Roadmap
-
-Everything from the July 2026 competitive review has shipped — the
-resolver core (cache, dedup, serve-stale, failover health, private
-reverse zones), family controls, the Pi-hole/AdGuard importer with a UI
-uploader, client-facing DoT/DoH with automatic ACME certificates,
-metrics, notifications, and the release pipeline. Two follow-up rounds
-from real-world use have shipped since: a bootstrap-free default upstream
-and curated resolver picker, clickable dashboard drill-downs and a
-full-width UI, rollback-safe config loading, device **vendor** labels and
-**mDNS** hostname resolution, a full-history Query Log, and in-app upgrade
-guidance. In-process **DNSSEC validation** shipped in August 2026 —
-something neither Pi-hole nor AdGuard Home does. Still planned: further
-device-identity layers (DHCP-lease ingestion) — details in
-[docs/roadmap.md](docs/roadmap.md).
+- [Roadmap](docs/roadmap.md) — what has shipped and what is being considered
+- [Releasing](docs/releasing.md) — for maintainers: the release flow and
+  signing key
 
 ## Developing
 
-Go 1.22+, Node 20+. `make test` runs the Go suite with the race detector;
-`make lint` runs golangci-lint and the frontend type check; `make bench`
-runs the filter engine benchmarks. See `CLAUDE.md` for architecture,
-conventions, and performance budgets.
+Go 1.22+, Node 20+. `make test` runs the Go suite with the race detector,
+`make lint` runs golangci-lint and the frontend type check, and `make bench`
+runs the filter-engine benchmarks. For local development without root, set
+`dns.listen: ":5353"` and test with `dig @127.0.0.1 -p 5353
+doubleclick.net`. See `CLAUDE.md` for the architecture, conventions and
+performance budgets.
 
 ## License
 
