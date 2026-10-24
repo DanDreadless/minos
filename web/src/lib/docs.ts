@@ -656,7 +656,8 @@ export const docs: Section[] = [
         label: 'Check for new releases once a day',
         key: 'update_check',
         default: 'off',
-        effect: 'Asks GitHub for the latest release — nothing about you or your network is sent. A banner shows how to upgrade.',
+        effect:
+          'Asks GitHub for the latest release — nothing about you or your network is sent. A banner shows how to upgrade. On Linux installs made with the install script, and once a password or API token is set, it has an Update now button: Minos downloads the release, checks it is signed by the Minos release key and is newer, installs it and restarts. If the new version does not answer within 30 seconds, the previous one is put back and you are told.',
         applies: 'live',
         where: 'Settings → System',
       },

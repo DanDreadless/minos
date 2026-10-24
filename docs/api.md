@@ -113,8 +113,35 @@ The running and latest versions plus an actionable upgrade command for how
 `install_method` is `binary` (quick-install), `docker`, or `source`,
 decided in this order: the `update_install_method` config override if set,
 then runtime container markers, then the build-time stamp release and
-Docker builds carry, then a dev-version heuristic. Display-only — Minos
-never runs the command itself.
+Docker builds carry, then a dev-version heuristic. The command is
+display-only.
+
+`self_update` is true when the one-click update below works on this
+install: a Linux install made with the install script (which adds the
+updater), running under systemd, with a password or API token set. When it
+is false, `self_update_blocked` says why in plain words.
+
+### `POST /api/update/install`
+
+Installs the latest known release (`202 Accepted`). Minos never has root:
+it writes the tag to `update-request` in its state directory, and
+`minos-update.path` starts the root helper
+(`/usr/local/libexec/minos-update`), which downloads the release, has the
+installed binary verify its Ed25519 signature, checksum and that it is
+newer, keeps the old binary as `minos.prev`, installs and restarts — and
+restores `minos.prev` if the new version does not answer `minos status`
+within 30 seconds. `409` when `self_update` is false, no newer release is
+known, or an update is already running.
+
+### `GET /api/update/progress`
+
+The updater's last report, e.g.
+`{"state": "verifying", "version": "v0.31.0", "from": "0.30.0", "message": "Checking the signature.", "time": 1792800131}`.
+`state` is `requested`, `downloading`, `verifying`, `installing`,
+`restarting`, `done`, `failed` or `rolled_back`; `{"state": ""}` when there
+has been none. A working state older than 15 minutes reads as `failed`. A
+finished update is also announced as a notification (type
+`update_available`).
 
 ### `GET /api/stats?hours=24`
 

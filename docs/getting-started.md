@@ -179,6 +179,15 @@ recovery point beside the config.
 
 Upgrade the way you installed:
 
+**From the web interface (quick-install installs):** with the update check
+on (Settings → System) and a password set, the "new version" banner has an
+**Update now** button. Minos downloads the release, checks its signature,
+installs it and restarts — and puts the previous version back by itself if
+the new one does not start. The install script adds the updater the first
+time you run it with v0.31.0 or later, so run the command below once and
+the button appears from then on. Docker installs keep using the pull
+command (a container cannot replace its own image).
+
 **Quick-install script (binary + systemd — the Raspberry Pi default):**
 re-run the installer. It fetches the latest release, verifies its checksum,
 and replaces `/usr/local/bin/minos`. Your state is left alone; the systemd

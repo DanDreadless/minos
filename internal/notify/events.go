@@ -192,6 +192,35 @@ func UpdateEvent(current, latest string) Event {
 	}
 }
 
+// UpdateResultEvent reports how a one-click update ended: state is the
+// updater's done, failed or rolled_back. It shares the update_available
+// type, so muting "Minos updates" silences both.
+func UpdateResultEvent(state, from, to, message string) Event {
+	to = strings.TrimPrefix(to, "v")
+	from = strings.TrimPrefix(from, "v")
+	e := Event{
+		Type:    TypeUpdateAvailable,
+		Link:    "#/settings?tab=system",
+		Actions: []Action{{Label: "Open Minos", URL: "#/settings?tab=system"}},
+	}
+	switch state {
+	case "done":
+		e.Priority = PriorityLow
+		e.Title = "Minos updated to v" + to
+		e.Message = fmt.Sprintf("The update from v%s finished and the new version is answering.", from)
+	case "rolled_back":
+		e.Priority = PriorityHigh
+		e.Title = "Minos update to v" + to + " was rolled back"
+		e.Message = fmt.Sprintf("The new version did not start, so v%s was put back and is running. "+
+			"Check the Logs, and report the problem if it happens again.", from)
+	default:
+		e.Priority = PriorityDefault
+		e.Title = "Minos update to v" + to + " did not happen"
+		e.Message = message + " Minos is still running v" + from + "."
+	}
+	return e
+}
+
 // ACMEEvent: the DoT/DoH certificate cannot be issued or renewed.
 func ACMEEvent(domain string, err error) Event {
 	return Event{

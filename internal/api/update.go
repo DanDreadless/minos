@@ -25,12 +25,17 @@ type updateResponse struct {
 	InstallMethod string `json:"install_method"`
 	Command       string `json:"command"`
 	NotesURL      string `json:"notes_url"`
+	// SelfUpdate is true when the "Update now" button can work here;
+	// otherwise SelfUpdateBlocked says why not.
+	SelfUpdate        bool   `json:"self_update"`
+	SelfUpdateBlocked string `json:"self_update_blocked,omitempty"`
 }
 
 // handleUpdate reports the running/latest version and, crucially, the exact
 // command to upgrade *this* instance — detected from how it was installed —
 // so the "new version available" notice is actionable rather than just a link.
-// Display-only: Minos never runs the command itself.
+// The command is display-only; the one-click update goes through the root
+// helper instead (selfupdate.go).
 func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	var latest string
 	var available bool
@@ -45,13 +50,16 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		tag = "v" + latest
 		notesURL = "https://github.com/" + repo + "/releases/tag/" + tag
 	}
+	blocked := s.selfUpdateBlocked(method)
 	writeJSON(w, http.StatusOK, updateResponse{
-		Current:       s.version,
-		Latest:        latest,
-		Available:     available,
-		InstallMethod: method,
-		Command:       upgradeCommand(method, tag),
-		NotesURL:      notesURL,
+		Current:           s.version,
+		Latest:            latest,
+		Available:         available,
+		InstallMethod:     method,
+		Command:           upgradeCommand(method, tag),
+		NotesURL:          notesURL,
+		SelfUpdate:        blocked == "",
+		SelfUpdateBlocked: blocked,
 	})
 }
 

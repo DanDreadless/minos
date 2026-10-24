@@ -13,6 +13,27 @@ export const copy = {
     howTo: (method: string) => `To upgrade (${method}):`,
     copy: 'Copy command',
     copied: 'Upgrade command copied.',
+    updateNow: 'Update now',
+    selfHint: 'Downloads the signed release, installs it and restarts Minos.',
+    showCommand: 'Or run the command yourself',
+    hideCommand: 'Hide the command',
+    confirm: (v: string) =>
+      `Update Minos to v${v} now? DNS stops for a few seconds while Minos restarts. If the new version does not start, the current one is put back automatically.`,
+    waiting: 'Waiting for the updater to start.',
+    restarting: 'Restarting Minos…',
+    done: (v: string) => `Minos updated to ${v}. Reloading…`,
+    dismiss: 'Dismiss',
+    state: (s: string) =>
+      ({
+        requested: 'Waiting for the updater to start.',
+        downloading: 'Downloading the release.',
+        verifying: 'Checking the signature.',
+        installing: 'Installing.',
+        restarting: 'Restarting Minos…',
+        done: 'Updated.',
+        failed: 'The update did not happen.',
+        rolled_back: 'The new version did not start, so the previous one was put back.',
+      })[s] ?? s,
   },
 
   nav: {

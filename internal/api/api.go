@@ -75,6 +75,9 @@ type Server struct {
 	login         *loginGuard
 	appLog        *applog.Ring // may be nil: no Logs endpoints
 	logLevel      *slog.LevelVar
+	// updateHelper is where install.sh puts the root updater; its presence
+	// is what turns the one-click update on (tests point it elsewhere).
+	updateHelper string
 }
 
 func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
@@ -95,6 +98,7 @@ func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
 		installMethod: installMethod,
 		started:       time.Now(),
 		login:         newLoginGuard(),
+		updateHelper:  defaultUpdateHelper,
 	}
 }
 
@@ -120,6 +124,8 @@ func (s *Server) Router() http.Handler {
 		r.Get("/host", s.handleHost)
 		r.Get("/upstreams", s.handleUpstreams)
 		r.Get("/update", s.handleUpdate)
+		r.Get("/update/progress", s.handleUpdateProgress)
+		r.Post("/update/install", s.handleUpdateInstall)
 		r.Get("/querylog", s.handleQueryLog)
 		r.Get("/querylog/history", s.handleQueryLogHistory)
 		r.Get("/querylog/export", s.handleQueryLogExport)

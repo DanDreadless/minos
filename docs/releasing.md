@@ -47,6 +47,27 @@ Useful flags: `--assets-only <tag>` re-syncs assets onto an existing
 release (also the recovery path if a run dies partway), `--skip-verify`
 when the checks just ran, `--notes-file <path>` for hand-written notes.
 
+## Release signing
+
+Every release's `checksums.txt` is signed (Ed25519) by the release workflow
+with the `MINOS_SIGNING_KEY` Actions secret, producing
+`checksums.txt.sig`; the public half is `PublicKey` in
+`internal/release/release.go`, compiled into every binary, and the
+one-click updater refuses any release that does not verify. The signed
+message includes the tag, so an old release cannot be passed off as a new
+one. `release.sh` checks the signature before mirroring to Gitea.
+
+The private seed is also kept in `.env` (`MINOS_SIGNING_KEY`) — back it up.
+If it is lost or leaks, generate a new key and release binaries carrying
+the new public key. Installed updaters only trust the old key, so every
+install then needs one upgrade with the install command; after that the
+button works again. Rotate promptly after a leak.
+
+```sh
+go run ./scripts/signrelease -keygen seed.txt   # prints the new public key
+gh secret set MINOS_SIGNING_KEY < seed.txt     # then put the public key in release.go
+```
+
 ## Tokens
 
 - **Gitea token** — user → Settings → Applications → Generate token,

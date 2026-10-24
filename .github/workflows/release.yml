@@ -69,7 +69,8 @@ jobs:
             CGO_ENABLED=0 go build -trimpath \
               -ldflags "-s -w -X main.version=${VERSION} -X main.installMethod=binary" \
               -o "${stage}/minos${ext}" ./cmd/minos
-            cp LICENSE README.md deploy/minos.service "$stage/"
+            cp LICENSE README.md deploy/minos.service deploy/minos-update.sh \
+              deploy/minos-update.path deploy/minos-update.service "$stage/"
             if [ "$GOOS" = "windows" ]; then
               (cd dist && zip -qr "${name}.zip" "$name")
             else
@@ -80,6 +81,13 @@ jobs:
           # Bare filenames in checksums.txt (no ./) so consumers can grep.
           (cd dist && find . -maxdepth 1 -name '*.tar.gz' -o -name '*.zip' \
             | sed 's|^\./||' | sort | xargs sha256sum > checksums.txt)
+      - name: sign checksums (one-click updater trust root)
+        env:
+          MINOS_SIGNING_KEY: ${{ secrets.MINOS_SIGNING_KEY }}
+        # Fails the release when the secret is missing or does not match
+        # internal/release.PublicKey: every installed updater would refuse an
+        # unsigned release anyway.
+        run: go run ./scripts/signrelease -tag "$GITHUB_REF_NAME" dist/checksums.txt
       - name: create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -88,10 +96,10 @@ jobs:
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" \
-              dist/*.tar.gz dist/*.zip dist/checksums.txt --clobber
+              dist/*.tar.gz dist/*.zip dist/checksums.txt dist/checksums.txt.sig --clobber
           else
             gh release create "$GITHUB_REF_NAME" \
-              dist/*.tar.gz dist/*.zip dist/checksums.txt \
+              dist/*.tar.gz dist/*.zip dist/checksums.txt dist/checksums.txt.sig \
               --title "Minos $GITHUB_REF_NAME" \
               --generate-notes
           fi

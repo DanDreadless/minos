@@ -1,0 +1,13 @@
+# Watches for a one-click update request from the Minos web interface.
+# Minos itself never has root: it only writes the request file, and this
+# starts minos-update.service (root), which does the work. Installed and
+# enabled by install.sh.
+[Unit]
+Description=Watch for a Minos update request
+
+[Path]
+PathExists=/var/lib/minos/update-request
+Unit=minos-update.service
+
+[Install]
+WantedBy=multi-user.target
