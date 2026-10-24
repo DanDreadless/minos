@@ -13,14 +13,18 @@
 #
 #   curl -fsSL .../install.sh | sudo MINOS_RESTART=1 sh
 #
-# The script is deliberately boring: no piping downloads into shells, no
-# self-updates, everything verified against checksums.txt from the release.
+# The script is deliberately boring: no piping downloads into shells,
+# everything verified against checksums.txt from the release. It also
+# installs the one-click updater (minos-update.path + .service and the
+# helper in /usr/local/libexec), which lets the web interface install a
+# signed release later — Minos itself still never runs as root.
 set -eu
 
 REPO="DanDreadless/minos"
 INSTALL_DIR="/usr/local/bin"
 UNIT_DIR="/etc/systemd/system"
 UNIT="${UNIT_DIR}/minos.service"
+LIBEXEC="/usr/local/libexec"
 RESTART="${MINOS_RESTART:-0}"
 
 say() { printf '%s\n' "$*"; }
@@ -98,6 +102,19 @@ if [ -d "$UNIT_DIR" ]; then
     UNIT_CHANGED=1
     say "systemd unit updated (previous saved to ${UNIT}.bak)"
   fi
+fi
+
+# The one-click updater: the root helper and the path unit that starts it
+# when the web interface asks. Refreshed on every run, like the main unit.
+if [ -d "$UNIT_DIR" ] && [ -f "${TMP}/${NAME}/minos-update.sh" ]; then
+  mkdir -p "$LIBEXEC"
+  install -m 755 "${TMP}/${NAME}/minos-update.sh" "${LIBEXEC}/minos-update.new"
+  mv -f "${LIBEXEC}/minos-update.new" "${LIBEXEC}/minos-update"
+  install -m 644 "${TMP}/${NAME}/minos-update.service" "${UNIT_DIR}/minos-update.service"
+  install -m 644 "${TMP}/${NAME}/minos-update.path" "${UNIT_DIR}/minos-update.path"
+  systemctl daemon-reload 2>/dev/null || true
+  systemctl enable --now minos-update.path >/dev/null 2>&1 ||
+    say "note: could not enable minos-update.path; the Update button stays off"
 fi
 
 # Is a Minos running that now has a stale binary behind it?

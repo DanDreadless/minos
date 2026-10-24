@@ -39,8 +39,9 @@ import (
 var (
 	version = "0.1.0-dev" // overridden at release time via -ldflags
 	// installMethod is stamped by release builds ("binary") and the
-	// Dockerfile ("docker"); empty means an unstamped source build. Used
-	// only to pick the right upgrade guidance — never to self-update.
+	// Dockerfile ("docker"); empty means an unstamped source build. It picks
+	// the upgrade guidance, and only "binary" installs can offer the
+	// one-click update (the root helper does the work — see update.go).
 	installMethod = ""
 )
 
@@ -79,6 +80,8 @@ func run(args []string) error {
 	case "version":
 		fmt.Println("minos", version)
 		return nil
+	case "verify-release":
+		return verifyRelease(args)
 	default:
 		return fmt.Errorf("unknown command %q (try: serve, status, pause, resume, import, logs, version)", cmd)
 	}
@@ -250,6 +253,9 @@ func serve(args []string) error {
 	go hostStats.Run(ctx)
 
 	apiSrv := api.New(engine, qlog, store, mgr, reg, proxy, checker, hostStats, static, version, installMethod)
+	go apiSrv.WatchSelfUpdate(ctx, func(p api.UpdateProgress) {
+		notifier.Publish(notify.UpdateResultEvent(p.State, p.From, p.Version, p.Message))
+	})
 	apiSrv.SetNotifier(notifier)
 	apiSrv.SetAppLog(logRing, logLevelVar)
 	httpSrv := &http.Server{

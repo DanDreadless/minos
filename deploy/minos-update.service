@@ -1,0 +1,11 @@
+# Installs the Minos release named in /var/lib/minos/update-request, after
+# the installed binary has checked its signature. Started by
+# minos-update.path; see deploy/minos-update.sh.
+[Unit]
+Description=Install a Minos update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/minos-update
+TimeoutStartSec=10min
+PrivateTmp=yes

@@ -253,7 +253,7 @@ Query-log storage, the application log level, and updates.
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
-| Check for new releases once a day<br><small>Settings → System</small> | `update_check` | off | Asks GitHub for the latest release — nothing about you or your network is sent. A banner shows how to upgrade. | at once |
+| Check for new releases once a day<br><small>Settings → System</small> | `update_check` | off | Asks GitHub for the latest release — nothing about you or your network is sent. A banner shows how to upgrade. On Linux installs made with the install script, and once a password or API token is set, it has an Update now button: Minos downloads the release, checks it is signed by the Minos release key and is newer, installs it and restarts. If the new version does not answer within 30 seconds, the previous one is put back and you are told. | at once |
 | Install method<br><small>minos.yaml</small> | `update_install_method` | detected | binary, docker or source — forces the upgrade instructions when detection cannot tell. | after restart (minos.yaml) |
 
 <a id="settings-backup"></a>

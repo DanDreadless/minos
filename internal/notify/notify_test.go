@@ -371,6 +371,12 @@ func TestEventWording(t *testing.T) {
 		{"only upstream down", UpstreamEvent("1.1.1.1:853", true, nil), "DNS is down: no resolver is answering",
 			"Every upstream resolver has stopped answering (the last was 1.1.1.1:853)"},
 		{"update", UpdateEvent("0.23.0", "0.24.0"), "Minos v0.24.0 is available", "This server runs v0.23.0."},
+		{"updated", UpdateResultEvent("done", "0.30.0", "v0.31.0", ""), "Minos updated to v0.31.0",
+			"The update from v0.30.0 finished and the new version is answering."},
+		{"rolled back", UpdateResultEvent("rolled_back", "0.30.0", "v0.31.0", ""), "Minos update to v0.31.0 was rolled back",
+			"The new version did not start, so v0.30.0 was put back and is running."},
+		{"update failed", UpdateResultEvent("failed", "0.30.0", "v0.31.0", "The download failed; nothing was changed."),
+			"Minos update to v0.31.0 did not happen", "The download failed; nothing was changed. Minos is still running v0.30.0."},
 		{"acme", ACMEEvent("dns.example.com", errors.New("rate limited")), "Certificate renewal failing for dns.example.com",
 			"Minos cannot get a certificate for dns.example.com and will retry hourly: rate limited."},
 	}

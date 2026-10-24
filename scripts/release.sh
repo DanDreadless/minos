@@ -190,6 +190,8 @@ workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
 say "downloading assets"
 curl -sSfL -o "$workdir/checksums.txt" "$base_url/checksums.txt"
+curl -sSfL -o "$workdir/checksums.txt.sig" "$base_url/checksums.txt.sig" ||
+  die "the release has no checksums.txt.sig — the one-click updater would refuse it"
 for t in "${TARGETS[@]}"; do
   ext="tar.gz"; case "$t" in windows_*) ext="zip" ;; esac
   name="minos_${version}_${t}.${ext}"
@@ -199,6 +201,9 @@ done
 say "verifying checksums"
 (cd "$workdir" && sha256sum -c checksums.txt) ||
   die "checksum mismatch — do not publish these assets"
+say "verifying the release signature"
+go run ./scripts/signrelease -verify -tag "$tag" "$workdir/checksums.txt" ||
+  die "signature check failed — do not publish these assets"
 
 say "publishing the Gitea release"
 if existing="$(gitea_api GET "/releases/tags/$tag" 2>/dev/null)"; then

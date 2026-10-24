@@ -4,10 +4,11 @@
   import ConfirmHost from './lib/components/ConfirmHost.svelte';
   import CheckDialog from './lib/components/CheckDialog.svelte';
   import Nav from './lib/components/Nav.svelte';
+  import UpdateBanner from './lib/components/UpdateBanner.svelte';
   import { copy } from './lib/copy';
   import { confirmDialog } from './lib/confirm';
   import { leaveGuarded, route, setLeaveGuard } from './lib/router';
-  import { notify, notifyError, toasts } from './lib/toast';
+  import { toasts } from './lib/toast';
   import Blocking from './pages/Blocking.svelte';
   import Dashboard from './pages/Dashboard.svelte';
   import DevicePage from './pages/Device.svelte';
@@ -81,17 +82,6 @@
       }
     } finally {
       signingIn = false;
-    }
-  }
-
-  async function copyCommand(): Promise<void> {
-    if (!updateInfo) return;
-    try {
-      await navigator.clipboard.writeText(updateInfo.command);
-      notify(copy.update.copied);
-    } catch (e) {
-      // Clipboard needs a secure context; the command is still visible to copy.
-      notifyError(e);
     }
   }
 
@@ -192,17 +182,7 @@
         <p class="fatal" role="alert">{fatalError}</p>
       {/if}
       {#if status?.update_available && updateInfo}
-        <section class="update-banner">
-          <div class="line">
-            <span>{copy.update.available(updateInfo.latest ?? '')}</span>
-            <a href={updateInfo.notes_url} target="_blank" rel="noreferrer">{copy.update.whatsNew}</a>
-          </div>
-          <div class="cmd-row">
-            <span class="how">{copy.update.howTo(updateInfo.install_method)}</span>
-            <code>{updateInfo.command}</code>
-            <button on:click={copyCommand}>{copy.update.copy}</button>
-          </div>
-        </section>
+        <UpdateBanner info={updateInfo} />
       {/if}
       {#if $route === 'dashboard'}
         <Dashboard {status} />
@@ -319,57 +299,6 @@
 
   .fatal {
     color: var(--blocked);
-  }
-
-  .update-banner {
-    border: 1px solid var(--accent);
-    border-radius: 6px;
-    background: var(--bg-raised);
-    padding: 0.75rem 1rem;
-    margin-bottom: 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    flex: none;
-  }
-
-  .update-banner .line {
-    display: flex;
-    gap: 0.6rem;
-    align-items: baseline;
-    flex-wrap: wrap;
-  }
-
-  .update-banner .line a {
-    color: var(--accent);
-  }
-
-  .update-banner .cmd-row {
-    display: flex;
-    gap: 0.6rem;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .update-banner .how {
-    color: var(--text-dim);
-    font-size: 0.85rem;
-  }
-
-  .update-banner code {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    background: var(--bg-sunken);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 0.3rem 0.5rem;
-    overflow-x: auto;
-    flex: 1;
-    min-width: 12rem;
-  }
-
-  .update-banner .cmd-row button {
-    flex: none;
   }
 
   .toasts {

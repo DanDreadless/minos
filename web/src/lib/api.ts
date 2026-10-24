@@ -61,6 +61,19 @@ export interface UpdateInfo {
   install_method: string;
   command: string;
   notes_url: string;
+  // Self_update is true when the one-click update works on this install;
+  // otherwise self_update_blocked says why not.
+  self_update: boolean;
+  self_update_blocked?: string;
+}
+
+// UpdateProgress is the updater's last report.
+export interface UpdateProgress {
+  state: '' | 'requested' | 'downloading' | 'verifying' | 'installing' | 'restarting' | 'done' | 'failed' | 'rolled_back';
+  version?: string;
+  from?: string;
+  message?: string;
+  time?: number;
 }
 
 export interface TimelineBucket {
@@ -488,6 +501,8 @@ export const api = {
   totpDisable: (current: string) => request<unknown>('DELETE', '/api/auth/totp', { current }),
   upstreams: () => request<UpstreamHealth[]>('GET', '/api/upstreams'),
   update: () => request<UpdateInfo>('GET', '/api/update'),
+  updateProgress: () => request<UpdateProgress>('GET', '/api/update/progress'),
+  installUpdate: () => request<unknown>('POST', '/api/update/install'),
   stats: (hours = 24) => request<Stats>('GET', `/api/stats?hours=${hours}`),
   clientStats: (clients: string[], hours = 24) =>
     request<ClientOverview>(

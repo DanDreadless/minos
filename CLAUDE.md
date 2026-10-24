@@ -619,6 +619,27 @@ This is security software; hold it to that standard.
   `web/src/lib/qr.ts` (a small level-M encoder, versions 1–10) rather
   than a dependency; it was verified against jsQR. 401s raise no toast —
   the sign-in screen takes over.
+- **One-click update** (fixed decisions, October 2026 — this reverses the
+  old "Minos never self-updates" rule, by maintainer decision): Minos
+  itself still never has root and never replaces its own binary. `POST
+  /api/update/install` only writes the tag to `update-request` in the
+  state directory; `minos-update.path` starts the root oneshot
+  `deploy/minos-update.sh` (installed as `/usr/local/libexec/minos-update`
+  by install.sh). Everything in the state directory is writable by the
+  service, so the helper trusts none of it: one regex-validated tag, a
+  symlinked request refused, status written via `mktemp` + rename. The
+  **installed** binary is the verifier (`minos verify-release`): Ed25519
+  signature over `minos-release-v1\n<tag>\n<checksums.txt>` with the key
+  compiled in (`internal/release`, stdlib only), the archive's checksum,
+  and **newer than itself** — downgrades are refused. The old binary stays
+  as `minos.prev`; if `minos status` does not report the new version within
+  30 s the helper restores it (and the unit, if it changed). Offered only
+  to Linux binary installs under systemd with the helper present **and a
+  password or token set** (an open interface must not install software).
+  `PublicKey` is a var solely so the container test can build binaries
+  trusting a throwaway key. Tested end to end in a systemd container (good
+  update, rollback, downgrade, swapped archive, junk request); the path
+  unit fires through DynamicUser's `/var/lib/minos` symlink.
 - **Extended DNS Errors** (fixed decisions, October 2026, `ede.go`): answers
   say why (RFC 8914) — 15 Blocked naming the list, 18 Prohibited for a
   device-level block, 6 DNSSEC Bogus with the reason, 3 Stale Answer, 23
