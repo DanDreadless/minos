@@ -5,38 +5,56 @@
 import { writable, type Readable } from 'svelte/store';
 import { api } from './api';
 
-const store = writable<Record<string, string>>({});
+const names = writable<Record<string, string>>({});
+// Search text per address: label and hostname, lowercased — what the
+// server's device-name search matches.
+const search = writable<Record<string, string>>({});
 let users = 0;
 let timer: ReturnType<typeof setInterval> | null = null;
 
 async function load(): Promise<void> {
   try {
-    const out: Record<string, string> = {};
+    const shown: Record<string, string> = {};
+    const text: Record<string, string> = {};
     for (const d of await api.clients()) {
-      const name = (d.name || d.hostname || '').trim();
-      if (!name) continue;
-      for (const ip of d.ips?.length ? d.ips : [d.ip]) out[ip] = name;
+      const label = (d.name ?? '').trim();
+      const host = (d.hostname ?? '').trim();
+      if (!label && !host) continue;
+      for (const ip of d.ips?.length ? d.ips : [d.ip]) {
+        shown[ip] = label || host;
+        text[ip] = `${label}\n${host}`.toLowerCase();
+      }
     }
-    store.set(out);
+    names.set(shown);
+    search.set(text);
   } catch {
     // Names are a nicety; addresses still show.
   }
 }
 
-// DeviceNames is the address → name map. Subscribing starts the refresh.
-export const deviceNames: Readable<Record<string, string>> = {
-  subscribe(run) {
-    if (users++ === 0) {
-      void load();
-      timer = setInterval(load, 60_000);
-    }
-    const unsub = store.subscribe(run);
-    return () => {
-      unsub();
-      if (--users === 0 && timer) {
-        clearInterval(timer);
-        timer = null;
+// Refreshing runs while anything subscribes to either store.
+function shared<T>(store: Readable<T>): Readable<T> {
+  return {
+    subscribe(run) {
+      if (users++ === 0) {
+        void load();
+        timer = setInterval(load, 60_000);
       }
-    };
-  },
-};
+      const unsub = store.subscribe(run);
+      return () => {
+        unsub();
+        if (--users === 0 && timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+      };
+    },
+  };
+}
+
+// DeviceNames is the address → name map.
+export const deviceNames = shared(names);
+
+// DeviceSearch is the address → searchable text map, for matching the
+// search box against device names the way the server does.
+export const deviceSearch = shared(search);

@@ -807,8 +807,12 @@ func (l *Log) prune() {
 // HistoryFilter narrows QueryHistory. Empty fields impose no constraint.
 type HistoryFilter struct {
 	// Search matches (case-insensitively) as a substring of qname OR client —
-	// the free-text match the Docket search box uses.
+	// the free-text match the Query Log search box uses.
 	Search string
+	// SearchClients are the addresses of devices whose name matches Search
+	// (resolved by the API, which knows the names): their rows match too,
+	// so "kitchen" finds the Kitchen iPad's queries. Only with Search.
+	SearchClients []string
 	// Verdict is "blocked", "allowed", or "" for both.
 	Verdict string
 	// Clients, when non-empty, restricts to these exact client IPs — the
@@ -866,6 +870,9 @@ func (l *Log) planSearch(ctx context.Context, f HistoryFilter) (searchPlan, []st
 	// the whole log it cannot prove absence.
 	if !l.derivedReady.Load() || !l.indexed.Load() || len(f.Clients) > 0 || f.List != "" {
 		return planScan, nil, nil
+	}
+	if len(f.SearchClients) > 0 && f.Domain == "" {
+		return planScan, nil, nil // a named device's own rows are plentiful: scan
 	}
 	if f.Domain != "" {
 		// One exact name: a point lookup in the dictionary. Search, if
@@ -1000,9 +1007,9 @@ func (l *Log) eachHistory(ctx context.Context, f HistoryFilter, limit int, befor
 			args = append(args, f.Domain)
 		}
 		if f.Search != "" {
-			where = append(where, "(qname LIKE ? ESCAPE '\\' OR client LIKE ? ESCAPE '\\')")
-			like := "%" + escapeLike(f.Search) + "%"
-			args = append(args, like, like)
+			clause, a := searchClause(f)
+			where = append(where, clause)
+			args = append(args, a...)
 		}
 	} else if f.Search != "" {
 		var names []string
@@ -1022,9 +1029,9 @@ func (l *Log) eachHistory(ctx context.Context, f HistoryFilter, limit int, befor
 			}
 			where = append(where, "qname IN ("+strings.Join(ph, ",")+")")
 		default:
-			where = append(where, "(qname LIKE ? ESCAPE '\\' OR client LIKE ? ESCAPE '\\')")
-			like := "%" + escapeLike(f.Search) + "%"
-			args = append(args, like, like)
+			clause, a := searchClause(f)
+			where = append(where, clause)
+			args = append(args, a...)
 		}
 	}
 	if f.Verdict == VerdictBlocked || f.Verdict == VerdictAllowed {
@@ -1148,6 +1155,21 @@ func (l *Log) eachHistory(ctx context.Context, f HistoryFilter, limit int, befor
 		return historyErr(ctx, err)
 	}
 	return nil
+}
+
+// searchClause is the free-text match: the name or the address contains
+// the term, or the row belongs to a device whose name does.
+func searchClause(f HistoryFilter) (string, []any) {
+	like := "%" + escapeLike(f.Search) + "%"
+	clause := "qname LIKE ? ESCAPE '\\' OR client LIKE ? ESCAPE '\\'"
+	args := []any{like, like}
+	if len(f.SearchClients) > 0 {
+		clause += " OR client IN (" + strings.TrimSuffix(strings.Repeat("?,", len(f.SearchClients)), ",") + ")"
+		for _, c := range f.SearchClients {
+			args = append(args, c)
+		}
+	}
+	return "(" + clause + ")", args
 }
 
 // historyErr translates a deadline-driven interrupt into the user-facing

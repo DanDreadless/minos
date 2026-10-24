@@ -65,7 +65,7 @@ Every DNS lookup your devices make — streaming live, and searchable across the
 - With no filter the page is Live: new lookups arrive at the top. Pause holds the rows still while you read; new ones wait, counted.
 - Any filter switches to Results: matches from the full history, newest first, with Load older.
 - Filter with the result buttons (All, Blocked, Allowed, Would block), the list menu and the time range — or click any device, domain, type, list or resolver in a row.
-- The search box takes filters as you type: blocked, allowed, would-block, client:192.168.1.5, domain:example.com (that exact name), type:AAAA, list:StevenBlack (quote names with spaces), upstream:1.1.1.1:853, dnssec:bogus, and -cdn to leave out names containing "cdn". Anything else matches domains and device addresses. Press / to search, Enter to apply, Esc to clear, Backspace to remove the last filter.
+- The search box takes filters as you type: blocked, allowed, would-block, client:192.168.1.5, domain:example.com (that exact name), type:AAAA, list:StevenBlack (quote names with spaces), upstream:1.1.1.1:853, dnssec:bogus, and -cdn to leave out names containing "cdn". Anything else matches domains, device addresses and device names — kitchen finds every query from the Kitchen iPad. Press / to search, Enter to apply, Esc to clear, Backspace to remove the last filter.
 - Row actions: Allow (on blocked rows) or Block (on allowed rows), Check (how the domain would be judged now) and Copy.
 - Export CSV or JSON downloads every match of the current filter, up to 100,000 rows.
 - The address bar keeps the filter, so a search can be bookmarked or shared.

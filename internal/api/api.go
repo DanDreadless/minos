@@ -353,6 +353,7 @@ func (s *Server) handleQueryLogHistory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	filter.SearchClients = s.searchClients(filter.Search)
 	entries, err := s.qlog.QueryHistory(r.Context(), filter, limit, before)
 	if errors.Is(err, querylog.ErrSearchTimeout) {
 		writeError(w, http.StatusServiceUnavailable, err.Error())

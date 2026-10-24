@@ -309,7 +309,9 @@ sampling rule as audit marks: it records resolutions, not lookups.
 
 The persisted log (SQLite), newest first — the full retained history behind
 search and the dashboard drill-downs, not just the in-memory ring. `q`
-matches a client IP or domain substring; `client` is an **exact** address
+matches a domain or client-IP substring, or a device whose label or
+discovered hostname contains it (2+ characters; that device's addresses,
+up to 64); `client` is an **exact** address
 filter, comma-separated for a device with several IPs (the Devices
 drill-down), distinct from the `q` substring; `verdict` is
 `blocked`/`allowed`/`all`; `would_block=true` narrows to entries an

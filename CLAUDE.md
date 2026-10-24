@@ -840,7 +840,13 @@ This is security software; hold it to that standard.
   Raw `TopBlockedDomains` is pinned to `idx_querylog_ts`, because the new
   index tempted the planner into walking the whole log to avoid a sort.
   Index migrations now ANALYZE only the indexes just built — a whole
-  ANALYZE took 2m18s there.
+  ANALYZE took 2m18s there. **Device-name search** (October 2026): the
+  querylog knows addresses, not names, so the API resolves the term against
+  device labels and hostnames (`searchClients`, 2+ characters, ≤ 64
+  addresses) into `HistoryFilter.SearchClients`, which adds `OR client IN
+  (…)` to the match and forces the scan plan — a device's own rows are
+  plentiful, and the dictionary cannot prove absence for a name that is not
+  a domain. The live view mirrors it with `deviceSearch` (devicenames.ts).
 - **Derived tables are exactly-once** (fixed decisions, October 2026,
   `derived.go`): live batches update them in the insert's own transaction
   and advance `live_upto`; rows they never saw (first upgrade, or an older

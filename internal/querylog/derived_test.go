@@ -284,3 +284,54 @@ func TestClientLike(t *testing.T) {
 		}
 	}
 }
+
+// A search naming a device matches that device's rows as well as names and
+// addresses containing the term — and a term that matches no domain at all
+// must not take the dictionary's "nothing matches" shortcut.
+func TestSearchMatchesNamedDevices(t *testing.T) {
+	l := openReady(t, filepath.Join(t.TempDir(), "q.db"))
+	defer l.Close()
+	rows := sampleRows(300, time.Now().Add(-time.Hour))
+	for i := range rows[:40] {
+		rows[i].Client = "10.0.0.9" // the "kitchen" device
+	}
+	if err := l.writeBatch(rows); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	f := HistoryFilter{Search: "kitchen", SearchClients: []string{"10.0.0.9"}}
+	if plan, _, err := l.planSearch(ctx, f); err != nil || plan != planScan {
+		t.Fatalf("plan %d, %v: want a scan", plan, err)
+	}
+	got, err := l.QueryHistory(ctx, f, 1000, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 40 {
+		t.Fatalf("got %d rows, want the device's 40", len(got))
+	}
+	for _, e := range got {
+		if e.Client != "10.0.0.9" {
+			t.Fatalf("row from %s matched a device search", e.Client)
+		}
+	}
+	// Names still match alongside the device.
+	f = HistoryFilter{Search: "rare-tracker", SearchClients: []string{"10.0.0.9"}}
+	got, err = l.QueryHistory(ctx, f, 1000, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := 40
+	for _, e := range rows[40:] {
+		if e.QName == "rare-tracker.example" {
+			want++
+		}
+	}
+	if len(got) != want {
+		t.Fatalf("got %d rows, want %d (device rows plus rare-tracker)", len(got), want)
+	}
+	// Without the device, "kitchen" matches nothing.
+	if got, _ := l.QueryHistory(ctx, HistoryFilter{Search: "kitchen"}, 10, time.Time{}); len(got) != 0 {
+		t.Fatalf("got %d rows for an unmatched term", len(got))
+	}
+}

@@ -113,3 +113,29 @@ func TestQueryLogFilterParams(t *testing.T) {
 		}
 	}
 }
+
+// The search box finds a device by its label or discovered hostname, not
+// only by address.
+func TestSearchClientsMatchesDeviceNames(t *testing.T) {
+	s, store := newTestServer(t, "")
+	if err := store.Update(func(c *config.Config) error {
+		c.Clients = append(c.Clients,
+			config.Client{IP: "192.168.1.21", Name: "Kitchen iPad"},
+			config.Client{IP: "192.168.1.22", Name: "Work laptop"})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for term, want := range map[string]string{
+		"kitchen": "192.168.1.21",
+		" IPAD ":  "192.168.1.21",
+		"laptop":  "192.168.1.22",
+		"k":       "", // one letter is too broad
+		"nomatch": "",
+		"":        "",
+	} {
+		if got := strings.Join(s.searchClients(term), ","); got != want {
+			t.Errorf("searchClients(%q) = %q, want %q", term, got, want)
+		}
+	}
+}

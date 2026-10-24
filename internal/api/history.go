@@ -79,6 +79,37 @@ func historyFilter(q url.Values) (querylog.HistoryFilter, error) {
 	return f, nil
 }
 
+// maxSearchClients bounds the addresses a device-name match adds to a
+// search, so a one-letter term on a big network stays a sane query.
+const maxSearchClients = 64
+
+// searchClients returns every address of the devices whose label or
+// discovered hostname contains term (case-insensitively), so the search box
+// finds "kitchen" as well as 192.168.1.21.
+func (s *Server) searchClients(term string) []string {
+	term = strings.ToLower(strings.TrimSpace(term))
+	if len(term) < 2 || s.clients == nil {
+		return nil
+	}
+	var out []string
+	for _, d := range s.clients.Devices(s.store.Get()) {
+		if !strings.Contains(strings.ToLower(d.Name), term) && !strings.Contains(strings.ToLower(d.Hostname), term) {
+			continue
+		}
+		ips := d.IPs
+		if len(ips) == 0 {
+			ips = []string{d.IP}
+		}
+		for _, ip := range ips {
+			if len(out) == maxSearchClients {
+				return out
+			}
+			out = append(out, ip)
+		}
+	}
+	return out
+}
+
 // notQTypeRune: record types are letters and digits (A, AAAA, HTTPS,
 // TYPE65534).
 func notQTypeRune(r rune) bool {
@@ -134,6 +165,7 @@ func (s *Server) handleQueryLogExport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	f.SearchClients = s.searchClients(f.Search)
 
 	name := "minos-querylog-" + time.Now().Format("20060102-1504") + "." + format
 	started := false
