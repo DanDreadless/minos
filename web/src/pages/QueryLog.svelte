@@ -3,7 +3,7 @@
   import { api, openStream, type LogEntry } from '../lib/api';
   import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
-  import { deviceNames } from '../lib/devicenames';
+  import { deviceNames, deviceSearch } from '../lib/devicenames';
   import { fmtLogTime, fmtLogTimeFull } from '../lib/format';
   import { currentParams } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
@@ -67,7 +67,7 @@
       ? results
       : resultsStatus === 'loading'
         ? []
-        : live.filter((e) => matches(filter, e));
+        : live.filter((e) => matches(filter, e, Date.now(), $deviceSearch));
   $: recentOnly = searching && results.length === 0 && displayed.length > 0;
   // Verdict and list have their own controls; everything else is a chip.
   $: activeChips = chips(filter, verdictLabel).filter((c) => c.key !== 'verdict' && c.key !== 'list');
@@ -251,7 +251,8 @@
         }
         live = [e, ...live].slice(0, MAX_ROWS);
         // Keep a results view live: new matches join at the top.
-        if (hasFilter(filter) && results.length && matches(filter, e)) results = [e, ...results];
+        if (hasFilter(filter) && results.length && matches(filter, e, Date.now(), $deviceSearch))
+          results = [e, ...results];
       },
       () => {
         ws = null;

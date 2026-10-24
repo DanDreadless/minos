@@ -291,8 +291,14 @@ export function fromParams(p: Record<string, string>): QueryFilter {
 
 // matches applies the filter to one entry client-side: new live entries
 // joining a results view, and the ring fallback in ephemeral mode. It must
-// agree with the server's QueryHistory.
-export function matches(f: QueryFilter, e: LogEntry, now = Date.now()): boolean {
+// agree with the server's QueryHistory, including its device-name match
+// (devices: address → lowercased label and hostname; terms of 2+ letters).
+export function matches(
+  f: QueryFilter,
+  e: LogEntry,
+  now = Date.now(),
+  devices: Record<string, string> = {},
+): boolean {
   if (f.verdict === 'would_block') {
     if (!e.audit_list) return false;
   } else if (f.verdict !== 'all' && e.verdict !== f.verdict) return false;
@@ -308,7 +314,8 @@ export function matches(f: QueryFilter, e: LogEntry, now = Date.now()): boolean 
   if (since !== undefined && new Date(e.time).getTime() < since) return false;
   if (f.q) {
     const q = f.q.toLowerCase();
-    return name.includes(q) || e.client.toLowerCase().includes(q);
+    if (name.includes(q) || e.client.toLowerCase().includes(q)) return true;
+    return q.trim().length >= 2 && (devices[e.client] ?? '').includes(q.trim());
   }
   return true;
 }

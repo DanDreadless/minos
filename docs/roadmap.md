@@ -230,11 +230,12 @@ the work it led to:
   codes, sign out everywhere; API tokens kept for automation
 - **One-click update** — signed releases (Ed25519), a root helper that
   verifies, refuses downgrades and rolls back a release that does not start
+- **Devices by name in the Query Log** — rows and the dashboard show device
+  names, and the search box finds a device by its label or hostname
 
 ## Under consideration
 
 - Replica config sync (see above)
-- Query Log search by device *name*, not only address
 
 ## Not building (pre-1.0)
 

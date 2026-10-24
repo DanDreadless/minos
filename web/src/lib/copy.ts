@@ -291,7 +291,7 @@ export const copy = {
       ['upstream:1.1.1.1:853', 'Answered by one resolver'],
       ['dnssec:bogus', 'One DNSSEC outcome'],
       ['-cdn', 'Leave out names containing "cdn"'],
-      ['Anything else', 'Domain or device address contains it'],
+      ['Anything else', 'Domain, device address or device name contains it'],
     ] as [string, string][],
     syntaxKeys: 'Press / to search from anywhere on the page, Enter to apply, Esc to clear.',
   },
