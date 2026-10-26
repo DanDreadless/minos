@@ -95,9 +95,26 @@ if [ "$assets_only" -eq 0 ]; then
   # push mirror means the tag never arrives and nothing builds. It failed
   # silently for seven weeks in 2026 (an expired PAT stored in Gitea) while
   # .env held a valid one — check Gitea's own record, not the local token.
-  mirror_err="$(gitea_api GET /push_mirrors | grep -o '"last_error":"[^"]*"' | grep -v '"last_error":""' | head -1 || true)"
-  [ -z "$mirror_err" ] ||
-    die "Gitea push mirror is failing ($mirror_err) — fix it in the repo's mirror settings first"
+  mirror_error() {
+    gitea_api GET /push_mirrors | grep -o '"last_error":"[^"]*"' | grep -v '"last_error":""' | head -1 || true
+  }
+  mirror_err="$(mirror_error)"
+  if [ -n "$mirror_err" ]; then
+    # A recorded error is not always current: two pushes in quick succession
+    # make two syncs race, and the loser records "cannot lock ref" although
+    # GitHub already has the commit. One fresh sync tells the two apart — a
+    # real failure (an expired token) fails again and still stops here.
+    say "Gitea push mirror reports an error; re-syncing once to see if it is current"
+    gitea_api POST /push_mirrors-sync >/dev/null
+    for _ in $(seq 12); do
+      sleep 5
+      mirror_err="$(mirror_error)"
+      [ -z "$mirror_err" ] && break
+    done
+    [ -z "$mirror_err" ] ||
+      die "Gitea push mirror is failing ($mirror_err) — fix it in the repo's mirror settings first"
+    say "mirror re-synced cleanly"
+  fi
 
   if [ "$skip_verify" -eq 0 ]; then
     # One-click choices must work on release day: every catalog list

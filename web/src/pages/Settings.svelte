@@ -674,7 +674,7 @@
           bind:value={u.address}
           on:input={() => matchProtocol(u)}
         />
-        <select bind:value={u.protocol} title="Protocol">
+        <select class="proto" bind:value={u.protocol} title="Protocol">
           <option value="doh">DoH (encrypted, HTTPS)</option>
           <option value="doh3">DoH3 (encrypted, HTTP/3 over QUIC)</option>
           <option value="doq">DoQ (encrypted, DNS over QUIC)</option>
@@ -682,6 +682,7 @@
           <option value="udp">UDP (plaintext)</option>
           <option value="tcp">TCP (plaintext)</option>
         </select>
+        <span class="row-actions">
         <button title="Move up" disabled={i === 0} on:click={() => moveUpstream(i, -1)}>↑</button>
         <button title="Move down" disabled={i === upstreams.length - 1} on:click={() => moveUpstream(i, 1)}>
           ↓
@@ -695,6 +696,7 @@
         <button class="danger" title="Remove" disabled={upstreams.length === 1} on:click={() => removeUpstream(i)}>
           ✕
         </button>
+        </span>
       </div>
       {#if tests[testKey(u)]?.text}
         <p class="test-result" class:ok={tests[testKey(u)]?.ok} role="status">{tests[testKey(u)]?.text}</p>
@@ -1307,6 +1309,50 @@
     width: 4.5rem;
     text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+
+  .row-actions {
+    display: inline-flex;
+    gap: 0.5rem;
+  }
+
+  /* On a phone each resolver is a small block — light, position and preset;
+     the address; the protocol; the buttons — instead of one row wrapping
+     into four ragged lines. */
+  @media (max-width: 640px) {
+    .upstream-row {
+      display: grid;
+      grid-template-columns: auto auto minmax(0, 1fr);
+      gap: 0.45rem 0.5rem;
+      padding: 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    .upstream-row .order {
+      width: auto;
+      text-align: left;
+    }
+
+    .upstream-row .preset {
+      max-width: none;
+      min-width: 0;
+    }
+
+    .upstream-row .grow,
+    .upstream-row .proto,
+    .upstream-row .row-actions {
+      grid-column: 1 / -1;
+      min-width: 0;
+    }
+
+    .row-actions {
+      justify-content: flex-end;
+    }
+
+    .row-actions .test {
+      margin-right: auto;
+    }
   }
 
   .grow {
