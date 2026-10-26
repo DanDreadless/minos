@@ -33,6 +33,7 @@ import (
 	"minos/internal/lists"
 	"minos/internal/notify"
 	"minos/internal/querylog"
+	"minos/internal/threats"
 	"minos/internal/updates"
 	"minos/web"
 )
@@ -277,6 +278,29 @@ func serve(args []string) error {
 	defer stopEntries()
 	go broken.Run(ctx, entries)
 	apiSrv.SetBreakage(broken)
+	// Threat detection: also off the query-log stream.
+	watcher := threats.New(threats.Options{
+		Enabled: func() bool { return store.Get().Threats.Enabled },
+		Ignore:  func() []string { return store.Get().Threats.Ignore },
+		ThreatList: func(name string) bool {
+			for _, src := range store.Get().Lists.Sources {
+				if src.Name == name {
+					return threats.ThreatFeed(src.Name, src.URL)
+				}
+			}
+			return false
+		},
+		OnNew: func(f threats.Finding) {
+			devs := deviceInfos(reg.Devices(store.Get()), []string{f.Client})
+			if len(devs) == 1 {
+				notifier.Publish(notify.ThreatEvent(devs[0], string(f.Kind), f.Domain, f.List, f.Count, f.Distinct, f.Samples))
+			}
+		},
+	})
+	threatEntries, stopThreatEntries := qlog.Subscribe()
+	defer stopThreatEntries()
+	go watcher.Run(ctx, threatEntries)
+	apiSrv.SetThreats(watcher)
 	apiSrv.SetAppLog(logRing, logLevelVar)
 	httpSrv := &http.Server{
 		Addr:              cfg.API.Listen,

@@ -448,7 +448,7 @@ type NotificationsConfig struct {
 var NotificationTypes = []string{
 	"device_new", "upstream_sick", "upstream_recovered", "dns_down",
 	"list_failing", "list_recovered", "update_available", "acme_renewal_failed", "digest",
-	"breakage_suspected",
+	"breakage_suspected", "threat_suspected",
 }
 
 // DigestSchedule resolves the configured digest timing, applying defaults
@@ -491,6 +491,18 @@ func parseWeekday(s string) (time.Weekday, error) {
 
 // DiscoveryConfig switches the *active* device-discovery probes (passive
 // techniques need no switch — they only listen).
+// ThreatsConfig is the behaviour-based threat detection (internal/threats).
+type ThreatsConfig struct {
+	// Enabled watches the query log for devices behaving like malware:
+	// generated domain names, data tunnelled through DNS, lookups of known
+	// malicious domains. Default on; a plain bool (no omitempty) so turning
+	// it off is written out.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Ignore lists domains never flagged (with subdomains) — a service that
+	// legitimately looks like tunnelling, say.
+	Ignore []string `yaml:"ignore,omitempty" json:"ignore"`
+}
+
 type DiscoveryConfig struct {
 	// SSDP names UPnP devices (TVs, consoles, IoT): one small multicast
 	// search every few minutes, plus one description fetch from each
@@ -513,6 +525,7 @@ type Config struct {
 	API           APIConfig           `yaml:"api"`
 	Notifications NotificationsConfig `yaml:"notifications,omitempty"`
 	Discovery     DiscoveryConfig     `yaml:"discovery"`
+	Threats       ThreatsConfig       `yaml:"threats"`
 	// UpdateCheck, when true, asks the GitHub releases API for the latest
 	// version once a day. Strictly opt-in (default false): nothing is
 	// sent beyond the request itself, and nothing is sent at all unless
@@ -556,6 +569,7 @@ func Default() *Config {
 			RateLimit: 1000,
 		},
 		Blocking: BlockingConfig{Mode: "zero_ip", CNAMEInspection: true},
+		Threats:  ThreatsConfig{Enabled: true},
 		Lists: ListsConfig{
 			Sources: []ListSource{
 				{
@@ -582,6 +596,7 @@ func (c *Config) Clone() *Config {
 	out.DNS.Upstreams = append([]Upstream(nil), c.DNS.Upstreams...)
 	out.Blocking.Allowlist = append([]string(nil), c.Blocking.Allowlist...)
 	out.Blocking.TemporaryAllows = append([]TemporaryAllow(nil), c.Blocking.TemporaryAllows...)
+	out.Threats.Ignore = append([]string(nil), c.Threats.Ignore...)
 	out.Blocking.Denylist = append([]string(nil), c.Blocking.Denylist...)
 	out.Blocking.Services = append([]string(nil), c.Blocking.Services...)
 	out.Blocking.AllowedServices = append([]string(nil), c.Blocking.AllowedServices...)
@@ -833,6 +848,14 @@ func (c *Config) Validate() error {
 	for i, s := range c.Blocking.Services {
 		if !services.Exists(s) {
 			return fmt.Errorf("blocking.services[%d]: unknown service %q", i, s)
+		}
+	}
+	if len(c.Threats.Ignore) > 500 {
+		return fmt.Errorf("threats.ignore: at most 500 entries")
+	}
+	for i, d := range c.Threats.Ignore {
+		if !validDomain(d) {
+			return fmt.Errorf("threats.ignore[%d]: %q is not a valid domain", i, d)
 		}
 	}
 	if len(c.Blocking.TemporaryAllows) > 1000 {

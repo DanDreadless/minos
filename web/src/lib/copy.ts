@@ -319,6 +319,16 @@ export const copy = {
 
   attention: {
     title: 'Needs attention',
+    threat: (kind: string, device: string, t: { domain?: string; count: number; distinct?: number; list?: string; samples: string[] }) =>
+      kind === 'dga'
+        ? `Possible infection on ${device}: it looked up ${t.count} random-looking domains in a few minutes (e.g. ${t.samples.slice(0, 2).join(', ')}) — how malware searches for its control server.`
+        : kind === 'tunnel'
+          ? `Possible data leak from ${device}: it looked up ${t.count} long, random names under ${t.domain} in a few minutes — the pattern of data sent out through DNS.`
+          : `${device} tried to reach ${(t.distinct ?? 1) > 1 ? `${t.distinct} known malicious domains (e.g. ${t.samples.slice(0, 2).join(', ')})` : `a known malicious domain, ${t.domain}`} — blocked by ${t.list}. Often a link in a scam message; it can also mean malware.`,
+    threatFine: 'This is fine',
+    threatFineHint: 'Expected behaviour — hide this for now',
+    threatNever: (domain: string) => `Never flag ${domain}`,
+    threatNeverHint: 'Add this domain to the threat detection ignore list',
     broken: (device: string, domain: string, count: number, list: string) =>
       `Something may be broken on ${device}: it asked for ${domain} ${count} times in a couple of minutes, and ${list} blocks it.`,
     brokenAllow: 'Allow',
@@ -742,6 +752,13 @@ export const copy = {
     rebind: 'Protect against DNS rebinding',
     rebindHint:
       'Refuses answers that point a public name at an address on your own network — the trick a malicious web page uses to reach your router or NAS from inside your browser. Allowed domains (for example plex.direct, which Plex needs), local records, conditional forwarding and names like .lan are exempt. Off by default.',
+    threatsTitle: 'Threat detection',
+    threatsHint: 'Notice devices that behave like malware',
+    threatsEnabled: 'Watch for infected devices',
+    threatsEnabledHint:
+      'Flags a device that looks up many random-looking domains (how malware finds its control server), sends data out hidden in long DNS names, or tries to reach a domain on a threat-intelligence list. It reads the query log in the background; lookups are never slowed.',
+    threatsIgnore: 'Never flag these domains',
+    threatsIgnoreHint: 'One per line, with subdomains — for a service that legitimately looks like this. Antivirus and spam-reputation lookups are already left out.',
     privateRelay: 'Block iCloud Private Relay',
     privateRelayHint:
       'Denies the mask.icloud.com hostnames Apple documents for exactly this. Apple devices show "Private Relay is unavailable on this network" and use normal DNS, so Minos can filter their queries. A real privacy trade — off by default.',
@@ -851,6 +868,7 @@ export const copy = {
       { types: ['list_recovered', 'upstream_recovered'], label: 'Recoveries', hint: 'A list or resolver that was reported failing works again' },
       { types: ['update_available'], label: 'Minos updates', hint: 'A new release is out (needs the update check on)' },
       { types: ['acme_renewal_failed'], label: 'Certificate problems', hint: 'The DoT/DoH certificate cannot be renewed' },
+      { types: ['threat_suspected'], label: 'Possible threats', hint: 'A device behaves like malware: random-looking domains, data through DNS, or a known malicious domain' },
       { types: ['breakage_suspected'], label: 'Something may be broken', hint: 'A device keeps retrying a blocked name, the way an app does when blocking breaks it' },
     ] as { types: string[]; label: string; hint: string }[],
     dnsDownNote: '"DNS is down" — every resolver failing — is always sent, at urgent priority.',

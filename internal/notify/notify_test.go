@@ -288,7 +288,7 @@ func TestUIBase(t *testing.T) {
 func TestMutableTypesMatchEvents(t *testing.T) {
 	sent := []string{
 		TypeDeviceNew, TypeUpstreamSick, TypeUpstreamRecovered, TypeDNSDown, TypeListFailing,
-		TypeListRecovered, TypeUpdateAvailable, TypeACMEFailed, TypeDigest, TypeBreakage,
+		TypeListRecovered, TypeUpdateAvailable, TypeACMEFailed, TypeDigest, TypeBreakage, TypeThreat,
 	}
 	if !slices.Equal(sent, config.NotificationTypes) {
 		t.Errorf("config.NotificationTypes = %v, want %v", config.NotificationTypes, sent)
@@ -371,6 +371,15 @@ func TestEventWording(t *testing.T) {
 		{"only upstream down", UpstreamEvent("1.1.1.1:853", true, nil), "DNS is down: no resolver is answering",
 			"Every upstream resolver has stopped answering (the last was 1.1.1.1:853)"},
 		{"update", UpdateEvent("0.23.0", "0.24.0"), "Minos v0.24.0 is available", "This server runs v0.23.0."},
+		{"dga", ThreatEvent(DeviceInfo{Key: "k", IP: "192.168.1.25", Name: "Doorbell"}, "dga", "", "", 14, 0, []string{"kqlxtqptsmys.com"}),
+			"Possible infection on Doorbell",
+			"Doorbell looked up 14 random-looking domains in a few minutes (e.g. kqlxtqptsmys.com)"},
+		{"tunnel", ThreatEvent(DeviceInfo{Key: "k", IP: "192.168.1.10", Name: "NAS"}, "tunnel", "example.net", "", 31, 0, nil),
+			"Possible data leak from NAS",
+			"NAS looked up 31 long, random names under example.net in a few minutes"},
+		{"known", ThreatEvent(DeviceInfo{Key: "k", IP: "192.168.1.21", Name: "Phone"}, "known_threat", "evil.example", "URLhaus", 3, 2, nil),
+			"Phone tried to reach a known malicious domain",
+			"Phone looked up evil.example and 1 other known malicious domain (URLhaus)"},
 		{"breakage", BreakageEvent(DeviceInfo{Key: "k", IP: "192.168.1.20", Name: "Living room TV"}, "api.app.example", "StevenBlack", 42),
 			"Something may be broken on Living room TV",
 			"Living room TV asked for api.app.example 42 times in two minutes, and StevenBlack blocks it"},

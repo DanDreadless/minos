@@ -123,7 +123,10 @@ Rules:
   `github.com/quic-go/quic-go` (DNS over QUIC and HTTP/3, client and
   server; approved October 2026 — the Go QUIC implementation, maintained,
   pure Go so CGO_ENABLED=0 builds keep working; pulls `quic-go/qpack` for
-  HTTP/3 headers. Pinned to a release at least a few weeks old).
+  HTTP/3 headers. Pinned to a release at least a few weeks old),
+  `golang.org/x/net` (publicsuffix for threat detection; approved October
+  2026 on the x/sys precedent — already an indirect dependency via quic-go,
+  so making it direct added no modules).
 
 ## Dev environment & commands
 
@@ -648,6 +651,29 @@ This is security software; hold it to that standard.
   trusting a throwaway key. Tested end to end in a systemd container (good
   update, rollback, downgrade, swapped archive, junk request); the path
   unit fires through DynamicUser's `/var/lib/minos` symlink.
+- **Threat detection** (fixed decisions, October 2026, `internal/threats`):
+  behaviour, not lists — `dga` (12+ distinct random-looking *registrable*
+  domains per device in 10 min), `tunnel` (20+ distinct names under one
+  registrable domain in 5 min, each with ≥ 50 characters of 16+-character
+  labels at entropy ≥ 2.9) and `known_threat` (lookups blocked by a list
+  whose name/URL marks it a threat feed — `ThreatFeed`). Beaconing is
+  deliberately not attempted: from DNS alone it looks like ordinary polling.
+  Registrable domains come from `golang.org/x/net/publicsuffix` (x/net was
+  already an indirect dependency via quic-go, so direct use added no
+  modules), judged under the ICANN suffix so private suffixes
+  (`cloudfront.net`) never make customer labels "registrable". A label is
+  random only if it is ≥ 10 chars, high-entropy, vowel-poor/consonant-run/
+  digit-mixed **and** mostly rare letter pairs (`commonPairs` < 0.7) — that
+  last test is what keeps `smartthings`/`msftconnecttest` out. **Tuned on
+  13.6M real lookups (90 days on the field Pi)** with the build-tagged
+  replay (`go test -tags replay`, MINOS_DB=…, prints counts and registrable
+  domains only): 0 dga, 0 tunnel (hashed-host shapes — GlobalProtect 20–28 +
+  11 + 2, a CDN's 29 + short — are why the tunnel rule counts only long
+  labels and needs 50 chars), and known_threat grouped **per device**
+  (a phone previewing phishing links made 150 per-domain alerts in a week;
+  grouped, 3 in 90 days). Antivirus/spam-reputation services are a built-in
+  ignore; `threats.ignore` adds more. Reads the query-log stream, so the
+  query path pays nothing; findings are in memory (24 h).
 - **"Something broke" detection** (fixed decisions, October 2026,
   `internal/breakage`): a burst of blocked lookups of one name by one device
   (15 in 2 minutes) is an app retrying because blocking broke it — but ad

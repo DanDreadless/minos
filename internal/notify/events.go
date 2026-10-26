@@ -194,6 +194,45 @@ func BreakageEvent(dev DeviceInfo, domain, list string, count int) Event {
 	}
 }
 
+// ThreatEvent: a device is behaving like malware (internal/threats). kind is
+// dga, tunnel or known_threat; distinct counts known-threat domains.
+func ThreatEvent(dev DeviceInfo, kind, domain, list string, count, distinct int, samples []string) Event {
+	who := dev.label()
+	e := Event{
+		Type:     TypeThreat,
+		Priority: PriorityHigh,
+		Link:     "#/",
+		Actions:  []Action{{Label: "Open Minos", URL: "#/"}},
+	}
+	const advice = " If you don't recognise this, disconnect the device and check it; if it is expected, mark it as fine in Minos."
+	switch kind {
+	case "dga":
+		e.Title = "Possible infection on " + who
+		eg := ""
+		if len(samples) > 0 {
+			eg = " (e.g. " + strings.Join(samples[:min(2, len(samples))], ", ") + ")"
+		}
+		e.Message = fmt.Sprintf("%s looked up %d random-looking domains in a few minutes%s — how malware searches "+
+			"for its control server.%s", who, count, eg, advice)
+	case "tunnel":
+		e.Title = "Possible data leak from " + who
+		e.Message = fmt.Sprintf("%s looked up %d long, random names under %s in a few minutes — the pattern of data "+
+			"being sent out through DNS.%s", who, count, domain, advice)
+	default:
+		e.Title = who + " tried to reach a known malicious domain"
+		others := ""
+		if distinct > 1 {
+			others = fmt.Sprintf(" and %d other known malicious domain", distinct-1)
+			if distinct > 2 {
+				others += "s"
+			}
+		}
+		e.Message = fmt.Sprintf("%s looked up %s%s (%s). Minos blocked it — often a link in a scam message or a "+
+			"malicious ad; it can also mean malware on the device.%s", who, domain, others, list, advice)
+	}
+	return e
+}
+
 // UpdateEvent announces a newer release.
 func UpdateEvent(current, latest string) Event {
 	latest = strings.TrimPrefix(latest, "v")
