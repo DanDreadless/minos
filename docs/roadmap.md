@@ -197,8 +197,15 @@ traffic-pattern OS hints as a clearly-labelled last resort *(shipped)*.
 
 Maintainer-gated (explicit decision needed before any code): **replica
 config sync** (bounded one-way push; the docs-only keepalived + API-sync
-recipe can ship anytime) and **router-assisted identity** (UPnP IGD/SNMP to
-the gateway — scope decision needed).
+recipe can ship anytime).
+
+**Declined: router-assisted identity** (October 2026). Probed against a
+TP-Link Deco BE68: no PTR answers for LAN devices, SNMP closed, and UPnP is
+MiniUPnPd IGD only (WAN/port-forwarding services, no host list). The device
+list exists only behind TP-Link's undocumented, encrypted web login — it
+would mean storing the router's admin password and tracking a private
+protocol across firmware updates, for names that labelling devices once, or
+the DHCP listener over time, already provides. Standard protocols only.
 
 ## Best-in-class round — shipped (v0.21.3–v0.31.0, October 2026)
 
