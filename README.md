@@ -22,7 +22,12 @@ is protected, with a clear answer to "why was this blocked?" one click away.
 
 - **Every block explains itself.** Each blocked lookup names the list and
   the rule that caught it, and **Allow** is right there on the row — never
-  more than two clicks from seeing a block to fixing it.
+  more than two clicks from seeing a block to fixing it. Or allow it for
+  just an hour.
+- **Notices when blocking breaks something.** A device retrying a blocked
+  name, the way an app does when it has stopped working, shows up as
+  "Something may be broken on Living room TV" with Allow, Allow 1 h and
+  Dismiss — while tracker chatter that nags all day is left out.
 - **Try a list before you trust it.** Audit mode shows what a new blocklist
   *would* block without blocking anything, so you can add a strict list
   without breaking the house.
