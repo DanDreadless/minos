@@ -281,6 +281,20 @@ the health lights next to each resolver in Settings:
 
 Probes count as requests in these counters and in `/metrics`.
 
+### Settings history
+
+`GET /api/settings/history` lists recorded settings changes, newest first:
+`[{"id", "time", "actor": "Password sign-in from 192.168.1.20", "note", "keys": ["blocking.allowlist"]}]`.
+Changes made through the API are recorded (the last 100) with how the
+request was authorized and its address — `Password sign-in`, `API token`,
+`Open access`, or `minos command` for the CLI (which sends
+`X-Minos-Client: cli`); Minos's own housekeeping is not.
+`GET /api/settings/history/{id}/diff` compares that version with the one
+before it as `[{"op": " "|"+"|"-", "text"}]` lines, secrets shown as
+`(hidden)`. `POST /api/settings/history/{id}/restore` makes it current
+again — except sign-in and other secrets and restart-only settings, which
+stay as they are — and records the restore as a change of its own.
+
 ### `GET /api/threats`
 
 Devices behaving like malware (threat detection, `threats.enabled`):

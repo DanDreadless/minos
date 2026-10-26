@@ -55,7 +55,7 @@ func (s *Server) handleUpdateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	isMAC := keyIsMAC(key)
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		// Pull out the device's existing assignment(s) — a MAC match or a
 		// legacy IP-keyed entry for one of its current IPs (assignments made
 		// before v0.10 were IP-keyed). Removing every match before re-adding a
@@ -163,7 +163,7 @@ func applyClientUpdate(cl *config.Client, upd clientUpdate) {
 func (s *Server) handleDeleteClient(w http.ResponseWriter, r *http.Request) {
 	key := clientKey(r)
 	isMAC := keyIsMAC(key)
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		// Remove the device's assignment(s) — MAC match or a legacy IP-keyed
 		// entry for one of its current IPs.
 		if _, found := takeDeviceClient(c, key, isMAC, s.deviceIPs(key, clientUpdate{})); !found {
@@ -266,7 +266,7 @@ func (s *Server) handleAddGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		for _, existing := range c.Groups {
 			if existing.Name == g.Name {
 				return fmt.Errorf("a group named %q already exists", g.Name)
@@ -289,7 +289,7 @@ func (s *Server) handleUpdateGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "body must be JSON with any of: mode, allowlist, denylist")
 		return
 	}
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		for i := range c.Groups {
 			g := &c.Groups[i]
 			if g.Name != name {
@@ -340,7 +340,7 @@ func (s *Server) handleUpdateGroup(w http.ResponseWriter, r *http.Request) {
 // handleDeleteGroup removes a group; members fall back to the default rules.
 func (s *Server) handleDeleteGroup(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		kept := c.Groups[:0]
 		found := false
 		for _, g := range c.Groups {

@@ -81,6 +81,20 @@ export interface Threat {
   last: string;
 }
 
+// HistoryEntry is one recorded settings change (Settings → History).
+export interface HistoryEntry {
+  id: string;
+  time: string;
+  actor: string;
+  note?: string;
+  keys: string[];
+}
+
+export interface DiffLine {
+  op: ' ' | '+' | '-';
+  text: string;
+}
+
 export interface TemporaryAllow {
   domain: string;
   until: string;
@@ -681,6 +695,9 @@ export const api = {
   temporaryAllows: () => request<TemporaryAllow[]>('GET', '/api/allowlist/temporary'),
   suggestions: () => request<Suggestion[]>('GET', '/api/suggestions'),
   threats: () => request<Threat[]>('GET', '/api/threats'),
+  settingsHistory: () => request<HistoryEntry[]>('GET', '/api/settings/history'),
+  settingsDiff: (id: string) => request<DiffLine[]>('GET', `/api/settings/history/${encodeURIComponent(id)}/diff`),
+  restoreSettings: (id: string) => request<unknown>('POST', `/api/settings/history/${encodeURIComponent(id)}/restore`),
   dismissThreat: (t: Threat) =>
     request<unknown>('POST', '/api/threats/dismiss', { kind: t.kind, client: t.client, domain: t.kind === 'known_threat' ? '' : (t.domain ?? '') }),
   ignoreThreatDomain: (domain: string) => request<unknown>('POST', '/api/threats/ignore', { domain }),

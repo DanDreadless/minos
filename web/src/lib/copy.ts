@@ -317,6 +317,25 @@ export const copy = {
     done: (domain: string) => `${domain} is now always blocked.`,
   },
 
+  history: {
+    title: 'Settings history',
+    hint: 'Every change, who made it, and a way back',
+    note: 'Changes made here, by scripts and by the minos command are kept — the last 100. Restoring a version never changes the password, tokens or other secrets, or settings that need a restart, so it cannot lock you out.',
+    empty: 'No changes yet. They appear here as you make them.',
+    baseline: 'The settings before history began',
+    current: 'Current',
+    showChanges: 'Show changes',
+    hideChanges: 'Hide changes',
+    loading: 'Loading…',
+    restore: 'Restore this version',
+    restoreConfirm: (when: string) =>
+      `Restore the settings as they were at ${when}? The password, tokens and restart-only settings stay as they are now. You can undo this too.`,
+    restored: (when: string) => `Settings restored to ${when}.`,
+    undo: 'Undo last change',
+    undoConfirm: 'Undo the last change? You can undo the undo, too.',
+    undone: 'The last change was undone.',
+  },
+
   attention: {
     title: 'Needs attention',
     threat: (kind: string, device: string, t: { domain?: string; count: number; distinct?: number; list?: string; samples: string[] }) =>
@@ -700,6 +719,7 @@ export const copy = {
       { key: 'access', label: 'Access & security' },
       { key: 'system', label: 'System' },
       { key: 'backup', label: 'Backup & import' },
+      { key: 'history', label: 'History' },
     ] as const,
     logLevelTitle: 'Application log',
     logLevelHint: 'How much Minos records about its own activity',

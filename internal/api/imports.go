@@ -120,7 +120,7 @@ func (s *Server) handleImportAdGuard(w http.ResponseWriter, r *http.Request) {
 // validated, persisted), fetches any new blocklists, and returns the report.
 func (s *Server) runImport(w http.ResponseWriter, r *http.Request, do func(*config.Config) (*importer.Report, error)) {
 	var report *importer.Report
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		rep, ierr := do(c)
 		report = rep
 		return ierr
@@ -150,7 +150,7 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 	// Preserve the file-only listen addresses and storage settings: those
 	// need a restart to change and must not be silently swapped from a
 	// backup taken on another host.
-	err = s.store.Update(func(c *config.Config) error {
+	err = s.update(r, func(c *config.Config) error {
 		dnsListen, apiListen := c.DNS.Listen, c.API.Listen
 		tls, qlog := c.DNS.TLS, c.QueryLog
 		*c = *restored

@@ -447,6 +447,8 @@ func apiClient(cfgPath string) (base string, authorize func(*http.Request), err 
 	}
 	a := cfg.API
 	authorize = func(req *http.Request) {
+		// Labels the settings history entry ("minos command"); not a credential.
+		req.Header.Set("X-Minos-Client", "cli")
 		switch {
 		case a.Token != "":
 			req.Header.Set("X-Api-Token", a.Token)

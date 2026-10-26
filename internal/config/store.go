@@ -3,9 +3,12 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // Store owns the on-disk config file and the current in-memory snapshot.
@@ -16,6 +19,7 @@ type Store struct {
 	mu       sync.Mutex // guards Update (clone-validate-persist-swap) and onChange
 	cur      atomic.Pointer[Config]
 	onChange []func(*Config)
+	hist     *history // Settings history (history.go), beside the config
 }
 
 // Open loads the config at path, creating it with defaults if it is missing.
@@ -29,7 +33,7 @@ func Open(path string) (*Store, error) {
 	} else if err != nil {
 		return nil, err
 	}
-	s := &Store{path: path}
+	s := &Store{path: path, hist: &history{dir: filepath.Join(filepath.Dir(path), "history")}}
 	s.cur.Store(c)
 	return s, nil
 }
@@ -50,11 +54,20 @@ func (s *Store) OnChange(fn func(*Config)) {
 
 // Update clones the current config, applies mutate, validates, persists to
 // disk, then atomically swaps the snapshot and notifies OnChange handlers.
-// If any step fails the running config is untouched.
+// If any step fails the running config is untouched. Not recorded in the
+// settings history: it is for Minos's own housekeeping.
 func (s *Store) Update(mutate func(*Config) error) error {
+	return s.UpdateAs("", "", mutate)
+}
+
+// UpdateAs is Update for a change someone made, recorded in the settings
+// history under actor (with an optional note). An empty actor records
+// nothing. A change that alters nothing is not recorded either.
+func (s *Store) UpdateAs(actor, note string, mutate func(*Config) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	next := s.cur.Load().Clone()
+	prev := s.cur.Load()
+	next := prev.Clone()
 	if err := mutate(next); err != nil {
 		return err
 	}
@@ -63,6 +76,15 @@ func (s *Store) Update(mutate func(*Config) error) error {
 	}
 	if err := save(s.path, next); err != nil {
 		return err
+	}
+	if keys := []string(nil); actor != "" && s.hist != nil {
+		if keys = ChangedKeys(prev, next); len(keys) == 0 {
+			// Nothing a person would see changed: not a version.
+		} else if err := s.hist.record(prev, next, keys, actor, note, time.Now()); err != nil {
+			// The change itself succeeded; losing its history entry must
+			// not undo it.
+			slog.Warn("could not record the settings change in history", "err", err)
+		}
 	}
 	s.cur.Store(next)
 	for _, fn := range s.onChange {

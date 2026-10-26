@@ -236,7 +236,7 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		if upd.DNS != nil {
 			if upd.DNS.Upstreams != nil {
 				c.DNS.Upstreams = *upd.DNS.Upstreams
@@ -447,7 +447,7 @@ func (s *Server) handleAddList(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		for _, existing := range append(append([]config.ListSource{}, c.Lists.Sources...), c.Lists.AllowSources...) {
 			if existing.Name == src.Name {
 				return fmt.Errorf("a list named %q already exists", src.Name)
@@ -485,7 +485,7 @@ func (s *Server) handleUpdateList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	urlChanged := false
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		slices := [2]*[]config.ListSource{&c.Lists.Sources, &c.Lists.AllowSources}
 		for si, slice := range slices {
 			for i := range *slice {
@@ -558,7 +558,7 @@ var errNotFound = errors.New("not found")
 
 func (s *Server) handleDeleteList(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		found := false
 		for _, slice := range [2]*[]config.ListSource{&c.Lists.Sources, &c.Lists.AllowSources} {
 			kept := (*slice)[:0]

@@ -174,6 +174,9 @@ func (s *Server) Router() http.Handler {
 		r.Get("/allowlist/temporary", s.handleGetTemporaryAllows)
 		r.Get("/suggestions", s.handleSuggestions)
 		r.Get("/threats", s.handleThreats)
+		r.Get("/settings/history", s.handleSettingsHistory)
+		r.Get("/settings/history/{id}/diff", s.handleSettingsHistoryDiff)
+		r.Post("/settings/history/{id}/restore", s.handleSettingsRestore)
 		r.Post("/threats/dismiss", s.handleDismissThreat)
 		r.Post("/threats/ignore", s.handleIgnoreThreatDomain)
 		r.Post("/suggestions/dismiss", s.handleDismissSuggestion)
@@ -525,7 +528,7 @@ func (s *Server) handleAddDomain(kind string) http.HandlerFunc {
 				writeError(w, http.StatusBadRequest, "minutes applies to allowed domains only")
 				return
 			}
-			s.addTemporaryAllow(w, body.Domain, body.Minutes)
+			s.addTemporaryAllow(w, r, body.Domain, body.Minutes)
 			return
 		}
 		norm, err := domainOrRegex(body.Domain)
@@ -533,7 +536,7 @@ func (s *Server) handleAddDomain(kind string) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		err = s.store.Update(func(c *config.Config) error {
+		err = s.update(r, func(c *config.Config) error {
 			list := s.domains(kind, c)
 			for _, d := range *list {
 				if d == norm {
@@ -566,7 +569,7 @@ var errAlreadyExists = errors.New("already present")
 
 // addTemporaryAllow allows domain for minutes, replacing any earlier
 // temporary allow for it. A domain already allowed for good is left alone.
-func (s *Server) addTemporaryAllow(w http.ResponseWriter, domain string, minutes int) {
+func (s *Server) addTemporaryAllow(w http.ResponseWriter, r *http.Request, domain string, minutes int) {
 	norm := filter.NormalizeDomain(strings.TrimSpace(domain))
 	if norm == "" {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("%q is not a valid domain (temporary allows take a domain, not a /regex/ rule)", domain))
@@ -578,7 +581,7 @@ func (s *Server) addTemporaryAllow(w http.ResponseWriter, domain string, minutes
 		return
 	}
 	until := time.Now().Add(d).UTC().Truncate(time.Second)
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		for _, a := range c.Blocking.Allowlist {
 			if a == norm {
 				return errAlreadyExists
@@ -623,7 +626,7 @@ func (s *Server) handleGetTemporaryAllows(w http.ResponseWriter, _ *http.Request
 func (s *Server) handleDeleteTemporaryAllow(w http.ResponseWriter, r *http.Request) {
 	norm := filter.NormalizeDomain(r.URL.Query().Get("domain"))
 	found := false
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		kept := withoutTemporary(c.Blocking.TemporaryAllows, norm)
 		found = len(kept) != len(c.Blocking.TemporaryAllows)
 		c.Blocking.TemporaryAllows = kept
@@ -669,7 +672,7 @@ func (s *Server) handleDeleteDomain(kind string) http.HandlerFunc {
 			return
 		}
 		found := false
-		err = s.store.Update(func(c *config.Config) error {
+		err = s.update(r, func(c *config.Config) error {
 			list := s.domains(kind, c)
 			kept := (*list)[:0]
 			for _, d := range *list {
