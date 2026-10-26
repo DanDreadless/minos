@@ -1063,6 +1063,10 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// ValidateUpstream checks one upstream the way saving the config does (the
+// Settings "Test" button checks an unsaved row with it).
+func ValidateUpstream(u Upstream) error { return validateUpstream(u) }
+
 func validateUpstream(u Upstream) error {
 	switch u.Protocol {
 	case "udp", "tcp", "dot", "doq":

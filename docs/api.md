@@ -270,12 +270,31 @@ the health lights next to each resolver in Settings:
 `state` is the one verdict to show:
 
 - `healthy` — has answered, and is not currently failing.
-- `failing` — the breaker tripped and nothing has succeeded since (it is
-  retried every 30 s), **or** the upstream has never answered a single
-  query. `sick` is the breaker half of that and stays true for the whole
-  outage, not only during the cooldown window.
-- `unused` — never asked since the last restart: normal for a backup behind
-  healthy primaries, and *untested* rather than healthy.
+- `failing` — the breaker tripped and nothing has succeeded since, **or**
+  the upstream has never answered a single query. Minos probes a failing
+  upstream itself every 30 s (a `. NS` question), so a backup that only
+  queries never reach still turns healthy when it recovers. `sick` is the
+  breaker half of that and stays true for the whole outage.
+- `unused` — not asked anything yet. Minos probes every upstream shortly
+  after it starts, and any no query has reached for 30 minutes, so this is
+  brief.
+
+Probes count as requests in these counters and in `/metrics`.
+
+### `POST /api/upstreams/test`
+
+Asks one upstream a test question now — the **Test** button in Settings.
+The body is an upstream, saved or not: `{"address": "https://9.9.9.9/dns-query", "protocol": "doh"}`
+(validated like a saved one; `400` otherwise). The answer:
+
+```json
+{"ok": true, "ms": 8.0, "rcode": "NOERROR", "configured": true}
+{"ok": false, "ms": 0, "error": "dial tcp 192.0.2.1:853: i/o timeout", "configured": false}
+```
+
+`configured` is true when the upstream is one Minos uses; the result then
+counts towards its health, so a passing test turns a failing light green at
+once. An unsaved upstream is tested on its own and leaves no record.
 
 `last_success`, `last_failure` and `last_error` are omitted until they
 happen. Counters are process-lifetime and reset for an address whose
