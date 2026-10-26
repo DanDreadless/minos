@@ -24,6 +24,11 @@ is protected, with a clear answer to "why was this blocked?" one click away.
   the rule that caught it, and **Allow** is right there on the row — never
   more than two clicks from seeing a block to fixing it. Or allow it for
   just an hour.
+- **Spots infected devices.** Not just domains on a list: a device looking
+  up many random-looking domains (malware hunting for its control server),
+  sending data out hidden in long DNS names, or reaching for known
+  malicious domains is flagged by name — tuned on 90 days of a real home
+  network to stay quiet when nothing is wrong.
 - **Notices when blocking breaks something.** A device retrying a blocked
   name, the way an app does when it has stopped working, shows up as
   "Something may be broken on Living room TV" with Allow, Allow 1 h and
@@ -128,6 +133,7 @@ As of October 2026, against each project's current release. ✅ yes ·
 |---|:-:|:-:|:-:|
 | Names the list *and rule* behind every block, with one-click allow | ✅ | ◐ | ✅ |
 | Audit (dry-run) blocklists | ✅ | — | — |
+| Flags infected devices by behaviour (DGA, DNS tunnelling) | ✅ | — | — |
 | In-process DNSSEC validation | ✅ | — | — |
 | One-click update from the web interface | ✅ signed, auto-rollback | — | ✅ |
 | Encrypted DNS for devices (DoT / DoH / DoQ / HTTP/3) | ✅ | — | ✅ |
