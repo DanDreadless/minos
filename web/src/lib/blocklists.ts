@@ -17,7 +17,7 @@
 // skips nothing, and lands near the recorded size.
 //
 // Sizes are compiled rule counts, not the publisher's marketing figure,
-// and were re-measured 2026-08-27 (URLhaus replacement: 2026-10-23).
+// and were re-measured 2026-08-27 (URLhaus replacement: 2026-10-23; Hagezi TIF: 2026-10-26).
 //
 // Mirrors are fallbacks Minos uses only when the primary is retired, refuses
 // us, or the copy in force has gone stale — never for a passing blip, since
@@ -114,7 +114,7 @@ export const blocklistPresets: BlocklistPreset[] = [
     id: 'hagezi-tif',
     label: 'Hagezi Threat Intelligence',
     note: 'Malware, phishing & scam domains — the medium cut; the full feed is ~2M domains and would fill a Pi\'s memory budget on its own',
-    size: '≈700k domains',
+    size: '≈435k domains',
     tier: 'security',
     list: {
       name: 'Hagezi TIF',

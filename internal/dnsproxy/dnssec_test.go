@@ -35,11 +35,16 @@ func newMiniZone(t *testing.T, name string) *miniZone {
 		Protocol:  3,
 		Algorithm: dns.ECDSAP256SHA256,
 	}
-	priv, err := key.Generate(256)
-	if err != nil {
-		t.Fatal(err)
+	for {
+		priv, err := key.Generate(256)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// KeyTag 0 cannot sign (miekg/dns: "bad key"); draw again.
+		if key.KeyTag() != 0 {
+			return &miniZone{name: name, key: key, priv: priv.(crypto.Signer)}
+		}
 	}
-	return &miniZone{name: name, key: key, priv: priv.(crypto.Signer)}
 }
 
 func (z *miniZone) sign(t *testing.T, rrset []dns.RR) *dns.RRSIG {

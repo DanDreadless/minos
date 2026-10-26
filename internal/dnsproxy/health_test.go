@@ -76,7 +76,9 @@ func TestTrippedBackupRecoversWhilePrimaryAnswers(t *testing.T) {
 func TestIdleBackupIsProbed(t *testing.T) {
 	oldTick := probeTick
 	probeTick = time.Hour // drive probeDue by hand
-	defer func() { probeTick = oldTick }()
+	// Restored after the server's own cleanup (cleanups run last-first),
+	// never while its probe loop is running — the race CI caught.
+	t.Cleanup(func() { probeTick = oldTick })
 	primary, _ := startCountingUpstream(t)
 	backup, backupCount := startCountingUpstream(t)
 	srv, _ := startProxyCfg(t, "zero_ip", func(c *config.Config) {
