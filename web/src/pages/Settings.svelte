@@ -562,6 +562,28 @@
   type Light = 'healthy' | 'failing' | 'unused' | 'unsaved';
   let savedUpstreams = new Set<string>();
 
+  // Test results by "protocol address", so a result stays with its row when
+  // rows move. Testing a saved resolver also refreshes the lights: a pass
+  // turns a failing one green at once.
+  type TestOutcome = { busy: boolean; ok?: boolean; text?: string };
+  let tests: Record<string, TestOutcome> = {};
+  const testKey = (u: Upstream): string => `${u.protocol} ${u.address.trim()}`;
+
+  async function testUpstream(u: Upstream): Promise<void> {
+    const key = testKey(u);
+    tests = { ...tests, [key]: { busy: true } };
+    try {
+      const r = await api.testUpstream({ address: u.address.trim(), protocol: u.protocol });
+      tests = {
+        ...tests,
+        [key]: { busy: false, ok: r.ok, text: r.ok ? copy.settings.upstreamTestOK(r.ms, r.rcode ?? '') : copy.settings.upstreamTestFailed(r.error ?? '') },
+      };
+      if (r.configured) await loadUpstreamHealth();
+    } catch (e) {
+      tests = { ...tests, [key]: { busy: false, ok: false, text: e instanceof Error ? e.message : String(e) } };
+    }
+  }
+
   function healthState(
     u: Upstream,
     health: Record<string, UpstreamHealth>,
@@ -664,10 +686,19 @@
         <button title="Move down" disabled={i === upstreams.length - 1} on:click={() => moveUpstream(i, 1)}>
           ↓
         </button>
+        <button
+          class="test"
+          title={copy.settings.upstreamTestHint}
+          disabled={!u.address.trim() || tests[testKey(u)]?.busy}
+          on:click={() => testUpstream(u)}>{tests[testKey(u)]?.busy ? copy.settings.upstreamTesting : copy.settings.upstreamTest}</button
+        >
         <button class="danger" title="Remove" disabled={upstreams.length === 1} on:click={() => removeUpstream(i)}>
           ✕
         </button>
       </div>
+      {#if tests[testKey(u)]?.text}
+        <p class="test-result" class:ok={tests[testKey(u)]?.ok} role="status">{tests[testKey(u)]?.text}</p>
+      {/if}
     {/each}
     <label class="field">
       <span>{copy.settings.dnssecLabel}</span>
@@ -1253,6 +1284,22 @@
 
   .upstream-row .preset {
     max-width: 15rem;
+  }
+
+  .test-result {
+    margin: -0.25rem 0 0.6rem 5.6rem;
+    font-size: 0.8rem;
+    color: var(--blocked);
+  }
+
+  .test-result.ok {
+    color: var(--allowed);
+  }
+
+  @media (max-width: 640px) {
+    .test-result {
+      margin-left: 0;
+    }
   }
 
   .order {

@@ -47,6 +47,8 @@ type Server struct {
 	udp     *dns.Server
 	tcp     *dns.Server
 	udpAddr net.Addr
+	// stopProbes ends the upstream health-probe loop (health.go).
+	stopProbes context.CancelFunc
 
 	// Client-facing encrypted DNS; nil when dns.tls is not configured.
 	// File-only settings like the plain listen address: restart to change.
@@ -504,6 +506,9 @@ func (s *Server) Start() error {
 			slog.Error("tcp dns server stopped", "err", err)
 		}
 	}()
+	probes, stop := context.WithCancel(context.Background())
+	s.stopProbes = stop
+	go s.runHealthProbes(probes)
 	slog.Info("dns server listening", "addr", s.udpAddr.String())
 	return nil
 }
@@ -548,6 +553,9 @@ func bindUDPTCP(listen string, listenTCP func(network, addr string) (net.Listene
 func (s *Server) UDPAddr() net.Addr { return s.udpAddr }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.stopProbes != nil {
+		s.stopProbes()
+	}
 	var firstErr error
 	for _, srv := range []*dns.Server{s.udp, s.tcp} {
 		if srv == nil {
@@ -984,8 +992,14 @@ func (s *Server) forward(ctx context.Context, req *dns.Msg, qname string) (resp 
 				continue // already attempted this query
 			}
 			began := time.Now()
+			short := budgetShort(ctx)
 			resp, err := up.Exchange(ctx, req)
-			s.trackUpstream(up.Name(), time.Since(began), err)
+			// An exchange cut off only because this query ran out of time
+			// (a slow primary used most of it) says nothing about the
+			// upstream, so it is not held against it.
+			if err == nil || !short || ctx.Err() == nil {
+				s.trackUpstream(up.Name(), time.Since(began), err)
+			}
 			if err == nil {
 				return resp, up.Name(), false, nil
 			}
@@ -1001,6 +1015,13 @@ func (s *Server) forward(ctx context.Context, req *dns.Msg, qname string) (resp 
 		lastErr = fmt.Errorf("no upstreams configured")
 	}
 	return nil, lastName, false, fmt.Errorf("all upstreams failed: %w", lastErr)
+}
+
+// budgetShort reports whether ctx leaves an upstream less than its own
+// timeout to answer in.
+func budgetShort(ctx context.Context) bool {
+	d, ok := ctx.Deadline()
+	return ok && time.Until(d) < upstreamTimeout
 }
 
 // blockedResponse synthesizes the condemned answer per policy: NXDOMAIN,

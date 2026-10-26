@@ -54,6 +54,14 @@ export interface LogEntry {
   dnssec?: 'secure' | 'insecure' | 'bogus' | 'indeterminate';
 }
 
+export interface UpstreamTestResult {
+  ok: boolean;
+  ms: number;
+  rcode?: string;
+  error?: string;
+  configured: boolean;
+}
+
 export interface UpdateInfo {
   current: string;
   latest?: string;
@@ -500,6 +508,9 @@ export const api = {
   totpEnable: (code: string) => request<unknown>('POST', '/api/auth/totp/enable', { code }),
   totpDisable: (current: string) => request<unknown>('DELETE', '/api/auth/totp', { current }),
   upstreams: () => request<UpstreamHealth[]>('GET', '/api/upstreams'),
+  // TestUpstream asks one resolver a test question now; a saved one's
+  // health light updates with the result.
+  testUpstream: (u: Upstream) => request<UpstreamTestResult>('POST', '/api/upstreams/test', u),
   update: () => request<UpdateInfo>('GET', '/api/update'),
   updateProgress: () => request<UpdateProgress>('GET', '/api/update/progress'),
   installUpdate: () => request<unknown>('POST', '/api/update/install'),

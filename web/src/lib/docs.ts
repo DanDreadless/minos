@@ -385,7 +385,8 @@ export const docs: Section[] = [
         label: 'Upstream resolvers',
         key: 'dns.upstreams',
         default: 'Cloudflare: https://1.1.1.1/dns-query (DoH), then 1.0.0.1:853 (DoT)',
-        effect: 'Where allowed lookups are sent, in order. A resolver that fails three times in a row is skipped for 30 seconds, then retried.',
+        effect:
+          'Where allowed lookups are sent, in order. A resolver that fails three times in a row is skipped, and Minos checks it again every 30 seconds until it answers — the light turns green by itself. Backups are also checked every 30 minutes, so a dead one shows before the day it is needed. Test asks a resolver a question now, saved or not.',
         applies: 'live',
         where: 'Settings → DNS',
         fields: [

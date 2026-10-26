@@ -1102,7 +1102,20 @@ This is security software; hold it to that standard.
   The old `now < sickUntil` check read a never-recovered upstream as healthy
   between trips — a dead backup sat green for 49 days. The UI shows the
   server's `state`; never re-derive one client-side. Health lives on the same name-keyed counters as
-  /metrics so it survives config swaps.- **`net.SplitHostPort` validates almost nothing** (field bug, v0.21.2): it
+  /metrics so it survives config swaps. **Health probes** (field bug, October
+  2026, `health.go`): forward() stops at the first answer, so while the
+  primary answered a tripped backup was never asked again and stayed red
+  for good (a blip that fails primary and backup together is enough). A
+  loop every 15 s sends `. NS` to each default upstream whose cooldown has
+  lapsed — claimed with the same CAS as available(), so a probe and a real
+  query never both test it — and to any no query has reached for 30 min
+  (and every unused one shortly after start). Probes count like exchanges
+  (a pass clears the breaker and announces the recovery). Settings' Test
+  button is `POST /api/upstreams/test` → `TestUpstream`: a configured
+  upstream is tested through its live instance and updates its health; an
+  unsaved row gets a throwaway instance and leaves no record. An exchange
+  cut off only because the *query's* time ran out (`budgetShort` + ctx
+  expired) is not charged to the upstream.- **`net.SplitHostPort` validates almost nothing** (field bug, v0.21.2): it
   splits on the last colon, so `https://8.8.8.8/dns-query` "parses" as host
   `https`, port `//8.8.8.8/dns-query`. A DoH URL saved under protocol `dot`
   passed validation and then failed 100% of exchanges for 49 days, unnoticed.

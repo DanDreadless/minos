@@ -161,6 +161,15 @@ func newDoQUpstream(addr string, roots *x509.CertPool) (*doqUpstream, error) {
 
 func (d *doqUpstream) Name() string { return d.addr }
 
+// Close ends the open connection, if any (a temporary upstream built for a
+// Settings test).
+func (d *doqUpstream) Close() error {
+	if c := d.conn.Swap(nil); c != nil {
+		return c.CloseWithError(doqNoError, "")
+	}
+	return nil
+}
+
 // connection returns a live connection, dialling one if there is none or
 // the last one died. stale is a connection the caller found broken.
 func (d *doqUpstream) connection(ctx context.Context, stale *quic.Conn) (*quic.Conn, error) {

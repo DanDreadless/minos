@@ -1,9 +1,9 @@
 // Package api exposes the REST + WebSocket surface consumed by the web UI
-// and the CLI. Field names stay boring and literal ("blocked", "allowlist");
-// the lore lives in the frontend.
+// and the CLI. Field names stay boring and literal ("blocked", "allowlist").
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -123,6 +123,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/status", s.handleStatus)
 		r.Get("/host", s.handleHost)
 		r.Get("/upstreams", s.handleUpstreams)
+		r.Post("/upstreams/test", s.handleUpstreamTest)
 		r.Get("/update", s.handleUpdate)
 		r.Get("/update/progress", s.handleUpdateProgress)
 		r.Post("/update/install", s.handleUpdateInstall)
@@ -304,6 +305,48 @@ func (s *Server) handleUpstreams(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// upstreamTester is the proxy's TestUpstream; optional so stats-only fakes
+// need not implement it.
+type upstreamTester interface {
+	TestUpstream(ctx context.Context, u config.Upstream) dnsproxy.UpstreamTest
+}
+
+type upstreamTestResult struct {
+	OK    bool    `json:"ok"`
+	Ms    float64 `json:"ms"`
+	Rcode string  `json:"rcode,omitempty"`
+	Error string  `json:"error,omitempty"`
+	// Configured: one Minos uses, so its health light was updated too.
+	Configured bool `json:"configured"`
+}
+
+// handleUpstreamTest asks one upstream a test question now. The body is an
+// upstream (address + protocol), saved or not.
+func (s *Server) handleUpstreamTest(w http.ResponseWriter, r *http.Request) {
+	var u config.Upstream
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&u); err != nil {
+		writeError(w, http.StatusBadRequest, "body must be JSON with address and protocol")
+		return
+	}
+	if err := config.ValidateUpstream(u); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	t, ok := s.cache.(upstreamTester)
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "upstream testing is not available")
+		return
+	}
+	res := t.TestUpstream(r.Context(), u)
+	writeJSON(w, http.StatusOK, upstreamTestResult{
+		OK:         res.OK,
+		Ms:         float64(res.RTT.Microseconds()) / 1000,
+		Rcode:      res.Rcode,
+		Error:      res.Err,
+		Configured: res.Configured,
+	})
 }
 
 func (s *Server) handleQueryLog(w http.ResponseWriter, r *http.Request) {

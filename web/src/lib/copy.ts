@@ -688,9 +688,14 @@ export const copy = {
     // Failing never claims the others are answering: they may be failing too.
     upstreamFailing: (lastSuccess: string, error: string) =>
       `Failing — ${lastSuccess ? `last answered ${lastSuccess}` : 'has not answered a single query since the last restart'}.` +
-      `${error ? ` Last error: ${error}.` : ''} Minos skips it and retries every 30 seconds.`,
-    upstreamUnused:
-      'Not used yet — the resolvers above it have answered everything, so this one has not been tested. It is tried if they fail.',
+      `${error ? ` Last error: ${error}.` : ''} Minos skips it and checks it again every 30 seconds — or press Test.`,
+    upstreamUnused: 'Not checked yet — Minos checks every resolver shortly after it starts. Press Test to check it now.',
+    upstreamTest: 'Test',
+    upstreamTesting: 'Testing…',
+    upstreamTestHint: 'Ask this resolver a test question now',
+    upstreamTestOK: (ms: number, rcode: string) =>
+      `Answered in ${ms < 10 ? ms.toFixed(1) : Math.round(ms)} ms${rcode && rcode !== 'NOERROR' ? ` (${rcode})` : ''}.`,
+    upstreamTestFailed: (error: string) => `No answer${error ? `: ${error.replace(/\.+$/, '')}` : ''}.`,
     upstreamUnsaved: 'Not saved yet — save to start using this resolver.',
     dnssecLabel: 'DNSSEC validation',
     dnssecOff: 'Off — trust the upstream resolvers (default)',
