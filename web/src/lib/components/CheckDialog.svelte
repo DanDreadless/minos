@@ -3,6 +3,7 @@
   import { api, type CheckResult } from '../api';
   import { checkOpen } from '../check';
   import { copy } from '../copy';
+  import { fmtClock } from '../format';
   import { docketHref } from '../router';
   import { notify, notifyError } from '../toast';
 
@@ -12,6 +13,8 @@
   let query = '';
   let checked: CheckResult | null = null;
   let checking = false;
+  // TempUntil is when a temporary allow deciding the checked name ends.
+  let tempUntil = '';
   let input: HTMLInputElement;
 
   $: if ($checkOpen) void focusInput();
@@ -30,12 +33,30 @@
     return v.replace(/:\d+$/, '').replace(/\.$/, '');
   }
 
+  async function judge(d: string): Promise<void> {
+    checked = await api.check(d);
+    tempUntil = '';
+    if (checked.list === 'temporary-allow') {
+      const t = (await api.temporaryAllows().catch(() => [])).find((x) => x.domain === checked?.rule);
+      if (t) tempUntil = fmtClock(t.until);
+    }
+  }
+
+  async function endTemporary(d: string): Promise<void> {
+    try {
+      await api.removeTemporaryAllow(d);
+      if (checked) await judge(checked.domain);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
   async function check(): Promise<void> {
     const d = hostOf(query);
     if (!d) return;
     checking = true;
     try {
-      checked = await api.check(d);
+      await judge(d);
     } catch (e) {
       checked = null;
       notifyError(e);
@@ -48,7 +69,17 @@
     try {
       await api.pardon(d);
       notify(copy.allow.done(d));
-      checked = await api.check(d);
+      await judge(d);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function allowHour(d: string): Promise<void> {
+    try {
+      const r = await api.allowFor(d, 60);
+      notify(r.until ? copy.allow.doneFor(r.domain, fmtClock(r.until)) : copy.allow.alreadyAlways(r.domain));
+      await judge(d);
     } catch (e) {
       notifyError(e);
     }
@@ -58,7 +89,7 @@
     try {
       await api.sentence(d);
       notify(copy.block.done(d));
-      checked = await api.check(d);
+      await judge(d);
     } catch (e) {
       notifyError(e);
     }
@@ -68,8 +99,9 @@
     checkOpen.set(false);
   }
 
-  function checkText(r: CheckResult): string {
+  function checkText(r: CheckResult, until: string): string {
     if (r.verdict === 'blocked') return copy.domains.checkBlocked(r.list, r.rule);
+    if (r.list === 'temporary-allow' && until) return copy.domains.checkAllowedFor(r.rule, until);
     return r.rule ? copy.domains.checkAllowedByRule(r.rule) : copy.domains.checkAllowed;
   }
 
@@ -106,10 +138,16 @@
     {#if checked}
       <div class="result">
         <p class="domain">{checked.domain}</p>
-        <p class:blocked={checked.verdict === 'blocked'}>{checkText(checked)}</p>
+        <p class:blocked={checked.verdict === 'blocked'}>{checkText(checked, tempUntil)}</p>
         <div class="actions">
-          {#if checked.verdict === 'blocked'}
+          {#if checked.list === 'temporary-allow'}
+            <button class="primary" on:click={() => checked && allow(checked.rule)}>{copy.domains.checkAllowForGood}</button>
+            <button on:click={() => checked && endTemporary(checked.rule)}>{copy.domains.checkEndNow}</button>
+          {:else if checked.verdict === 'blocked'}
             <button class="primary" on:click={() => checked && allow(checked.domain)}>{copy.allow.action}</button>
+            <button title={copy.allow.hourHint} on:click={() => checked && allowHour(checked.domain)}
+              >{copy.allow.hourActionLong}</button
+            >
           {:else}
             <button on:click={() => checked && block(checked.domain)}>{copy.block.action}</button>
           {/if}

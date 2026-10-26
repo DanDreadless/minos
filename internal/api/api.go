@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"minos/internal/applog"
+	"minos/internal/breakage"
 	"minos/internal/clients"
 	"minos/internal/config"
 	"minos/internal/dnsproxy"
@@ -78,6 +79,7 @@ type Server struct {
 	// updateHelper is where install.sh puts the root updater; its presence
 	// is what turns the one-click update on (tests point it elsewhere).
 	updateHelper string
+	breakage     *breakage.Detector // may be nil: no suggestions
 }
 
 func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
@@ -167,6 +169,10 @@ func (s *Server) Router() http.Handler {
 		r.Post("/allowlist", s.handleAddDomain("allowlist"))
 		r.Delete("/allowlist/{domain}", s.handleDeleteDomain("allowlist"))
 		r.Delete("/allowlist", s.handleDeleteDomain("allowlist")) // ?domain=, for /regex/ rules
+		r.Get("/allowlist/temporary", s.handleGetTemporaryAllows)
+		r.Get("/suggestions", s.handleSuggestions)
+		r.Post("/suggestions/dismiss", s.handleDismissSuggestion)
+		r.Delete("/allowlist/temporary", s.handleDeleteTemporaryAllow) // ?domain=
 		r.Get("/denylist", s.handleGetDomains("denylist"))
 		r.Post("/denylist", s.handleAddDomain("denylist"))
 		r.Delete("/denylist/{domain}", s.handleDeleteDomain("denylist"))
@@ -502,9 +508,19 @@ func (s *Server) handleAddDomain(kind string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Domain string `json:"domain"`
+			// Minutes, on the allowlist only, makes the allow temporary.
+			Minutes int `json:"minutes"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "body must be JSON: {\"domain\": \"...\"}")
+			return
+		}
+		if body.Minutes != 0 {
+			if kind != "allowlist" {
+				writeError(w, http.StatusBadRequest, "minutes applies to allowed domains only")
+				return
+			}
+			s.addTemporaryAllow(w, body.Domain, body.Minutes)
 			return
 		}
 		norm, err := domainOrRegex(body.Domain)
@@ -520,8 +536,15 @@ func (s *Server) handleAddDomain(kind string) http.HandlerFunc {
 				}
 			}
 			*list = append(*list, norm)
+			if kind == "allowlist" {
+				// A permanent allow supersedes a temporary one.
+				c.Blocking.TemporaryAllows = withoutTemporary(c.Blocking.TemporaryAllows, norm)
+			}
 			return nil
 		})
+		if err == nil && kind == "allowlist" && s.breakage != nil {
+			s.breakage.Resolve(norm)
+		}
 		if errors.Is(err, errAlreadyExists) {
 			writeJSON(w, http.StatusOK, map[string]string{"domain": norm, "status": "unchanged"})
 			return
@@ -535,6 +558,82 @@ func (s *Server) handleAddDomain(kind string) http.HandlerFunc {
 }
 
 var errAlreadyExists = errors.New("already present")
+
+// addTemporaryAllow allows domain for minutes, replacing any earlier
+// temporary allow for it. A domain already allowed for good is left alone.
+func (s *Server) addTemporaryAllow(w http.ResponseWriter, domain string, minutes int) {
+	norm := filter.NormalizeDomain(strings.TrimSpace(domain))
+	if norm == "" {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("%q is not a valid domain (temporary allows take a domain, not a /regex/ rule)", domain))
+		return
+	}
+	d := time.Duration(minutes) * time.Minute
+	if d <= 0 || d > config.MaxTemporaryAllow {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("minutes must be 1-%d", int(config.MaxTemporaryAllow/time.Minute)))
+		return
+	}
+	until := time.Now().Add(d).UTC().Truncate(time.Second)
+	err := s.store.Update(func(c *config.Config) error {
+		for _, a := range c.Blocking.Allowlist {
+			if a == norm {
+				return errAlreadyExists
+			}
+		}
+		c.Blocking.TemporaryAllows = append(withoutTemporary(c.Blocking.TemporaryAllows, norm),
+			config.TemporaryAllow{Domain: norm, Until: until})
+		return nil
+	})
+	if s.breakage != nil && (err == nil || errors.Is(err, errAlreadyExists)) {
+		s.breakage.Resolve(norm)
+	}
+	if errors.Is(err, errAlreadyExists) {
+		writeJSON(w, http.StatusOK, map[string]string{"domain": norm, "status": "unchanged"})
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"domain": norm, "status": "added", "until": until})
+}
+
+func withoutTemporary(list []config.TemporaryAllow, domain string) []config.TemporaryAllow {
+	out := make([]config.TemporaryAllow, 0, len(list))
+	for _, t := range list {
+		if t.Domain != domain {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func (s *Server) handleGetTemporaryAllows(w http.ResponseWriter, _ *http.Request) {
+	out := s.store.Get().Blocking.ActiveTemporaryAllows(time.Now())
+	if out == nil {
+		out = []config.TemporaryAllow{}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) handleDeleteTemporaryAllow(w http.ResponseWriter, r *http.Request) {
+	norm := filter.NormalizeDomain(r.URL.Query().Get("domain"))
+	found := false
+	err := s.store.Update(func(c *config.Config) error {
+		kept := withoutTemporary(c.Blocking.TemporaryAllows, norm)
+		found = len(kept) != len(c.Blocking.TemporaryAllows)
+		c.Blocking.TemporaryAllows = kept
+		return nil
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("%q is not allowed temporarily", norm))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"domain": norm, "status": "removed"})
+}
 
 // domainOrRegex accepts a domain (normalized) or a /pattern/ regex rule
 // (kept as written, after checking it compiles as RE2).

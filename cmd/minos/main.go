@@ -23,6 +23,7 @@ import (
 	"minos/internal/api"
 	"minos/internal/applog"
 	"minos/internal/auth"
+	"minos/internal/breakage"
 	"minos/internal/clients"
 	"minos/internal/config"
 	"minos/internal/dnsproxy"
@@ -221,6 +222,7 @@ func serve(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), shutdownSignals...)
 	defer stop()
 	go mgr.Run(ctx)
+	go mgr.RunTemporaryAllows(ctx)
 	go reg.Run(ctx)
 
 	checker := updates.NewChecker(version, store)
@@ -257,6 +259,24 @@ func serve(args []string) error {
 		notifier.Publish(notify.UpdateResultEvent(p.State, p.From, p.Version, p.Message))
 	})
 	apiSrv.SetNotifier(notifier)
+	// "Something broke" suggestions: read off the query-log stream, so the
+	// query path never pays; the chronic check asks the log's history.
+	broken := breakage.New(func(ctx context.Context, client, domain string, since, before time.Time) (int, error) {
+		rows, err := qlog.QueryHistory(ctx, querylog.HistoryFilter{
+			Domain: domain, Clients: []string{client}, Verdict: querylog.VerdictBlocked, Since: since,
+		}, breakage.ChronicLimit+1, before)
+		return len(rows), err
+	})
+	broken.OnNew(func(s breakage.Suggestion) {
+		devs := deviceInfos(reg.Devices(store.Get()), []string{s.Client})
+		if len(devs) == 1 {
+			notifier.Publish(notify.BreakageEvent(devs[0], s.Domain, s.List, s.Count))
+		}
+	})
+	entries, stopEntries := qlog.Subscribe()
+	defer stopEntries()
+	go broken.Run(ctx, entries)
+	apiSrv.SetBreakage(broken)
 	apiSrv.SetAppLog(logRing, logLevelVar)
 	httpSrv := &http.Server{
 		Addr:              cfg.API.Listen,

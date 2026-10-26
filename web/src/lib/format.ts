@@ -15,6 +15,15 @@ export function fmtLogTime(iso: string): string {
   return today ? d.toLocaleTimeString() : `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
 }
 
+// FmtClock renders a time of day without seconds ("15:42"), adding the
+// date when it is not today — for "allowed until …".
+export function fmtClock(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === now.toDateString() ? time : `${d.toLocaleDateString()} ${time}`;
+}
+
 // fmtLogTimeFull always renders the complete date + time.
 export function fmtLogTimeFull(iso: string): string {
   return new Date(iso).toLocaleString();

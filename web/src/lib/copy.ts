@@ -300,6 +300,15 @@ export const copy = {
     action: 'Allow',
     actionHint: 'Always allow this domain and its subdomains',
     done: (domain: string) => `${domain} is now always allowed.`,
+    hourAction: '1 h',
+    hourActionLong: 'Allow for 1 hour',
+    hourHint: 'Allow this domain and its subdomains for one hour, then block it again',
+    doneFor: (domain: string, until: string) => `${domain} is allowed until ${until}, then blocked again.`,
+    alreadyAlways: (domain: string) => `${domain} is already always allowed.`,
+    temporaryTitle: 'Allowed for a limited time',
+    temporaryHint: 'Blocked again by themselves when the time is up',
+    until: (time: string, left: string) => `Until ${time} · ${left} left`,
+    endNow: (domain: string) => `End the allow for ${domain} now`,
   },
 
   block: {
@@ -310,6 +319,15 @@ export const copy = {
 
   attention: {
     title: 'Needs attention',
+    broken: (device: string, domain: string, count: number, list: string) =>
+      `Something may be broken on ${device}: it asked for ${domain} ${count} times in a couple of minutes, and ${list} blocks it.`,
+    brokenAllow: 'Allow',
+    brokenAllowHint: 'Always allow this domain and its subdomains',
+    brokenHour: 'Allow 1 h',
+    brokenHourHint: 'Allow it for one hour, then block it again',
+    brokenDismiss: 'Dismiss',
+    brokenDismissHint: 'Not broken — do not suggest this again today',
+    brokenLookups: 'See lookups',
     noRules: 'Nothing is being blocked: no blocklist rules are loaded.',
     list: (name: string, state: string) =>
       ({
@@ -527,6 +545,10 @@ export const copy = {
     checkButton: 'Check',
     checkBlocked: (list: string, rule: string) => `Blocked — matched "${rule}" in ${list}.`,
     checkAllowedByRule: (rule: string) => `Allowed — by "${rule}".`,
+    checkAllowedFor: (rule: string, until: string) =>
+      `Allowed for now — "${rule}" is allowed until ${until}, then blocked again.`,
+    checkAllowForGood: 'Allow for good',
+    checkEndNow: 'End now',
     checkAllowed: 'Allowed — no rule matches; it is looked up upstream as normal.',
     pardonsTitle: 'Allowed domains',
     pardonsHint: 'Always allowed, with their subdomains, whatever the blocklists say. Write /pattern/ for a regex rule.',
@@ -829,6 +851,7 @@ export const copy = {
       { types: ['list_recovered', 'upstream_recovered'], label: 'Recoveries', hint: 'A list or resolver that was reported failing works again' },
       { types: ['update_available'], label: 'Minos updates', hint: 'A new release is out (needs the update check on)' },
       { types: ['acme_renewal_failed'], label: 'Certificate problems', hint: 'The DoT/DoH certificate cannot be renewed' },
+      { types: ['breakage_suspected'], label: 'Something may be broken', hint: 'A device keeps retrying a blocked name, the way an app does when blocking breaks it' },
     ] as { types: string[]; label: string; hint: string }[],
     dnsDownNote: '"DNS is down" — every resolver failing — is always sent, at urgent priority.',
     quietTitle: 'Quiet hours',

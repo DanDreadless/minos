@@ -1,7 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { api, type ConfigView, type ListStatus, type Status, type UpstreamHealth } from '../api';
+  import { api, type ConfigView, type ListStatus, type Status, type Suggestion, type UpstreamHealth } from '../api';
   import { copy } from '../copy';
+  import { fmtClock } from '../format';
+  import { docketHref } from '../router';
+  import { notify, notifyError } from '../toast';
   import { bootOf, hasUnseen, logSeen } from '../logseen';
 
   // Every health signal Minos has, in one place, each with the link that
@@ -21,14 +24,41 @@
   let lists: ListStatus[] = [];
   let upstreams: UpstreamHealth[] = [];
   let cfg: ConfigView | null = null;
+  let suggestions: Suggestion[] = [];
   let timer: ReturnType<typeof setInterval> | null = null;
 
   async function load(): Promise<void> {
     // Each source is optional: a failure just leaves its signals out.
-    const [l, u, c] = await Promise.allSettled([api.lists(), api.upstreams(), api.getConfig()]);
+    const [l, u, c, sg] = await Promise.allSettled([api.lists(), api.upstreams(), api.getConfig(), api.suggestions()]);
     if (l.status === 'fulfilled') lists = l.value;
     if (u.status === 'fulfilled') upstreams = u.value;
     if (c.status === 'fulfilled') cfg = c.value;
+    if (sg.status === 'fulfilled') suggestions = sg.value;
+  }
+
+  // The three answers to "something may be broken". Each removes the line.
+  async function allow(s: Suggestion, minutes: number): Promise<void> {
+    try {
+      if (minutes) {
+        const r = await api.allowFor(s.domain, minutes);
+        notify(r.until ? copy.allow.doneFor(r.domain, fmtClock(r.until)) : copy.allow.alreadyAlways(r.domain));
+      } else {
+        await api.pardon(s.domain);
+        notify(copy.allow.done(s.domain));
+      }
+      suggestions = suggestions.filter((x) => x.domain !== s.domain);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function dismiss(s: Suggestion): Promise<void> {
+    try {
+      await api.dismissSuggestion(s.client, s.domain);
+      suggestions = suggestions.filter((x) => x !== s);
+    } catch (e) {
+      notifyError(e);
+    }
   }
 
   const BAD_LISTS = ['unavailable', 'retired', 'unauthorized'];
@@ -81,10 +111,28 @@
   });
 </script>
 
-{#if items.length}
+{#if items.length || suggestions.length}
   <section class="card attention" aria-label={copy.attention.title}>
     <h2>{copy.attention.title}</h2>
     <ul>
+      {#each suggestions as s (s.client + ' ' + s.domain)}
+        <li class="warn broken">
+          <span class="mark" aria-hidden="true"></span>
+          <span class="text">
+            {copy.attention.broken(s.device || s.client, s.domain, s.count, s.list)}
+            <a href={docketHref({ client: s.client, domain: s.domain })}>{copy.attention.brokenLookups}</a>
+          </span>
+          <span class="fix">
+            <button class="primary" title={copy.attention.brokenAllowHint} on:click={() => allow(s, 0)}
+              >{copy.attention.brokenAllow}</button
+            >
+            <button title={copy.attention.brokenHourHint} on:click={() => allow(s, 60)}>{copy.attention.brokenHour}</button>
+            <button class="link" title={copy.attention.brokenDismissHint} on:click={() => dismiss(s)}
+              >{copy.attention.brokenDismiss}</button
+            >
+          </span>
+        </li>
+      {/each}
       {#each items as it (it.text)}
         <li class={it.severity}>
           <span class="mark" aria-hidden="true"></span>
@@ -145,5 +193,48 @@
     flex: none;
     white-space: nowrap;
     font-size: 0.82rem;
+  }
+
+  /* Dot, sentence, buttons; on a phone the buttons drop under the sentence
+     and the dot stays beside it. */
+  li.broken {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 0.6rem;
+  }
+
+  li.broken .text a {
+    margin-left: 0.4rem;
+  }
+
+  .fix {
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: center;
+    flex: none;
+  }
+
+  .fix button {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+  }
+
+  .fix .link {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+
+  @media (max-width: 640px) {
+    li.broken {
+      grid-template-columns: auto minmax(0, 1fr);
+      row-gap: 0.45rem;
+    }
+
+    li.broken .fix {
+      grid-column: 2;
+    }
   }
 </style>

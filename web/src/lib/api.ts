@@ -54,6 +54,24 @@ export interface LogEntry {
   dnssec?: 'secure' | 'insecure' | 'bogus' | 'indeterminate';
 }
 
+// Suggestion: a device retrying a blocked name in a burst — an app that
+// blocking has probably broken.
+export interface Suggestion {
+  client: string;
+  device?: string;
+  domain: string;
+  list: string;
+  rule?: string;
+  count: number;
+  since: string;
+  last: string;
+}
+
+export interface TemporaryAllow {
+  domain: string;
+  until: string;
+}
+
 export interface UpstreamTestResult {
   ok: boolean;
   ms: number;
@@ -641,6 +659,15 @@ export const api = {
   allowlist: () => request<string[]>('GET', '/api/allowlist'),
   denylist: () => request<string[]>('GET', '/api/denylist'),
   pardon: (domain: string) => request<unknown>('POST', '/api/allowlist', { domain }),
+  // AllowFor allows a domain for a while; it is blocked again afterwards.
+  allowFor: (domain: string, minutes: number) =>
+    request<{ domain: string; until?: string; status: string }>('POST', '/api/allowlist', { domain, minutes }),
+  temporaryAllows: () => request<TemporaryAllow[]>('GET', '/api/allowlist/temporary'),
+  suggestions: () => request<Suggestion[]>('GET', '/api/suggestions'),
+  dismissSuggestion: (client: string, domain: string) =>
+    request<unknown>('POST', '/api/suggestions/dismiss', { client, domain }),
+  removeTemporaryAllow: (domain: string) =>
+    request<unknown>('DELETE', `/api/allowlist/temporary?domain=${encodeURIComponent(domain)}`),
   unpardon: (domain: string) =>
     request<unknown>('DELETE', `/api/allowlist?domain=${encodeURIComponent(domain)}`),
   sentence: (domain: string) => request<unknown>('POST', '/api/denylist', { domain }),

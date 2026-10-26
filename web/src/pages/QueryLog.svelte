@@ -4,7 +4,7 @@
   import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
   import { deviceNames, deviceSearch } from '../lib/devicenames';
-  import { fmtLogTime, fmtLogTimeFull } from '../lib/format';
+  import { fmtClock, fmtLogTime, fmtLogTimeFull } from '../lib/format';
   import { currentParams } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
   import {
@@ -279,6 +279,15 @@
       notifyError(e);
     } finally {
       exporting = '';
+    }
+  }
+
+  async function allowHour(domain: string): Promise<void> {
+    try {
+      const r = await api.allowFor(domain, 60);
+      notify(r.until ? copy.allow.doneFor(r.domain, fmtClock(r.until)) : copy.allow.alreadyAlways(r.domain));
+    } catch (e) {
+      notifyError(e);
     }
   }
 
@@ -564,6 +573,9 @@
               {#if e.verdict === 'blocked'}
                 <button class="row-action" title={copy.allow.actionHint} on:click={() => pardon(e.rule ?? e.qname)}
                   >{copy.allow.action}</button
+                >
+                <button class="row-action subtle" title={copy.allow.hourHint} on:click={() => allowHour(e.qname)}
+                  >{copy.allow.hourAction}</button
                 >
               {:else}
                 <button class="row-action subtle" title={copy.block.actionHint} on:click={() => sentence(e.qname)}

@@ -5,12 +5,14 @@
     type CustomService,
     type Group,
     type Service,
+    type TemporaryAllow,
   } from '../lib/api';
   import CustomServiceForm from '../lib/components/CustomServiceForm.svelte';
   import ServiceShuttle from '../lib/components/ServiceShuttle.svelte';
   import { checkOpen } from '../lib/check';
   import { confirmDialog } from '../lib/confirm';
   import { copy } from '../lib/copy';
+  import { fmtClock } from '../lib/format';
   import { notify, notifyError } from '../lib/toast';
 
   // Which tab this is: what you always allow, or what you always block.
@@ -28,17 +30,22 @@
   let scope = '';
   let newPardon = '';
   let newSentence = '';
+  let temporary: TemporaryAllow[] = [];
+  // Now ticks each minute so the time left stays current.
+  let now = Date.now();
 
   async function load(): Promise<void> {
     try {
-      const [al, dl, svcs, grps] = await Promise.all([
+      const [al, dl, svcs, grps, tmp] = await Promise.all([
         api.allowlist(),
         api.denylist(),
         api.services(),
         api.groups(),
+        api.temporaryAllows(),
       ]);
       allowlist = al;
       denylist = dl;
+      temporary = tmp;
       applyServicesView(svcs);
       groups = grps;
     } catch (e) {
@@ -238,7 +245,31 @@
     }
   }
 
-  onMount(() => void load());
+  async function endTemporary(domain: string): Promise<void> {
+    try {
+      await api.removeTemporaryAllow(domain);
+      temporary = temporary.filter((t) => t.domain !== domain);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  function timeLeft(until: string, at: number): string {
+    const mins = Math.max(0, Math.round((new Date(until).getTime() - at) / 60000));
+    if (mins < 60) return `${mins} min`;
+    const h = Math.floor(mins / 60);
+    return mins % 60 ? `${h} h ${mins % 60} min` : `${h} h`;
+  }
+
+  onMount(() => {
+    void load();
+    const t = setInterval(() => {
+      now = Date.now();
+      // Drop ones that have run out; the server removes them too.
+      temporary = temporary.filter((x) => new Date(x.until).getTime() > now);
+    }, 30000);
+    return () => clearInterval(t);
+  });
 </script>
 
 <div class="intro">
@@ -281,6 +312,30 @@
     </ul>
   {/if}
 </section>
+
+{#if mode === 'allow' && temporary.length}
+  <section class="card">
+    <h2>
+      {copy.allow.temporaryTitle}
+      <span class="count">{temporary.length}</span>
+      <small>{copy.allow.temporaryHint}</small>
+    </h2>
+    <ul class="chips">
+      {#each temporary as t (t.domain)}
+        <li>
+          <span class="domain">{t.domain}</span>
+          <span class="until">{copy.allow.until(fmtClock(t.until), timeLeft(t.until, now))}</span>
+          <button
+            class="chip-x"
+            title={copy.allow.endNow(t.domain)}
+            aria-label={copy.allow.endNow(t.domain)}
+            on:click={() => endTemporary(t.domain)}>×</button
+          >
+        </li>
+      {/each}
+    </ul>
+  </section>
+{/if}
 
 <section class="card">
   <h2>
@@ -463,6 +518,11 @@
   .domain {
     font-family: var(--font-mono);
     overflow-wrap: anywhere;
+  }
+
+  .until {
+    color: var(--text-dim);
+    font-size: 0.78rem;
   }
 
   .chip-x {

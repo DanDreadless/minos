@@ -357,6 +357,9 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 	for _, d := range cfg.Blocking.Allowlist {
 		b.AddAllow("allowlist", d)
 	}
+	for _, t := range cfg.Blocking.ActiveTemporaryAllows(time.Now()) {
+		b.AddAllow(ListTemporaryAllow, t.Domain)
+	}
 	for _, d := range cfg.Blocking.Denylist {
 		b.AddDeny("denylist", d)
 	}
