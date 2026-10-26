@@ -57,7 +57,7 @@ func (s *Server) handleUpdateServices(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "body must be JSON with any of: {\"blocked\": [...], \"allowed\": [...]}")
 		return
 	}
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		if body.Blocked != nil {
 			c.Blocking.Services = *body.Blocked
 		}
@@ -112,7 +112,7 @@ func (s *Server) handleAddCustomService(w http.ResponseWriter, r *http.Request) 
 	if body.Allowed != nil {
 		cs.Allowed = *body.Allowed
 	}
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		name := ""
 		if body.Name != nil {
 			name = *body.Name
@@ -153,7 +153,7 @@ func (s *Server) handleUpdateCustomService(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "body must be JSON with any of: label, domains, allow_extra, blocked, allowed")
 		return
 	}
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		cs := services.FindCustom(c.Blocking.CustomServices, name)
 		if cs == nil {
 			return errNotFound
@@ -191,7 +191,7 @@ func (s *Server) handleUpdateCustomService(w http.ResponseWriter, r *http.Reques
 // sees a dangling reference.
 func (s *Server) handleDeleteCustomService(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		kept := c.Blocking.CustomServices[:0]
 		found := false
 		for _, cs := range c.Blocking.CustomServices {

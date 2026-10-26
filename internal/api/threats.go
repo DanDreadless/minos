@@ -72,7 +72,7 @@ func (s *Server) handleIgnoreThreatDomain(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "not a valid domain")
 		return
 	}
-	err := s.store.Update(func(c *config.Config) error {
+	err := s.update(r, func(c *config.Config) error {
 		if !slices.Contains(c.Threats.Ignore, norm) {
 			c.Threats.Ignore = append(c.Threats.Ignore, norm)
 		}

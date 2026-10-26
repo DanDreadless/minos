@@ -651,6 +651,21 @@ This is security software; hold it to that standard.
   trusting a throwaway key. Tested end to end in a systemd container (good
   update, rollback, downgrade, swapped archive, junk request); the path
   unit fires through DynamicUser's `/var/lib/minos` symlink.
+- **Settings history** (fixed decisions, October 2026, `config/history.go`):
+  `Store.UpdateAs(actor, note, fn)` records a version (a YAML snapshot in
+  `history/` beside the config, 0600, the newest `MaxHistory` = 100, ids
+  strictly increasing — Windows' clock is coarse); plain `Update` is
+  housekeeping and records nothing. Every API write goes through
+  `s.update(r, …)`, whose actor is how the auth middleware let the request
+  in plus its address (`withActor`), or "minos command" when the CLI's
+  `X-Minos-Client: cli` header is present (a label, not a credential). A
+  change is a version only when `ChangedKeys` (real values, key names out)
+  is non-empty, so a password change is recorded but nothing secret is.
+  Diffs are of `Redacted` snapshots. `RestoreVersion` keeps `keepLive`
+  fields from the current config — all of `api`, ntfy token, `dns.listen`,
+  `dns.tls`, query-log storage, list headers by list name — so a restore can
+  never lock anyone out or move a listener, and is itself recorded. A
+  failed history write is logged, never fatal to the change.
 - **Threat detection** (fixed decisions, October 2026, `internal/threats`):
   behaviour, not lists — `dga` (12+ distinct random-looking *registrable*
   domains per device in 10 min), `tunnel` (20+ distinct names under one

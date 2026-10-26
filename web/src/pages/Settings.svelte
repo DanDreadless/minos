@@ -11,6 +11,7 @@
   } from '../lib/api';
   import { confirmDialog } from '../lib/confirm';
   import HelpLink from '../lib/components/HelpLink.svelte';
+  import SettingsHistory from '../lib/components/SettingsHistory.svelte';
   import { copy } from '../lib/copy';
   import { fmtBytes, fmtLogTime } from '../lib/format';
   import { resolverPresets, matchPreset } from '../lib/resolvers';
@@ -1103,6 +1104,10 @@
     </label>
     <p class="note">{copy.settings.updateCheckHint}</p>
   </section>
+  {/if}
+
+  {#if tab === 'history'}
+    <SettingsHistory onRestored={load} />
   {/if}
 
   {#if tab === 'backup'}

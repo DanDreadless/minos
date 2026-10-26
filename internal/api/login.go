@@ -85,11 +85,11 @@ func (s *Server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c := s.store.Get().API
 		if c.Token == "" && c.PasswordHash == "" {
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, withActor(r, "Open access"))
 			return
 		}
 		if tokenOK(r, c.Token) {
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, withActor(r, "API token"))
 			return
 		}
 		if sessionOK(r, c) {
@@ -97,7 +97,7 @@ func (s *Server) auth(next http.Handler) http.Handler {
 				writeError(w, http.StatusForbidden, "cross-site request refused")
 				return
 			}
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, withActor(r, "Password sign-in"))
 			return
 		}
 		if c.PasswordHash != "" {
@@ -232,7 +232,7 @@ func (s *Server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := s.store.Update(func(c *config.Config) error {
+	if err := s.update(r, func(c *config.Config) error {
 		c.API.PasswordHash, c.API.SessionKey = hash, key
 		return nil
 	}); err != nil {
@@ -264,7 +264,7 @@ func (s *Server) handleRemovePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "the current password is wrong")
 		return
 	}
-	if err := s.store.Update(func(c *config.Config) error {
+	if err := s.update(r, func(c *config.Config) error {
 		c.API.PasswordHash, c.API.SessionKey, c.API.TOTPSecret = "", "", ""
 		return nil
 	}); err != nil {
@@ -288,7 +288,7 @@ func (s *Server) handleSignOutEverywhere(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := s.store.Update(func(c *config.Config) error {
+	if err := s.update(r, func(c *config.Config) error {
 		c.API.SessionKey = key
 		return nil
 	}); err != nil {
@@ -337,7 +337,7 @@ func (s *Server) handleTOTPEnable(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "that code does not match — check the time on your phone and try the next one")
 		return
 	}
-	if err := s.store.Update(func(c *config.Config) error {
+	if err := s.update(r, func(c *config.Config) error {
 		c.API.TOTPSecret = secret
 		return nil
 	}); err != nil {
@@ -362,7 +362,7 @@ func (s *Server) handleTOTPDisable(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "the current password is wrong")
 		return
 	}
-	if err := s.store.Update(func(c *config.Config) error {
+	if err := s.update(r, func(c *config.Config) error {
 		c.API.TOTPSecret = ""
 		return nil
 	}); err != nil {

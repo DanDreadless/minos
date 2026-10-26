@@ -24,6 +24,7 @@ immediately. "After restart" settings live only in `minos.yaml`; restart Minos a
 - [Settings → Access & security](#settings-access)
 - [Settings → System](#settings-system)
 - [Settings → Backup & import](#settings-backup)
+- [Settings → History](#settings-history)
 - [Command line](#cli)
 
 <a id="start"></a>
@@ -272,6 +273,17 @@ Query-log storage, the application log level, and updates.
 ## Settings → Backup & import
 
 Download the whole configuration (minos.yaml) as a backup, restore one, or bring your setup across from Pi-hole or AdGuard Home. Imports only add; nothing already configured is removed.
+
+<a id="settings-history"></a>
+
+## Settings → History
+
+Every settings change made here, by a script or with the minos command — when, who (password sign-in, API token, the minos command, with the address) and which settings — with a way back. The last 100 changes are kept, beside the config file.
+
+- Show changes opens the change itself, line by line. Passwords, tokens and keys are always hidden.
+- Undo last change restores the version before the latest change; Restore this version restores any earlier one.
+- Restoring never touches the password, authenticator codes, API token, notification and certificate secrets, list request headers, or settings that need a restart (listen addresses, encrypted DNS, query-log storage) — so it cannot lock you out. A restore is recorded as a change of its own, so it can be undone too.
+- Minos's own housekeeping (an hour's allow ending, say) is not recorded.
 
 <a id="cli"></a>
 
