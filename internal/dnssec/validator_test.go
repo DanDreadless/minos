@@ -38,11 +38,18 @@ func genKey(t testing.TB, zone string, flags uint16) (*dns.DNSKEY, crypto.Signer
 		Protocol:  3,
 		Algorithm: dns.ECDSAP256SHA256,
 	}
-	priv, err := key.Generate(256)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
+	// A key whose tag comes out 0 (about 1 in 65,536 random keys) cannot
+	// sign: miekg/dns refuses an RRSIG with KeyTag 0 as "bad key", which
+	// once failed CI. Draw again.
+	for {
+		priv, err := key.Generate(256)
+		if err != nil {
+			t.Fatalf("generate key: %v", err)
+		}
+		if key.KeyTag() != 0 {
+			return key, priv.(crypto.Signer)
+		}
 	}
-	return key, priv.(crypto.Signer)
 }
 
 // sign produces an RRSIG over rrset. A zero expire means "a day from now".

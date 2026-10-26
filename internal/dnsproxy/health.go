@@ -36,9 +36,12 @@ func probeQuestion() *dns.Msg {
 	return m
 }
 
-// runHealthProbes probes due upstreams until ctx ends.
-func (s *Server) runHealthProbes(ctx context.Context) {
-	t := time.NewTicker(probeTick)
+// runHealthProbes probes due upstreams every tick until ctx ends, then
+// closes done. The timing is passed in, read by Start: the loop never reads
+// the package variables tests adjust.
+func (s *Server) runHealthProbes(ctx context.Context, tick time.Duration, done chan<- struct{}) {
+	defer close(done)
+	t := time.NewTicker(tick)
 	defer t.Stop()
 	for {
 		select {
@@ -75,7 +78,7 @@ func (s *Server) probeWanted(name string, now time.Time) bool {
 		return c.sickUntil.CompareAndSwap(until, now.Add(failoverCooldown).UnixNano())
 	}
 	last := max(c.lastSuccess.Load(), c.lastFailure.Load())
-	return last == 0 || now.UnixNano()-last >= idleRecheck.Nanoseconds()
+	return last == 0 || now.UnixNano()-last >= s.probeIdle.Load()
 }
 
 // probe sends one test question and, when track is set, records the result

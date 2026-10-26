@@ -47,8 +47,11 @@ type Server struct {
 	udp     *dns.Server
 	tcp     *dns.Server
 	udpAddr net.Addr
-	// stopProbes ends the upstream health-probe loop (health.go).
-	stopProbes context.CancelFunc
+	// stopProbes ends the upstream health-probe loop (health.go) and waits
+	// for it; probeIdle is its idle re-check interval in nanoseconds, set by
+	// Start (zero before then: every probed upstream counts as idle).
+	stopProbes func()
+	probeIdle  atomic.Int64
 
 	// Client-facing encrypted DNS; nil when dns.tls is not configured.
 	// File-only settings like the plain listen address: restart to change.
@@ -507,8 +510,13 @@ func (s *Server) Start() error {
 		}
 	}()
 	probes, stop := context.WithCancel(context.Background())
-	s.stopProbes = stop
-	go s.runHealthProbes(probes)
+	done := make(chan struct{})
+	s.stopProbes = func() {
+		stop()
+		<-done
+	}
+	s.probeIdle.Store(idleRecheck.Nanoseconds())
+	go s.runHealthProbes(probes, probeTick, done)
 	slog.Info("dns server listening", "addr", s.udpAddr.String())
 	return nil
 }
@@ -997,7 +1005,7 @@ func (s *Server) forward(ctx context.Context, req *dns.Msg, qname string) (resp 
 			// An exchange cut off only because this query ran out of time
 			// (a slow primary used most of it) says nothing about the
 			// upstream, so it is not held against it.
-			if err == nil || !short || ctx.Err() == nil {
+			if err == nil || !short || !expired(ctx) {
 				s.trackUpstream(up.Name(), time.Since(began), err)
 			}
 			if err == nil {
@@ -1022,6 +1030,17 @@ func (s *Server) forward(ctx context.Context, req *dns.Msg, qname string) (resp 
 func budgetShort(ctx context.Context) bool {
 	d, ok := ctx.Deadline()
 	return ok && time.Until(d) < upstreamTimeout
+}
+
+// expired reports whether ctx's deadline has passed. The clock, not only
+// ctx.Err(): a socket given the same deadline times out a moment before the
+// context's own timer marks it done, so Err can still be nil right after.
+func expired(ctx context.Context) bool {
+	if ctx.Err() != nil {
+		return true
+	}
+	d, ok := ctx.Deadline()
+	return ok && !time.Now().Before(d)
 }
 
 // blockedResponse synthesizes the condemned answer per policy: NXDOMAIN,
