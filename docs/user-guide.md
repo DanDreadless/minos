@@ -21,6 +21,7 @@ immediately. "After restart" settings live only in `minos.yaml`; restart Minos a
 - [Settings → Filtering](#settings-filtering)
 - [Settings → Notifications](#settings-notifications)
 - [Settings → Device discovery](#settings-discovery)
+- [Settings → Home Assistant](#settings-homeassistant)
 - [Settings → Access & security](#settings-access)
 - [Settings → System](#settings-system)
 - [Settings → Backup & import](#settings-backup)
@@ -234,6 +235,35 @@ How Minos learns the names of the devices on your network. Everything stays on y
 |---|---|---|---|---|
 | Ask UPnP devices to introduce themselves (SSDP)<br><small>Settings → Device discovery</small> | `discovery.ssdp` | on | Names smart TVs, consoles and other gadgets by their own name, maker and model. | at once |
 | Listen for DHCP introductions (Linux)<br><small>Settings → Device discovery</small> | `discovery.dhcp_listen` | on | Devices announce their own name when they join the network. Minos only listens — it never hands out addresses. | at once |
+
+<a id="settings-homeassistant"></a>
+
+## Settings → Home Assistant
+
+Puts Minos in Home Assistant with no YAML. Minos announces itself over MQTT (Home Assistant's "MQTT discovery"), so a Minos device appears with everything below, kept up to date within seconds.
+
+- In Home Assistant, install the Mosquitto broker add-on (Settings → Add-ons) and add the MQTT integration if it isn't there already.
+- Make a Home Assistant user for Minos (Settings → People → Users), for example "minos" — the Mosquitto add-on accepts Home Assistant users.
+- Here, enter the broker as mqtt://<Home Assistant's address>:1883 with that username and password, tick Connect to Home Assistant and save. The status line says when Minos is connected.
+- In Home Assistant, open Settings → Devices & services → MQTT: the Minos device is listed with its entities.
+- What you get: a Blocking switch (off pauses blocking until you turn it back on), Pause blocking for 5 minutes and for 1 hour buttons, Queries, Blocked queries and Share blocked sensors (counted since Minos started), Blocklist rules, problem sensors for an upstream resolver failing, a suspected threat and blocking that may have broken something, an Update entity when Check for new releases is on, and a Block switch for each device you have named.
+- Changes made from Home Assistant act straight away; blocking a device is recorded in Settings → History as "Home Assistant (MQTT)".
+
+**The status says "wrong username or password" or "not authorized".** Check the user in Home Assistant (or the broker's password file). With the Mosquitto add-on, a Home Assistant user works; an "owner" account works too but a separate user is safer.
+
+**Minos is connected but nothing appears in Home Assistant.** The MQTT integration in Home Assistant must be using the same broker, and its discovery prefix must match (homeassistant unless you changed it).
+
+**How do I remove Minos from Home Assistant?** Untick Connect to Home Assistant and save: Minos removes its entities before it disconnects.
+
+| Setting | Config key | Default | What it does | Applies |
+|---|---|---|---|---|
+| Connect to Home Assistant<br><small>Settings → Home Assistant</small> | `home_assistant.enabled` | off | Connects to the MQTT broker and announces Minos to Home Assistant. Turning it off removes the Minos entities from Home Assistant. | at once |
+| MQTT broker<br><small>Settings → Home Assistant</small> | `home_assistant.broker` | none | The broker Home Assistant uses: mqtt://host:1883, or mqtts://host:8883 for TLS (the certificate must be valid for the host name). If the broker goes away Minos keeps trying, waiting up to a minute between attempts. | at once |
+| Username<br><small>Settings → Home Assistant</small> | `home_assistant.username` | none | The broker login. For the Mosquitto add-on, a Home Assistant user. | at once |
+| Password<br><small>Settings → Home Assistant</small> | `home_assistant.password` | none | The broker password. Stored in the config file; never shown again, and hidden in the settings history. | at once |
+| Add a Block switch for each named device<br><small>Settings → Home Assistant</small> | `home_assistant.device_switches` | on | One switch per device you have named on the Devices page. On blocks all of that device's DNS, exactly like Block device in Minos — handy for a bedtime automation. | at once |
+| Discovery prefix<br><small>Settings → Home Assistant</small> | `home_assistant.discovery_prefix` | homeassistant | Where Home Assistant listens for announcements. Change it only if you changed it in Home Assistant's MQTT settings. | at once |
+| Topic prefix<br><small>Settings → Home Assistant</small> | `home_assistant.topic_prefix` | minos | Where Minos publishes its state and listens for commands (minos/state, minos/blocking/set…). Give each Minos its own when two share a broker. | at once |
 
 <a id="settings-access"></a>
 

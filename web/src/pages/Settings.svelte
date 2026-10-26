@@ -5,6 +5,7 @@
     exportConfig,
     setToken,
     type ConfigView,
+    type HomeAssistantStatus,
     type ImportReport,
     type Upstream,
     type UpstreamHealth,
@@ -34,6 +35,15 @@
   let cnameInspect = true;
   let threatsEnabled = true;
   let threatsIgnore = '';
+  let haEnabled = false;
+  let haBroker = '';
+  let haUsername = '';
+  let haPassword = '';
+  let haPasswordSet = false;
+  let haDiscovery = '';
+  let haTopic = '';
+  let haSwitches = true;
+  let haStatus: HomeAssistantStatus | null = null;
   let blockPrivateRelay = false;
   let retentionDays = 90;
   let ringSize = 10000;
@@ -110,6 +120,14 @@
     cnameInspect = c.blocking.cname_inspection;
     threatsEnabled = c.threats.enabled;
     threatsIgnore = c.threats.ignore.join('\n');
+    haEnabled = c.home_assistant.enabled;
+    haBroker = c.home_assistant.broker;
+    haUsername = c.home_assistant.username;
+    haPassword = '';
+    haPasswordSet = c.home_assistant.password_set;
+    haDiscovery = c.home_assistant.discovery_prefix;
+    haTopic = c.home_assistant.topic_prefix;
+    haSwitches = c.home_assistant.device_switches;
     blockPrivateRelay = c.blocking.block_icloud_private_relay;
     blockTTL = c.dns.block_ttl;
     retentionDays = c.querylog.retention_days;
@@ -170,10 +188,26 @@
     }
   }
 
+  async function loadHAStatus(): Promise<void> {
+    try {
+      haStatus = await api.homeAssistantStatus();
+    } catch {
+      // The status line is a nicety; the settings still work without it.
+    }
+  }
+
+  function haStatusText(s: HomeAssistantStatus | null): string {
+    if (!s || !s.enabled) return copy.settings.haStatusOff;
+    if (s.connected) return copy.settings.haStatusConnected(s.since ? fmtLogTime(s.since) : '');
+    if (s.error) return copy.settings.haStatusError(s.error);
+    return copy.settings.haStatusConnecting;
+  }
+
   async function save(upd: Parameters<typeof api.updateConfig>[0]): Promise<void> {
     try {
       initFrom(await api.updateConfig(upd));
       notify(copy.settings.saved);
+      setTimeout(loadHAStatus, 1500);
     } catch (e) {
       notifyError(e);
     }
@@ -236,6 +270,19 @@
         };
       case 'discovery':
         return { discovery: { ssdp, dhcp_listen: dhcpListen } };
+      case 'homeassistant':
+        return {
+          home_assistant: {
+            enabled: haEnabled,
+            broker: haBroker.trim(),
+            username: haUsername.trim(),
+            discovery_prefix: haDiscovery.trim(),
+            topic_prefix: haTopic.trim(),
+            device_switches: haSwitches,
+            // Only a typed password is sent; an untouched field keeps the stored one.
+            ...(haPassword ? { password: haPassword } : {}),
+          },
+        };
       case 'access':
         return {
           dns: {
@@ -266,6 +313,7 @@
   $: draftKey = JSON.stringify([
     upstreams, dnssec, mode, blockTTL, safeSearch, firefoxCanary, rebindProtect, cnameInspect, allowedNetworks, rateLimit, blockPrivateRelay, retentionDays,
     threatsEnabled, threatsIgnore,
+    haEnabled, haBroker, haUsername, haPassword, haDiscovery, haTopic, haSwitches,
     ringSize, memoryMB, cacheEnabled, cacheMaxEntries, cacheMinTTL, cacheMaxTTL, cacheServeStale,
     updateCheck, webhookURL, ntfyURL, ntfyToken, digest, digestTime, digestDay, uiURL, quiet,
     quietFrom, quietTo, mute, ssdp, dhcpListen, logLevel,
@@ -634,7 +682,11 @@
       .host()
       .then((h) => (procRSS = h.sample?.proc_rss))
       .catch(() => {});
-    healthTimer = setInterval(loadUpstreamHealth, 10000);
+    void loadHAStatus();
+    healthTimer = setInterval(() => {
+      void loadUpstreamHealth();
+      void loadHAStatus();
+    }, 10000);
     window.addEventListener('hashchange', onHashChange);
     window.addEventListener('beforeunload', onBeforeUnload);
   });
@@ -928,6 +980,54 @@
       {copy.settings.discoveryDHCP}
     </label>
     <p class="note">{copy.settings.discoveryDHCPHint}</p>
+  </section>
+  {/if}
+
+  {#if tab === 'homeassistant'}
+  <section class="card">
+    <h2>{copy.settings.haTitle} <small>{copy.settings.haHint}</small></h2>
+    <p class="note">{copy.settings.haNote}</p>
+    <p class="ha-status" class:ok={haStatus?.connected} class:bad={haStatus?.enabled && !haStatus?.connected && haStatus?.error}>
+      {haStatusText(haStatus)}
+      {#if dirtyTabs.includes('homeassistant')}<small>{copy.settings.haSaveFirst}</small>{/if}
+    </p>
+    <label class="radio">
+      <input type="checkbox" bind:checked={haEnabled} />
+      {copy.settings.haEnabled}
+    </label>
+    <label class="field wide">
+      <span>{copy.settings.haBroker} <small>{copy.settings.haBrokerHint}</small></span>
+      <input placeholder="mqtt://192.168.1.10:1883" bind:value={haBroker} autocomplete="off" />
+    </label>
+    <label class="field wide">
+      <span>{copy.settings.haUsername} <small>{copy.settings.haUsernameHint}</small></span>
+      <input bind:value={haUsername} autocomplete="off" />
+    </label>
+    <label class="field wide">
+      <span>{copy.settings.haPassword}</span>
+      <input
+        type="password"
+        placeholder={haPasswordSet ? copy.settings.haPasswordSet : ''}
+        bind:value={haPassword}
+        autocomplete="new-password"
+      />
+    </label>
+    <label class="radio ha-switches">
+      <input type="checkbox" bind:checked={haSwitches} />
+      {copy.settings.haDeviceSwitches}
+    </label>
+    <p class="note">{copy.settings.haDeviceSwitchesHint}</p>
+    <div class="digest">
+      <h3>{copy.settings.haTopicsTitle} <small>{copy.settings.haTopicsHint}</small></h3>
+      <label class="field wide">
+        <span>{copy.settings.haDiscoveryPrefix} <small>{copy.settings.haDiscoveryPrefixHint}</small></span>
+        <input placeholder="homeassistant" bind:value={haDiscovery} />
+      </label>
+      <label class="field wide">
+        <span>{copy.settings.haTopicPrefix} <small>{copy.settings.haTopicPrefixHint}</small></span>
+        <input placeholder="minos" bind:value={haTopic} />
+      </label>
+    </div>
   </section>
   {/if}
 
@@ -1568,6 +1668,35 @@
   .radio small.hint {
     color: var(--text-dim);
     margin-left: 0.3rem;
+  }
+
+  .ha-status {
+    margin: 0.2rem 0 0.9rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.88rem;
+    color: var(--text-dim);
+  }
+
+  .ha-status.ok {
+    color: var(--allowed);
+    border-color: var(--allowed);
+  }
+
+  .ha-status.bad {
+    color: var(--blocked);
+    border-color: var(--blocked);
+  }
+
+  .ha-switches {
+    margin-top: 0.8rem;
+  }
+
+  .ha-status small {
+    display: block;
+    color: var(--text-dim);
+    margin-top: 0.2rem;
   }
 
   .test-result {

@@ -79,8 +79,13 @@ type configView struct {
 		// Types is every event type mute accepts.
 		Types []string `json:"types"`
 	} `json:"notifications"`
-	Discovery config.DiscoveryConfig `json:"discovery"`
-	Threats   config.ThreatsConfig   `json:"threats"`
+	Discovery     config.DiscoveryConfig `json:"discovery"`
+	Threats       config.ThreatsConfig   `json:"threats"`
+	HomeAssistant struct {
+		config.HomeAssistantConfig
+		// PasswordSet stands in for the password, which is never served.
+		PasswordSet bool `json:"password_set"`
+	} `json:"home_assistant"`
 }
 
 func viewOf(c *config.Config) configView {
@@ -148,6 +153,8 @@ func viewOf(c *config.Config) configView {
 	v.Notifications.Types = config.NotificationTypes
 	v.Discovery = c.Discovery
 	v.Threats = config.ThreatsConfig{Enabled: c.Threats.Enabled, Ignore: append([]string{}, c.Threats.Ignore...)}
+	v.HomeAssistant.HomeAssistantConfig = c.HomeAssistant
+	v.HomeAssistant.PasswordSet = c.HomeAssistant.Password != ""
 	return v
 }
 
@@ -216,6 +223,15 @@ type settingsUpdate struct {
 		Enabled *bool     `json:"enabled"`
 		Ignore  *[]string `json:"ignore"`
 	} `json:"threats"`
+	HomeAssistant *struct {
+		Enabled         *bool   `json:"enabled"`
+		Broker          *string `json:"broker"`
+		Username        *string `json:"username"`
+		Password        *string `json:"password"`
+		DiscoveryPrefix *string `json:"discovery_prefix"`
+		TopicPrefix     *string `json:"topic_prefix"`
+		DeviceSwitches  *bool   `json:"device_switches"`
+	} `json:"home_assistant"`
 }
 
 func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
@@ -372,6 +388,26 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				c.Threats.Ignore = ignore
+			}
+		}
+		if h := upd.HomeAssistant; h != nil {
+			set := func(dst *string, src *string) {
+				if src != nil {
+					*dst = strings.TrimSpace(*src)
+				}
+			}
+			if h.Enabled != nil {
+				c.HomeAssistant.Enabled = *h.Enabled
+			}
+			set(&c.HomeAssistant.Broker, h.Broker)
+			set(&c.HomeAssistant.Username, h.Username)
+			if h.Password != nil {
+				c.HomeAssistant.Password = *h.Password // Not trimmed: a password may end in a space
+			}
+			set(&c.HomeAssistant.DiscoveryPrefix, h.DiscoveryPrefix)
+			set(&c.HomeAssistant.TopicPrefix, h.TopicPrefix)
+			if h.DeviceSwitches != nil {
+				c.HomeAssistant.DeviceSwitches = *h.DeviceSwitches
 			}
 		}
 		return nil

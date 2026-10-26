@@ -96,6 +96,8 @@ internal/acme/         DNS-01 certificate issuance/renewal for DoT/DoH
 internal/auth/         web sign-in: argon2id passwords, signed sessions, TOTP (leaf pkg)
 internal/release/      release-signature verification for the one-click updater (leaf pkg)
 internal/applog/       application log ring + redaction (leaf pkg)
+internal/mqtt/         small MQTT 3.1.1 client (stdlib only, leaf pkg)
+internal/hass/         Home Assistant MQTT discovery bridge (config + mqtt only)
 internal/notify/       webhook/ntfy event delivery (off the query path)
 internal/updates/      opt-in GitHub release check (release builds only)
 internal/querylog/     ring buffer + batched SQLite flush
@@ -666,6 +668,32 @@ This is security software; hold it to that standard.
   `dns.tls`, query-log storage, list headers by list name — so a restore can
   never lock anyone out or move a listener, and is itself recorded. A
   failed history write is logged, never fatal to the change.
+- **Home Assistant over MQTT** (fixed decisions, October 2026,
+  `internal/mqtt` + `internal/hass`): the MQTT client is **hand-rolled**
+  (maintainer decision — paho.mqtt.golang would have brought a second
+  WebSocket library and a large network-facing surface for the 5% we use).
+  Scope is 3.1.1, QoS 0 publish and subscribe, incoming QoS 1 acked, a last
+  will, keep-alive, reconnect with 1 s → 1 min back-off, TLS; **no** QoS 2,
+  persistent sessions, WebSockets or MQTT 5. Broker input is untrusted:
+  packets over `MaxPacket` (64 KB) are read past and dropped (not a
+  disconnect — a big retained message would otherwise loop the redial),
+  lengths are checked, `FuzzReadPacket` covers the parser. A connection
+  silent for two keep-alives is dead (half-open TCP). A clean stop publishes
+  the will itself (a DISCONNECT tells the broker not to). Verified against
+  Mosquitto 2.1 (`go test -tags mqtt_e2e`, CI job `mqtt-e2e`) and a real
+  Home Assistant in Docker (all entities created, commands both ways, will
+  → unavailable, stale cleanup, removal on disable, the update entity).
+  The bridge reads Minos through `hass.Hooks` built in main
+  (`cmd/minos/hass_wiring.go`) so it imports only config and mqtt; device
+  blocks from Home Assistant go through `UpdateAs("Home Assistant (MQTT)")`
+  and land in the settings history. **Retained commands are ignored** (one
+  left on the broker would pause blocking on every reconnect). On connect
+  Minos subscribes to its own retained discovery configs and clears any it
+  no longer has (a device deleted while Minos was off); switching the
+  integration off or moving its topics/broker clears them all first.
+  `home_assistant.password` is a secret: `password_set` in the API, hidden
+  by `Redacted`, kept by `keepLive`. The queries sensors are process-lifetime
+  counters (`total_increasing` handles the reset on restart).
 - **Threat detection** (fixed decisions, October 2026, `internal/threats`):
   behaviour, not lists — `dga` (12+ distinct random-looking *registrable*
   domains per device in 10 min), `tunnel` (20+ distinct names under one

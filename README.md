@@ -39,6 +39,10 @@ is protected, with a clear answer to "why was this blocked?" one click away.
 - **Undo for settings.** Every change is recorded with who made it and
   what it touched; see the change line by line (secrets hidden) and put
   back any earlier version in one click.
+- **Home Assistant with no YAML.** Point Minos at your MQTT broker and a
+  Minos device appears in Home Assistant: a blocking switch, pause
+  buttons, counters, problem sensors and a Block switch for each named
+  device — ready for a bedtime automation.
 - **Knows your devices.** Names come from DHCP, mDNS, UPnP, NetBIOS and the
   MAC vendor registry, and rules follow a device across address changes.
 - **Modern DNS, both ways.** Upstreams over DoH, DoH3, DoT or DNS-over-QUIC;
@@ -112,7 +116,7 @@ is protected, with a clear answer to "why was this blocked?" one click away.
 - Prometheus `/metrics` with a ready-made
   [Grafana dashboard](deploy/grafana-dashboard.json), a
   [documented REST API](docs/api.md) and
-  [Home Assistant recipes](docs/home-assistant.md)
+  [Home Assistant](docs/home-assistant.md) over MQTT discovery or REST
 - Built for SD cards: query-log writes are batched, memory use is capped,
   and nothing slow ever stands between a reboot and working DNS
 - Works on a phone: every page reflows to a phone screen
@@ -215,8 +219,8 @@ systemd helper does the installing. Docker installs update with
 - [Getting started](docs/getting-started.md) — install, host preparation,
   encrypted DNS, monitoring, upgrading, and the full config reference
 - [REST API reference](docs/api.md) — every endpoint, with examples
-- [Home Assistant recipes](docs/home-assistant.md) — a blocking switch,
-  sensors, bedtime automations, events on your phone
+- [Home Assistant](docs/home-assistant.md) — MQTT discovery (no YAML),
+  REST recipes, bedtime automations, events on your phone
 - [Roadmap](docs/roadmap.md) — what has shipped and what is being considered
 - [Releasing](docs/releasing.md) — for maintainers: the release flow and
   signing key

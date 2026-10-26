@@ -22,6 +22,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"minos/internal/mqtt"
 	"minos/internal/services"
 )
 
@@ -489,8 +490,6 @@ func parseWeekday(s string) (time.Weekday, error) {
 	return 0, fmt.Errorf("must be a lowercase day name (monday…sunday), got %q", s)
 }
 
-// DiscoveryConfig switches the *active* device-discovery probes (passive
-// techniques need no switch — they only listen).
 // ThreatsConfig is the behaviour-based threat detection (internal/threats).
 type ThreatsConfig struct {
 	// Enabled watches the query log for devices behaving like malware:
@@ -503,6 +502,8 @@ type ThreatsConfig struct {
 	Ignore []string `yaml:"ignore,omitempty" json:"ignore"`
 }
 
+// DiscoveryConfig switches the *active* device-discovery probes (passive
+// techniques need no switch — they only listen).
 type DiscoveryConfig struct {
 	// SSDP names UPnP devices (TVs, consoles, IoT): one small multicast
 	// search every few minutes, plus one description fetch from each
@@ -513,6 +514,42 @@ type DiscoveryConfig struct {
 	// lease-time hostnames and OS hints. A listener, never a server:
 	// nothing is transmitted, allocated, or answered. Default on.
 	DHCPListen bool `yaml:"dhcp_listen" json:"dhcp_listen"`
+}
+
+// HomeAssistantConfig announces Minos to Home Assistant over MQTT
+// (internal/hass): its switches, buttons and sensors appear in Home
+// Assistant with no YAML.
+type HomeAssistantConfig struct {
+	// Enabled connects to the broker. Off by default.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Broker is mqtt://host:1883 or mqtts://host:8883 — usually Home
+	// Assistant's Mosquitto add-on.
+	Broker   string `yaml:"broker,omitempty" json:"broker"`
+	Username string `yaml:"username,omitempty" json:"username"`
+	// Password is a secret: never served by the API, hidden in the
+	// settings history.
+	Password string `yaml:"password,omitempty" json:"-"`
+	// DiscoveryPrefix is Home Assistant's discovery prefix (default
+	// "homeassistant").
+	DiscoveryPrefix string `yaml:"discovery_prefix,omitempty" json:"discovery_prefix"`
+	// TopicPrefix roots Minos's own state and command topics (default
+	// "minos"); a second Minos on the same broker needs its own.
+	TopicPrefix string `yaml:"topic_prefix,omitempty" json:"topic_prefix"`
+	// DeviceSwitches adds a "Block <device>" switch for every device given a
+	// name in Minos. Default on; a plain bool so turning it off is written.
+	DeviceSwitches bool `yaml:"device_switches" json:"device_switches"`
+}
+
+// Prefixes returns the discovery and topic prefixes, defaults applied.
+func (h HomeAssistantConfig) Prefixes() (discovery, topic string) {
+	discovery, topic = h.DiscoveryPrefix, h.TopicPrefix
+	if discovery == "" {
+		discovery = "homeassistant"
+	}
+	if topic == "" {
+		topic = "minos"
+	}
+	return discovery, topic
 }
 
 type Config struct {
@@ -526,6 +563,7 @@ type Config struct {
 	Notifications NotificationsConfig `yaml:"notifications,omitempty"`
 	Discovery     DiscoveryConfig     `yaml:"discovery"`
 	Threats       ThreatsConfig       `yaml:"threats"`
+	HomeAssistant HomeAssistantConfig `yaml:"home_assistant"`
 	// UpdateCheck, when true, asks the GitHub releases API for the latest
 	// version once a day. Strictly opt-in (default false): nothing is
 	// sent beyond the request itself, and nothing is sent at all unless
@@ -568,8 +606,9 @@ func Default() *Config {
 			LocalTTL:  300,
 			RateLimit: 1000,
 		},
-		Blocking: BlockingConfig{Mode: "zero_ip", CNAMEInspection: true},
-		Threats:  ThreatsConfig{Enabled: true},
+		Blocking:      BlockingConfig{Mode: "zero_ip", CNAMEInspection: true},
+		Threats:       ThreatsConfig{Enabled: true},
+		HomeAssistant: HomeAssistantConfig{DeviceSwitches: true},
 		Lists: ListsConfig{
 			Sources: []ListSource{
 				{
@@ -849,6 +888,9 @@ func (c *Config) Validate() error {
 		if !services.Exists(s) {
 			return fmt.Errorf("blocking.services[%d]: unknown service %q", i, s)
 		}
+	}
+	if err := validateHomeAssistant(c.HomeAssistant); err != nil {
+		return err
 	}
 	if len(c.Threats.Ignore) > 500 {
 		return fmt.Errorf("threats.ignore: at most 500 entries")
@@ -1442,4 +1484,32 @@ func Parse(data []byte) (*Config, error) {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
 	return c, nil
+}
+
+// validateHomeAssistant checks the MQTT settings. A broker is needed only
+// once the connection is switched on, so a half-filled form can be saved.
+func validateHomeAssistant(h HomeAssistantConfig) error {
+	if h.Broker != "" {
+		if _, _, _, err := mqtt.ParseBroker(h.Broker); err != nil {
+			return fmt.Errorf("home_assistant.broker: %w", err)
+		}
+	} else if h.Enabled {
+		return errors.New("home_assistant.broker: give the broker's address (mqtt://host:1883) to connect")
+	}
+	if len(h.Username) > 256 || len(h.Password) > 1024 {
+		return errors.New("home_assistant: the username or password is too long")
+	}
+	for _, p := range []struct{ key, v string }{
+		{"home_assistant.discovery_prefix", h.DiscoveryPrefix},
+		{"home_assistant.topic_prefix", h.TopicPrefix},
+	} {
+		if p.v == "" {
+			continue
+		}
+		if len(p.v) > 64 || mqtt.ValidTopic(p.v) != nil || strings.HasPrefix(p.v, "/") ||
+			strings.HasSuffix(p.v, "/") || strings.Contains(p.v, "//") || strings.HasPrefix(p.v, "$") {
+			return fmt.Errorf("%s: %q must be a plain topic like \"minos\" (no +, #, $ or leading/trailing slashes)", p.key, p.v)
+		}
+	}
+	return nil
 }

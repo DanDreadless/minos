@@ -233,6 +233,7 @@ func (s *Store) RestoreVersion(id, actor string) error {
 func keepLive(restored, cur *Config) {
 	restored.API = cur.API
 	restored.Notifications.NtfyToken = cur.Notifications.NtfyToken
+	restored.HomeAssistant.Password = cur.HomeAssistant.Password
 	restored.DNS.Listen = cur.DNS.Listen
 	restored.DNS.TLS = cur.DNS.TLS
 	restored.QueryLog.Ephemeral = cur.QueryLog.Ephemeral
@@ -267,6 +268,7 @@ func Redacted(c *Config) *Config {
 	hide(&r.API.SessionKey)
 	hide(&r.API.TOTPSecret)
 	hide(&r.Notifications.NtfyToken)
+	hide(&r.HomeAssistant.Password)
 	if r.DNS.TLS.ACME != nil {
 		acme := *r.DNS.TLS.ACME // A copy: the clone may share the pointer
 		hide(&acme.APIToken)

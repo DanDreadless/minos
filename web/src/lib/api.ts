@@ -297,7 +297,26 @@ export interface ConfigView {
   };
   discovery: { ssdp: boolean; dhcp_listen: boolean };
   threats: { enabled: boolean; ignore: string[] };
+  home_assistant: HomeAssistantSettings & { password_set: boolean };
   log_level: string; // '' = the -log-level flag's (info by default)
+}
+
+// Home Assistant over MQTT (the password is write-only).
+export interface HomeAssistantSettings {
+  enabled: boolean;
+  broker: string; // mqtt://host:1883 or mqtts://host:8883
+  username: string;
+  discovery_prefix: string; // '' = homeassistant
+  topic_prefix: string; // '' = minos
+  device_switches: boolean;
+}
+
+// The MQTT connection as it stands.
+export interface HomeAssistantStatus {
+  enabled: boolean;
+  connected: boolean;
+  error?: string;
+  since?: string;
 }
 
 // Partial settings update; omitted fields are left untouched by the server.
@@ -323,6 +342,7 @@ export interface SettingsUpdate {
   };
   lists?: { refresh_interval?: string };
   threats?: { enabled?: boolean; ignore?: string[] };
+  home_assistant?: Partial<HomeAssistantSettings> & { password?: string };
   querylog?: { ring_size?: number; retention_days?: number; memory_mb?: number };
   api?: { token?: string };
   update_check?: boolean;
@@ -644,6 +664,7 @@ export const api = {
   },
   // Sends a test notification now; the result maps each destination
   // ("webhook", "ntfy") to "ok" or the reason it failed.
+  homeAssistantStatus: () => request<HomeAssistantStatus>('GET', '/api/home-assistant/status'),
   testNotification: () => request<Record<string, string>>('POST', '/api/notifications/test'),
 
   importPihole: (gravity: File, customList?: File) => {
