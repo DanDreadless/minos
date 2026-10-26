@@ -1144,7 +1144,8 @@ This is security software; hold it to that standard.
   running with nobody told. Now: a failing scheduled catalog/preset run
   opens (or comments on) a `catalog-broken` GitHub issue and the next pass
   closes it; `release.sh` refuses to start while Gitea reports a push-mirror
-  `last_error`, and runs the catalog + preset network tests before tagging.
+  `last_error` that survives one fresh sync (two quick pushes make syncs
+  race and record a stale "cannot lock ref"), and runs the catalog + preset network tests before tagging.
   Gitea cannot edit a mirror's password in place: rotate by creating a new
   push mirror (API `POST /push_mirrors`), confirming it syncs, then deleting
   the old one. Rotate the PAT in `.env` **and** Gitea together.
