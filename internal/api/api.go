@@ -82,6 +82,7 @@ type Server struct {
 	updateHelper string
 	breakage     *breakage.Detector // may be nil: no suggestions
 	threats      *threats.Detector  // may be nil: no threat findings
+	hass         homeAssistant      // may be nil: no Home Assistant bridge
 }
 
 func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
@@ -174,6 +175,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/allowlist/temporary", s.handleGetTemporaryAllows)
 		r.Get("/suggestions", s.handleSuggestions)
 		r.Get("/threats", s.handleThreats)
+		r.Get("/home-assistant/status", s.handleHomeAssistantStatus)
 		r.Get("/settings/history", s.handleSettingsHistory)
 		r.Get("/settings/history/{id}/diff", s.handleSettingsHistoryDiff)
 		r.Post("/settings/history/{id}/restore", s.handleSettingsRestore)
@@ -715,6 +717,7 @@ func (s *Server) handlePause(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.engine.Pause(d)
+	s.homeAssistantChanged()
 	paused, until := s.engine.Paused()
 	resp := map[string]any{"paused": paused}
 	if !until.IsZero() {
@@ -725,6 +728,7 @@ func (s *Server) handlePause(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleResume(w http.ResponseWriter, r *http.Request) {
 	s.engine.Resume()
+	s.homeAssistantChanged()
 	writeJSON(w, http.StatusOK, map[string]any{"paused": false})
 }
 

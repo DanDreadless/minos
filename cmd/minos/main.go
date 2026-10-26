@@ -301,6 +301,14 @@ func serve(args []string) error {
 	defer stopThreatEntries()
 	go watcher.Run(ctx, threatEntries)
 	apiSrv.SetThreats(watcher)
+	// Home Assistant over MQTT: off until switched on in Settings.
+	homeAssistant := newHomeAssistant(store, engine, qlog, proxy, checker, watcher, broken)
+	haDone := make(chan struct{})
+	go func() {
+		homeAssistant.Run(ctx)
+		close(haDone)
+	}()
+	apiSrv.SetHomeAssistant(homeAssistant)
 	apiSrv.SetAppLog(logRing, logLevelVar)
 	httpSrv := &http.Server{
 		Addr:              cfg.API.Listen,
@@ -331,6 +339,11 @@ func serve(args []string) error {
 	}
 	if err := proxy.Shutdown(shutdownCtx); err != nil {
 		slog.Warn("dns shutdown", "err", err)
+	}
+	// Let the bridge tell Home Assistant Minos is going offline.
+	select {
+	case <-haDone:
+	case <-shutdownCtx.Done():
 	}
 	// Close last: flushes buffered query log entries to disk.
 	if err := qlog.Close(); err != nil {

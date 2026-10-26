@@ -1,8 +1,68 @@
-# Home Assistant recipes
+# Home Assistant
 
-Minos has no custom integration and doesn't need one: everything below
-uses Home Assistant's built-in `rest` platforms against the
-[REST API](api.md). Replace `192.168.1.2:8080` and the token throughout.
+## MQTT discovery (recommended)
+
+Minos announces itself to Home Assistant over MQTT, so a **Minos** device
+appears with its entities and no YAML at all.
+
+1. In Home Assistant, install the **Mosquitto broker** add-on and the
+   **MQTT** integration (Home Assistant offers it once the add-on runs).
+2. Make a Home Assistant user for Minos (Settings → People → Users) — the
+   Mosquitto add-on accepts Home Assistant users as broker logins.
+3. In Minos, open **Settings → Home Assistant**, enter the broker as
+   `mqtt://<Home Assistant's address>:1883` with that username and
+   password, tick **Connect to Home Assistant** and save. The status line
+   turns green when Minos is connected.
+
+| Entity | What it does |
+|---|---|
+| `switch.minos_blocking` | On = blocking; off pauses blocking until turned back on |
+| `button.minos_pause_blocking_for_5_minutes`, `…_for_1_hour` | Timed pauses |
+| `sensor.minos_queries`, `sensor.minos_blocked_queries` | Counted since Minos started (`total_increasing`) |
+| `sensor.minos_share_blocked` | Blocked queries as a percentage of all queries |
+| `sensor.minos_blocklist_rules` | Rules in force (diagnostic) |
+| `binary_sensor.minos_upstream_resolver_problem` | On while an upstream resolver is failing |
+| `binary_sensor.minos_threat_suspected` | On while threat detection has an open finding |
+| `binary_sensor.minos_blocking_may_have_broken_something` | On while a "something may be broken" suggestion is open |
+| `update.minos_update` | Installed and latest version — only when *Check for new releases* is on |
+| `switch.minos_block_<device>` | One per device you have named; on blocks all its DNS |
+
+State is published when it changes and every 30 seconds; Minos's last will
+marks every entity unavailable if it stops without saying goodbye. Turning
+the connection off removes the entities. Commands are plain MQTT, so they
+work from anything that can publish:
+
+| Topic | Payload |
+|---|---|
+| `minos/blocking/set` | `ON` (resume) or `OFF` (pause until resumed) |
+| `minos/pause/set` | Minutes to pause, e.g. `30` |
+| `minos/device/<id>/set` | `ON` (block) or `OFF` |
+
+Commands must not be retained — a retained one is ignored, rather than
+re-applied every time Minos reconnects. State is on `minos/state` (JSON),
+`minos/availability` (`online`/`offline`), `minos/update` and
+`minos/device/<id>/state`. `minos` is the topic prefix, changeable in
+Settings for a second Minos on the same broker.
+
+A bedtime automation, with the device named "Kids tablet" in Minos:
+
+```yaml
+automation:
+  - alias: Kids tablet off the internet at bedtime
+    triggers:
+      - trigger: time
+        at: "21:00:00"
+    actions:
+      - action: switch.turn_on
+        target:
+          entity_id: switch.minos_block_kids_tablet
+```
+
+## REST recipes
+
+Without a broker, Home Assistant's built-in `rest` platforms work against
+the [REST API](api.md) instead. Replace `192.168.1.2:8080` and the token
+throughout.
 
 ## A switch that pauses blocking
 

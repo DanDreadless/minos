@@ -101,6 +101,7 @@ func TestRestoreKeepsSecretsAndListeners(t *testing.T) {
 		c.API.Token = "new-token"
 		c.API.PasswordHash = "$argon2id$current"
 		c.DNS.Listen = ":5353"
+		c.HomeAssistant.Password = "broker-current"
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -114,6 +115,9 @@ func TestRestoreKeepsSecretsAndListeners(t *testing.T) {
 	}
 	if c.API.Token != "new-token" || c.API.PasswordHash != "$argon2id$current" {
 		t.Error("restore changed sign-in or the API token")
+	}
+	if c.HomeAssistant.Password != "broker-current" {
+		t.Error("restore changed the MQTT broker password")
 	}
 	if c.DNS.Listen != ":5353" {
 		t.Error("restore changed a restart-only setting")

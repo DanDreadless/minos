@@ -127,6 +127,39 @@ jobs:
         if: failure()
         run: docker logs pebble; docker logs challtestsrv
 
+  # The hand-rolled MQTT client against a real broker: connect, publish,
+  # subscribe, the last will on a cut connection, reconnect, a clean stop,
+  # and a wrong password.
+  mqtt-e2e:
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: start mosquitto
+        run: |
+          docker run -d --name mosquitto -p 1883:1883 eclipse-mosquitto:2 sh -c '
+            printf "listener 1883\nallow_anonymous false\npassword_file /tmp/passwd\n" > /tmp/m.conf &&
+            touch /tmp/passwd && chmod 0700 /tmp/passwd &&
+            mosquitto_passwd -b /tmp/passwd minos e2epass && chown mosquitto /tmp/passwd &&
+            exec mosquitto -c /tmp/m.conf'
+          for i in $(seq 1 30); do
+            docker logs mosquitto 2>&1 | grep -q running && exit 0
+            sleep 1
+          done
+          echo "mosquitto never came up" && docker logs mosquitto && exit 1
+      - name: e2e
+        env:
+          MQTT_BROKER: mqtt://127.0.0.1:1883
+          MQTT_USER: minos
+          MQTT_PASS: e2epass
+        run: go test -tags mqtt_e2e -count=1 -v -run TestE2E ./internal/mqtt
+      - name: broker logs on failure
+        if: failure()
+        run: docker logs mosquitto
+
   lint:
     if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest

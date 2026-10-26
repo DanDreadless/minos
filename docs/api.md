@@ -625,6 +625,21 @@ services.
   listen addresses, `dns.tls`, and query-log storage, which are kept from
   the running instance. Returns the resulting config view.
 
+### Home Assistant (MQTT)
+
+`GET /api/config` reports `home_assistant` (`enabled`, `broker`,
+`username`, `discovery_prefix`, `topic_prefix`, `device_switches`, and
+`password_set` in place of the password); `PUT /api/config` takes the same
+fields plus `password` (omit it to keep the stored one). The connection
+follows the settings live.
+
+`GET /api/home-assistant/status` →
+`{"enabled": true, "connected": false, "error": "the broker refused the
+connection: not authorized (check the username and password)", "since":
+"…"}` — `error` is the reason the last connection ended or failed; Minos
+keeps retrying (up to a minute apart). The topics and entities are listed
+in [home-assistant.md](home-assistant.md).
+
 ## Import from Pi-hole / AdGuard Home
 
 Append-only uploads (multipart form, 64 MB cap) — existing settings are

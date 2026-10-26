@@ -612,6 +612,93 @@ export const docs: Section[] = [
     ],
   },
   {
+    id: 'settings-homeassistant',
+    title: 'Settings → Home Assistant',
+    page: '#/settings?tab=homeassistant',
+    summary:
+      'Puts Minos in Home Assistant with no YAML. Minos announces itself over MQTT (Home Assistant\'s "MQTT discovery"), so a Minos device appears with everything below, kept up to date within seconds.',
+    howto: [
+      'In Home Assistant, install the Mosquitto broker add-on (Settings → Add-ons) and add the MQTT integration if it isn\'t there already.',
+      'Make a Home Assistant user for Minos (Settings → People → Users), for example "minos" — the Mosquitto add-on accepts Home Assistant users.',
+      'Here, enter the broker as mqtt://<Home Assistant\'s address>:1883 with that username and password, tick Connect to Home Assistant and save. The status line says when Minos is connected.',
+      'In Home Assistant, open Settings → Devices & services → MQTT: the Minos device is listed with its entities.',
+      'What you get: a Blocking switch (off pauses blocking until you turn it back on), Pause blocking for 5 minutes and for 1 hour buttons, Queries, Blocked queries and Share blocked sensors (counted since Minos started), Blocklist rules, problem sensors for an upstream resolver failing, a suspected threat and blocking that may have broken something, an Update entity when Check for new releases is on, and a Block switch for each device you have named.',
+      'Changes made from Home Assistant act straight away; blocking a device is recorded in Settings → History as "Home Assistant (MQTT)".',
+    ],
+    tasks: [
+      {
+        q: 'The status says "wrong username or password" or "not authorized".',
+        a: 'Check the user in Home Assistant (or the broker\'s password file). With the Mosquitto add-on, a Home Assistant user works; an "owner" account works too but a separate user is safer.',
+      },
+      {
+        q: 'Minos is connected but nothing appears in Home Assistant.',
+        a: 'The MQTT integration in Home Assistant must be using the same broker, and its discovery prefix must match (homeassistant unless you changed it).',
+      },
+      {
+        q: 'How do I remove Minos from Home Assistant?',
+        a: 'Untick Connect to Home Assistant and save: Minos removes its entities before it disconnects.',
+      },
+    ],
+    settings: [
+      {
+        label: 'Connect to Home Assistant',
+        key: 'home_assistant.enabled',
+        default: 'off',
+        effect: 'Connects to the MQTT broker and announces Minos to Home Assistant. Turning it off removes the Minos entities from Home Assistant.',
+        applies: 'live',
+        where: 'Settings → Home Assistant',
+      },
+      {
+        label: 'MQTT broker',
+        key: 'home_assistant.broker',
+        default: 'none',
+        effect: 'The broker Home Assistant uses: mqtt://host:1883, or mqtts://host:8883 for TLS (the certificate must be valid for the host name). If the broker goes away Minos keeps trying, waiting up to a minute between attempts.',
+        applies: 'live',
+        where: 'Settings → Home Assistant',
+      },
+      {
+        label: 'Username',
+        key: 'home_assistant.username',
+        default: 'none',
+        effect: 'The broker login. For the Mosquitto add-on, a Home Assistant user.',
+        applies: 'live',
+        where: 'Settings → Home Assistant',
+      },
+      {
+        label: 'Password',
+        key: 'home_assistant.password',
+        default: 'none',
+        effect: 'The broker password. Stored in the config file; never shown again, and hidden in the settings history.',
+        applies: 'live',
+        where: 'Settings → Home Assistant',
+      },
+      {
+        label: 'Add a Block switch for each named device',
+        key: 'home_assistant.device_switches',
+        default: 'on',
+        effect: 'One switch per device you have named on the Devices page. On blocks all of that device\'s DNS, exactly like Block device in Minos — handy for a bedtime automation.',
+        applies: 'live',
+        where: 'Settings → Home Assistant',
+      },
+      {
+        label: 'Discovery prefix',
+        key: 'home_assistant.discovery_prefix',
+        default: 'homeassistant',
+        effect: 'Where Home Assistant listens for announcements. Change it only if you changed it in Home Assistant\'s MQTT settings.',
+        applies: 'live',
+        where: 'Settings → Home Assistant',
+      },
+      {
+        label: 'Topic prefix',
+        key: 'home_assistant.topic_prefix',
+        default: 'minos',
+        effect: 'Where Minos publishes its state and listens for commands (minos/state, minos/blocking/set…). Give each Minos its own when two share a broker.',
+        applies: 'live',
+        where: 'Settings → Home Assistant',
+      },
+    ],
+  },
+  {
     id: 'settings-access',
     title: 'Settings → Access & security',
     page: '#/settings?tab=access',
@@ -755,4 +842,4 @@ export const docs: Section[] = [
 
 // Config keys that are containers of the documented keys above, not
 // settings in their own right. The drift test treats them as covered.
-export const structuralKeys = ['dns', 'blocking', 'lists', 'querylog', 'api', 'notifications', 'discovery', 'threats'];
+export const structuralKeys = ['dns', 'blocking', 'lists', 'querylog', 'api', 'notifications', 'discovery', 'threats', 'home_assistant'];
