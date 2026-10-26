@@ -894,6 +894,7 @@ export const copy = {
     submit: 'Unlock',
   },
   login: {
+    logoAlt: 'Minos — DNS server',
     prompt: 'Enter the password to continue.',
     codePrompt: 'Enter the 6-digit code from your authenticator app.',
     password: 'Password',

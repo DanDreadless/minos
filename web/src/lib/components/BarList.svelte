@@ -10,7 +10,10 @@
   <p class="empty">{empty}</p>
 {:else}
   <ol>
-    {#each items as item (item.label)}
+    <!-- Keyed by position: labels are not unique (a device on two addresses
+         shows its name twice), and a duplicate key throws and stops the
+         whole page rendering (field bug, v0.31.1). -->
+    {#each items as item, i (i)}
       <li>
         <svelte:element
           this={item.href ? 'a' : 'div'}

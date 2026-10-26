@@ -117,8 +117,7 @@
   <main class:fill={!needsToken && ($route === 'querylog' || $route === 'logs')}>
     {#if needsToken}
       <section class="token-gate">
-        <img class="gate-logo" src="/logo.png" alt="" />
-        <h1>{copy.appName}</h1>
+        <h1><img class="gate-logo" src="/logo-full.png" alt={copy.login.logoAlt} /></h1>
         {#if gate === 'password'}
           <p>{needCode ? copy.login.codePrompt : copy.login.prompt}</p>
           <form class="login" on:submit|preventDefault={submitPassword}>
@@ -252,15 +251,18 @@
     text-align: center;
   }
 
+  /* The full logo is drawn on black; lighten lets the black take the page
+     colour instead of showing as a square. */
   .gate-logo {
-    width: 160px;
-    height: 160px;
+    display: block;
+    width: min(300px, 80vw);
+    height: auto;
+    margin: 0 auto;
+    mix-blend-mode: lighten;
   }
 
   .token-gate h1 {
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    color: var(--accent);
+    margin: 0 0 1rem;
   }
 
   .token-gate form {

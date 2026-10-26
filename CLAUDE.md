@@ -563,7 +563,12 @@ This is security software; hold it to that standard.
   {#each} key — duplicate keys throw at runtime and freeze the whole page
   (field bug, v0.16.5). The Docket and device-page tables are deliberately
   unkeyed; keep any future entry list that way (or add a synthetic
-  client-side counter id).
+  client-side counter id). Same trap with *labels* (field bug, v0.31.1):
+  BarList was keyed by label, and once the busiest-devices list showed
+  device names, a device on two addresses produced two equal labels — the
+  throw stopped the dashboard rendering below the tiles, but only when the
+  names were already loaded, i.e. on returning to the page. Display lists
+  key by position; key by a field only when validation makes it unique.
 - **Svelte template functions must take their data as arguments**
   (field bug, v0.22.0): in Svelte 5's legacy (non-runes) mode a top-level
   `let` is compiled into a tracked signal **only if the template names it**.
