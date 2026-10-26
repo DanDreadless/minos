@@ -36,6 +36,9 @@ is protected, with a clear answer to "why was this blocked?" one click away.
 - **Try a list before you trust it.** Audit mode shows what a new blocklist
   *would* block without blocking anything, so you can add a strict list
   without breaking the house.
+- **Undo for settings.** Every change is recorded with who made it and
+  what it touched; see the change line by line (secrets hidden) and put
+  back any earlier version in one click.
 - **Knows your devices.** Names come from DHCP, mDNS, UPnP, NetBIOS and the
   MAC vendor registry, and rules follow a device across address changes.
 - **Modern DNS, both ways.** Upstreams over DoH, DoH3, DoT or DNS-over-QUIC;
@@ -135,6 +138,7 @@ As of October 2026, against each project's current release. ✅ yes ·
 | Audit (dry-run) blocklists | ✅ | — | — |
 | Flags infected devices by behaviour (DGA, DNS tunnelling) | ✅ | — | — |
 | In-process DNSSEC validation | ✅ | — | — |
+| Settings history with one-click undo | ✅ | — | — |
 | One-click update from the web interface | ✅ signed, auto-rollback | — | ✅ |
 | Encrypted DNS for devices (DoT / DoH / DoQ / HTTP/3) | ✅ | — | ✅ |
 | DDR — devices upgrade to encrypted DNS automatically | ✅ | — | ✅ |
