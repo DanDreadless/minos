@@ -67,6 +67,20 @@ export interface Suggestion {
   last: string;
 }
 
+// Threat: a device behaving like malware (threat detection).
+export interface Threat {
+  kind: 'dga' | 'tunnel' | 'known_threat';
+  client: string;
+  device?: string;
+  domain?: string;
+  list?: string;
+  count: number;
+  distinct?: number;
+  samples: string[];
+  first: string;
+  last: string;
+}
+
 export interface TemporaryAllow {
   domain: string;
   until: string;
@@ -268,6 +282,7 @@ export interface ConfigView {
     types: string[];
   };
   discovery: { ssdp: boolean; dhcp_listen: boolean };
+  threats: { enabled: boolean; ignore: string[] };
   log_level: string; // '' = the -log-level flag's (info by default)
 }
 
@@ -293,6 +308,7 @@ export interface SettingsUpdate {
     cname_inspection?: boolean;
   };
   lists?: { refresh_interval?: string };
+  threats?: { enabled?: boolean; ignore?: string[] };
   querylog?: { ring_size?: number; retention_days?: number; memory_mb?: number };
   api?: { token?: string };
   update_check?: boolean;
@@ -664,6 +680,10 @@ export const api = {
     request<{ domain: string; until?: string; status: string }>('POST', '/api/allowlist', { domain, minutes }),
   temporaryAllows: () => request<TemporaryAllow[]>('GET', '/api/allowlist/temporary'),
   suggestions: () => request<Suggestion[]>('GET', '/api/suggestions'),
+  threats: () => request<Threat[]>('GET', '/api/threats'),
+  dismissThreat: (t: Threat) =>
+    request<unknown>('POST', '/api/threats/dismiss', { kind: t.kind, client: t.client, domain: t.kind === 'known_threat' ? '' : (t.domain ?? '') }),
+  ignoreThreatDomain: (domain: string) => request<unknown>('POST', '/api/threats/ignore', { domain }),
   dismissSuggestion: (client: string, domain: string) =>
     request<unknown>('POST', '/api/suggestions/dismiss', { client, domain }),
   removeTemporaryAllow: (domain: string) =>

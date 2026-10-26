@@ -73,6 +73,7 @@ export const docs: Section[] = [
     howto: [
       'Pick the window at the top (24 hours, 7, 30 or 90 days). It is remembered in this browser.',
       'Click any number, domain or device to open exactly those queries in the Query Log.',
+      'Possible threats (in red): a device behaving like malware — many random-looking domains in a few minutes, long random names under one domain (data leaving through DNS), or lookups of known malicious domains. See lookups shows the evidence; This is fine hides it; Never flag adds a domain to the ignore list (Settings → Filtering).',
       'Something may be broken: when a device asks for a blocked name again and again within a couple of minutes — the way an app retries when blocking has broken it — Needs attention names the device and the domain, with Allow, Allow 1 h and Dismiss. Ad and tracker SDKs that nag all day are recognised and left out, as are blocks you chose yourself (your blocked domains, blocked services, group rules, a blocked device). It can also notify you.',
       'Needs attention appears only when something does: no rules loaded, a list failing or retired, a resolver not answering, no password or API token, a nearly full disk, DNSSEC unable to check answers, or new warnings in Logs. Each line links to its fix.',
       'The line under the tiles gives totals since Minos last started; the cache hit rate is also since the last start.',
@@ -530,6 +531,24 @@ export const docs: Section[] = [
         applies: 'live',
         where: 'Settings → Filtering',
       },
+      {
+        label: 'Threat detection',
+        key: 'threats.enabled',
+        default: 'on',
+        effect:
+          'Watches for devices behaving like malware and says so under Needs attention (and in a notification): many random-looking domains in a few minutes (how malware finds its control server), long random names under one domain (data sent out through DNS), or a lookup blocked by a threat-intelligence list such as URLhaus or Hagezi TIF. "This is fine" hides a finding for a week (a day for known malicious domains). It reads the query log in the background, so lookups are never slowed. Tuned on 90 days of a real home network: no false alarms for the first two kinds.',
+        applies: 'live',
+        where: 'Settings → Filtering',
+      },
+      {
+        label: 'Never flag these domains',
+        key: 'threats.ignore',
+        default: 'none',
+        effect:
+          'Domains (with subdomains) threat detection leaves alone — a service that legitimately uses long random names. Antivirus and spam-reputation lookups (Sophos, McAfee, ESET, Spamhaus…) are already left out. "Never flag" on a finding adds to it.',
+        applies: 'live',
+        where: 'Settings → Filtering',
+      },
     ],
   },
   {
@@ -723,4 +742,4 @@ export const docs: Section[] = [
 
 // Config keys that are containers of the documented keys above, not
 // settings in their own right. The drift test treats them as covered.
-export const structuralKeys = ['dns', 'blocking', 'lists', 'querylog', 'api', 'notifications', 'discovery'];
+export const structuralKeys = ['dns', 'blocking', 'lists', 'querylog', 'api', 'notifications', 'discovery', 'threats'];

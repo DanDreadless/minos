@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -79,6 +80,7 @@ type configView struct {
 		Types []string `json:"types"`
 	} `json:"notifications"`
 	Discovery config.DiscoveryConfig `json:"discovery"`
+	Threats   config.ThreatsConfig   `json:"threats"`
 }
 
 func viewOf(c *config.Config) configView {
@@ -145,6 +147,7 @@ func viewOf(c *config.Config) configView {
 	v.Notifications.Mute = append([]string{}, c.Notifications.Mute...)
 	v.Notifications.Types = config.NotificationTypes
 	v.Discovery = c.Discovery
+	v.Threats = config.ThreatsConfig{Enabled: c.Threats.Enabled, Ignore: append([]string{}, c.Threats.Ignore...)}
 	return v
 }
 
@@ -209,6 +212,10 @@ type settingsUpdate struct {
 		SSDP       *bool `json:"ssdp"`
 		DHCPListen *bool `json:"dhcp_listen"`
 	} `json:"discovery"`
+	Threats *struct {
+		Enabled *bool     `json:"enabled"`
+		Ignore  *[]string `json:"ignore"`
+	} `json:"threats"`
 }
 
 func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
@@ -351,6 +358,20 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			if upd.Discovery.DHCPListen != nil {
 				c.Discovery.DHCPListen = *upd.Discovery.DHCPListen
+			}
+		}
+		if upd.Threats != nil {
+			if upd.Threats.Enabled != nil {
+				c.Threats.Enabled = *upd.Threats.Enabled
+			}
+			if upd.Threats.Ignore != nil {
+				var ignore []string
+				for _, d := range *upd.Threats.Ignore {
+					if d = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(d), ".")); d != "" && !slices.Contains(ignore, d) {
+						ignore = append(ignore, d)
+					}
+				}
+				c.Threats.Ignore = ignore
 			}
 		}
 		return nil

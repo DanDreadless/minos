@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { api, type ConfigView, type ListStatus, type Status, type Suggestion, type UpstreamHealth } from '../api';
+  import { api, type ConfigView, type ListStatus, type Status, type Suggestion, type Threat, type UpstreamHealth } from '../api';
   import { copy } from '../copy';
   import { fmtClock } from '../format';
   import { docketHref } from '../router';
@@ -25,11 +25,19 @@
   let upstreams: UpstreamHealth[] = [];
   let cfg: ConfigView | null = null;
   let suggestions: Suggestion[] = [];
+  let threats: Threat[] = [];
   let timer: ReturnType<typeof setInterval> | null = null;
 
   async function load(): Promise<void> {
     // Each source is optional: a failure just leaves its signals out.
-    const [l, u, c, sg] = await Promise.allSettled([api.lists(), api.upstreams(), api.getConfig(), api.suggestions()]);
+    const [l, u, c, sg, th] = await Promise.allSettled([
+      api.lists(),
+      api.upstreams(),
+      api.getConfig(),
+      api.suggestions(),
+      api.threats(),
+    ]);
+    if (th.status === 'fulfilled') threats = th.value;
     if (l.status === 'fulfilled') lists = l.value;
     if (u.status === 'fulfilled') upstreams = u.value;
     if (c.status === 'fulfilled') cfg = c.value;
@@ -47,6 +55,25 @@
         notify(copy.allow.done(s.domain));
       }
       suggestions = suggestions.filter((x) => x.domain !== s.domain);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function threatFine(t: Threat): Promise<void> {
+    try {
+      await api.dismissThreat(t);
+      threats = threats.filter((x) => x !== t);
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function threatNever(t: Threat): Promise<void> {
+    if (!t.domain) return;
+    try {
+      await api.ignoreThreatDomain(t.domain);
+      threats = threats.filter((x) => x.domain !== t.domain);
     } catch (e) {
       notifyError(e);
     }
@@ -111,10 +138,29 @@
   });
 </script>
 
-{#if items.length || suggestions.length}
+{#if items.length || suggestions.length || threats.length}
   <section class="card attention" aria-label={copy.attention.title}>
     <h2>{copy.attention.title}</h2>
     <ul>
+      {#each threats as t (t.kind + ' ' + t.client + ' ' + (t.domain ?? ''))}
+        <li class="bad broken">
+          <span class="mark" aria-hidden="true"></span>
+          <span class="text">
+            {copy.attention.threat(t.kind, t.device || t.client, t)}
+            <a href={docketHref({ client: t.client, domain: t.kind === 'known_threat' ? undefined : t.domain, verdict: t.kind === 'known_threat' ? 'blocked' : undefined })}
+              >{copy.attention.brokenLookups}</a
+            >
+          </span>
+          <span class="fix">
+            <button title={copy.attention.threatFineHint} on:click={() => threatFine(t)}>{copy.attention.threatFine}</button>
+            {#if t.kind === 'tunnel' && t.domain}
+              <button class="link" title={copy.attention.threatNeverHint} on:click={() => threatNever(t)}
+                >{copy.attention.threatNever(t.domain)}</button
+              >
+            {/if}
+          </span>
+        </li>
+      {/each}
       {#each suggestions as s (s.client + ' ' + s.domain)}
         <li class="warn broken">
           <span class="mark" aria-hidden="true"></span>

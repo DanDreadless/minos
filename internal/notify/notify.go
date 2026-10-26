@@ -55,6 +55,7 @@ const (
 	TypeACMEFailed        = "acme_renewal_failed"
 	TypeDigest            = "digest"
 	TypeBreakage          = "breakage_suspected"
+	TypeThreat            = "threat_suspected"
 	TypeTest              = "test"
 )
 
@@ -95,6 +96,7 @@ var ntfyTags = map[string]string{
 	TypeACMEFailed:        "lock",
 	TypeDigest:            "bar_chart",
 	TypeBreakage:          "wrench",
+	TypeThreat:            "biohazard",
 	TypeTest:              "bell",
 }
 

@@ -281,6 +281,31 @@ the health lights next to each resolver in Settings:
 
 Probes count as requests in these counters and in `/metrics`.
 
+### `GET /api/threats`
+
+Devices behaving like malware (threat detection, `threats.enabled`):
+
+- `dga` — 12+ distinct random-looking registrable domains in 10 minutes;
+- `tunnel` — 20+ distinct names under one domain in 5 minutes, each carrying
+  50+ characters of long, high-entropy labels;
+- `known_threat` — lookups blocked by a threat-intelligence list (name or URL
+  mentions tif, threat, urlhaus, malware, phish, scam or ransom), one
+  accumulating finding per device (`distinct` domains, `count` lookups).
+
+```json
+[{"kind": "dga", "client": "192.168.1.25", "device": "Doorbell", "count": 14,
+  "samples": ["kqlxtqptsmys.com", "pxhbfogkrmplf.com"],
+  "first": "2026-10-26T14:02:11Z", "last": "2026-10-26T14:09:40Z"}]
+```
+
+A finding lasts 24 hours after its last evidence. New findings are sent as
+notifications of type `threat_suspected` at high priority.
+
+`POST /api/threats/dismiss` with `{"kind", "client", "domain"}` ("This is
+fine") hides one for a week (a day for `known_threat`; pass `"domain": ""`
+for `dga` and `known_threat`). `POST /api/threats/ignore` with `{"domain"}`
+adds it to `threats.ignore` — never flagged again, on any device.
+
 ### `GET /api/suggestions`
 
 Apps that look broken by blocking: a device that asked for a name a

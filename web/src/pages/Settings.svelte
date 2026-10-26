@@ -31,6 +31,8 @@
   let allowedNetworks = '';
   let rateLimit = 1000;
   let cnameInspect = true;
+  let threatsEnabled = true;
+  let threatsIgnore = '';
   let blockPrivateRelay = false;
   let retentionDays = 90;
   let ringSize = 10000;
@@ -105,6 +107,8 @@
     allowedNetworks = c.dns.allowed_networks.join('\n');
     rateLimit = c.dns.rate_limit;
     cnameInspect = c.blocking.cname_inspection;
+    threatsEnabled = c.threats.enabled;
+    threatsIgnore = c.threats.ignore.join('\n');
     blockPrivateRelay = c.blocking.block_icloud_private_relay;
     blockTTL = c.dns.block_ttl;
     retentionDays = c.querylog.retention_days;
@@ -205,6 +209,13 @@
             cname_inspection: cnameInspect,
           },
           dns: { block_ttl: blockTTL, allow_firefox_doh: !firefoxCanary, rebind_protection: rebindProtect },
+          threats: {
+            enabled: threatsEnabled,
+            ignore: threatsIgnore
+              .split(/[\s,]+/)
+              .map((s) => s.trim())
+              .filter(Boolean),
+          },
         };
       case 'notifications':
         return {
@@ -253,6 +264,7 @@
   // (Svelte tracks only what a reactive statement names).
   $: draftKey = JSON.stringify([
     upstreams, dnssec, mode, blockTTL, safeSearch, firefoxCanary, rebindProtect, cnameInspect, allowedNetworks, rateLimit, blockPrivateRelay, retentionDays,
+    threatsEnabled, threatsIgnore,
     ringSize, memoryMB, cacheEnabled, cacheMaxEntries, cacheMinTTL, cacheMaxTTL, cacheServeStale,
     updateCheck, webhookURL, ntfyURL, ntfyToken, digest, digestTime, digestDay, uiURL, quiet,
     quietFrom, quietTo, mute, ssdp, dhcpListen, logLevel,
@@ -783,6 +795,19 @@
       {copy.settings.privateRelay}
     </label>
     <p class="note">{copy.settings.privateRelayHint}</p>
+  </section>
+
+  <section class="card">
+    <h2>{copy.settings.threatsTitle} <small>{copy.settings.threatsHint}</small></h2>
+    <label class="radio safe-search">
+      <input type="checkbox" bind:checked={threatsEnabled} />
+      {copy.settings.threatsEnabled}
+    </label>
+    <p class="note">{copy.settings.threatsEnabledHint}</p>
+    <label class="field wide">
+      <span>{copy.settings.threatsIgnore} <small>{copy.settings.threatsIgnoreHint}</small></span>
+      <textarea rows="3" placeholder="example.com" bind:value={threatsIgnore} disabled={!threatsEnabled}></textarea>
+    </label>
   </section>
   {/if}
 

@@ -29,6 +29,7 @@ import (
 	"minos/internal/lists"
 	"minos/internal/notify"
 	"minos/internal/querylog"
+	"minos/internal/threats"
 )
 
 // ProxyStatsSource reports DNS-proxy counters (response cache, upstreams,
@@ -80,6 +81,7 @@ type Server struct {
 	// is what turns the one-click update on (tests point it elsewhere).
 	updateHelper string
 	breakage     *breakage.Detector // may be nil: no suggestions
+	threats      *threats.Detector  // may be nil: no threat findings
 }
 
 func New(engine *filter.Engine, qlog *querylog.Log, store *config.Store,
@@ -171,6 +173,9 @@ func (s *Server) Router() http.Handler {
 		r.Delete("/allowlist", s.handleDeleteDomain("allowlist")) // ?domain=, for /regex/ rules
 		r.Get("/allowlist/temporary", s.handleGetTemporaryAllows)
 		r.Get("/suggestions", s.handleSuggestions)
+		r.Get("/threats", s.handleThreats)
+		r.Post("/threats/dismiss", s.handleDismissThreat)
+		r.Post("/threats/ignore", s.handleIgnoreThreatDomain)
 		r.Post("/suggestions/dismiss", s.handleDismissSuggestion)
 		r.Delete("/allowlist/temporary", s.handleDeleteTemporaryAllow) // ?domain=
 		r.Get("/denylist", s.handleGetDomains("denylist"))
