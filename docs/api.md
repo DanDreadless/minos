@@ -281,6 +281,39 @@ the health lights next to each resolver in Settings:
 
 Probes count as requests in these counters and in `/metrics`.
 
+### `GET /api/suggestions`
+
+Apps that look broken by blocking: a device that asked for a name a
+blocklist blocks at least 15 times within two minutes, when it had not been
+doing so through the previous 24 hours (chronic tracker chatter is left out).
+Only blocks from subscribed blocklists, CNAME cloaking and rebinding
+protection count — never your own blocked domains, blocked services, group
+rules or a blocked device. A suggestion lasts an hour after its last blocked
+lookup and disappears as soon as the name is allowed.
+
+```json
+[{"client": "192.168.1.20", "device": "Living room TV", "domain": "api.app.example",
+  "list": "StevenBlack", "rule": "api.app.example", "count": 42,
+  "since": "2026-10-26T14:02:11Z", "last": "2026-10-26T14:03:40Z"}]
+```
+
+### `POST /api/suggestions/dismiss`
+
+`{"client": "192.168.1.20", "domain": "api.app.example"}` hides that
+suggestion and keeps the pair quiet for 24 hours. A new suggestion is also
+sent as a notification of type `breakage_suspected` (mutable like the rest).
+
+### Temporary allows
+
+`POST /api/allowlist` with `{"domain": "ads.example.com", "minutes": 60}`
+allows a domain (and its subdomains) until then, after which it is blocked
+again by itself (`201` with `until`). Up to a week; a domain only — not a
+`/regex/` rule. Allowing the domain again replaces the entry; allowing it
+for good (no `minutes`) removes the temporary entry. Queries it passes are
+attributed to the list `temporary-allow`.
+`GET /api/allowlist/temporary` lists the active ones
+(`[{"domain", "until"}]`); `DELETE /api/allowlist/temporary?domain=` ends one now.
+
 ### `POST /api/upstreams/test`
 
 Asks one upstream a test question now — the **Test** button in Settings.

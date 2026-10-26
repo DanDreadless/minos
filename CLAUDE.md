@@ -648,6 +648,27 @@ This is security software; hold it to that standard.
   trusting a throwaway key. Tested end to end in a systemd container (good
   update, rollback, downgrade, swapped archive, junk request); the path
   unit fires through DynamicUser's `/var/lib/minos` symlink.
+- **"Something broke" detection** (fixed decisions, October 2026,
+  `internal/breakage`): a burst of blocked lookups of one name by one device
+  (15 in 2 minutes) is an app retrying because blocking broke it — but ad
+  and tracker SDKs retry all day, so a burst counts only when the device did
+  not hit that name more than 45 times in the 24 hours before it (one
+  bounded, indexed QueryHistory call, made only when a burst crosses the
+  threshold, in its own goroutine; ephemeral mode skips the check). Only
+  blocks from subscribed lists, CNAME cloaking and rebinding count — the
+  user's own denylist, services, group rules and device blocks are
+  deliberate (`considered`). Reads the query-log *stream* (slow subscribers
+  drop, never stall), so the query path pays nothing; suggestions live in
+  memory, end an hour after the last hit or the moment the name passes, and
+  a dismissal (or a chronic verdict) quiets the pair for a day. Allowing the
+  domain through the API calls `Resolve`.
+- **Temporary allows** (fixed decisions, October 2026): a separate key,
+  `blocking.temporary_allows` ({domain, until}), compiled as list
+  `temporary-allow` while active; `lists.RunTemporaryAllows` prunes expired
+  entries every 15 s, and the config change rebuilds the matcher — that is
+  what ends the allow. An older binary ignores the key, so the domains are
+  blocked again (the safe direction). Domains only (no regex), up to a week;
+  a permanent allow replaces a temporary one.
 - **Extended DNS Errors** (fixed decisions, October 2026, `ede.go`): answers
   say why (RFC 8914) — 15 Blocked naming the list, 18 Prohibited for a
   device-level block, 6 DNSSEC Bogus with the reason, 3 Stale Answer, 23

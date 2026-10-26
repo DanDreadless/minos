@@ -177,6 +177,23 @@ func DNSDownEvent(last string) Event {
 	}
 }
 
+// BreakageEvent: a device is retrying a name a blocklist blocks, the way an
+// app does when blocking has broken it. Links to the dashboard, where the
+// suggestion offers Allow, Allow for 1 hour and Dismiss.
+func BreakageEvent(dev DeviceInfo, domain, list string, count int) Event {
+	who := dev.label()
+	return Event{
+		Type:     TypeBreakage,
+		Priority: PriorityDefault,
+		Title:    "Something may be broken on " + who,
+		Message: fmt.Sprintf("%s asked for %s %d times in two minutes, and %s blocks it — an app on it has "+
+			"probably stopped working. If so, allow the domain from the Minos dashboard, for an hour or for good.",
+			who, domain, count, list),
+		Link:    "#/",
+		Actions: []Action{{Label: "Open Minos", URL: "#/"}},
+	}
+}
+
 // UpdateEvent announces a newer release.
 func UpdateEvent(current, latest string) Event {
 	latest = strings.TrimPrefix(latest, "v")

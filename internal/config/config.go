@@ -188,11 +188,36 @@ type CacheConfig struct {
 	ServeStale bool `yaml:"serve_stale" json:"serve_stale"`
 }
 
+// TemporaryAllow is one allowed domain with an expiry.
+type TemporaryAllow struct {
+	Domain string    `yaml:"domain" json:"domain"`
+	Until  time.Time `yaml:"until" json:"until"`
+}
+
+// MaxTemporaryAllow is the longest a temporary allow may last.
+const MaxTemporaryAllow = 7 * 24 * time.Hour
+
+// ActiveTemporaryAllows returns the temporary allows that have not expired.
+func (b BlockingConfig) ActiveTemporaryAllows(now time.Time) []TemporaryAllow {
+	var out []TemporaryAllow
+	for _, t := range b.TemporaryAllows {
+		if t.Until.After(now) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 type BlockingConfig struct {
 	// Mode is "zero_ip" (respond 0.0.0.0 / ::) or "nxdomain".
 	Mode      string   `yaml:"mode"`
 	Allowlist []string `yaml:"allowlist"`
 	Denylist  []string `yaml:"denylist"`
+	// TemporaryAllows are allowed domains that expire ("Allow for 1 hour"),
+	// compiled as the temporary-allow list until Until passes and then
+	// removed. A separate key, so an older Minos that does not know it simply
+	// blocks them again — the safe direction.
+	TemporaryAllows []TemporaryAllow `yaml:"temporary_allows,omitempty"`
 	// Services are catalog names (see internal/services) blocked for
 	// everyone; groups can block more for their members only.
 	Services []string `yaml:"services,omitempty"`
@@ -423,6 +448,7 @@ type NotificationsConfig struct {
 var NotificationTypes = []string{
 	"device_new", "upstream_sick", "upstream_recovered", "dns_down",
 	"list_failing", "list_recovered", "update_available", "acme_renewal_failed", "digest",
+	"breakage_suspected",
 }
 
 // DigestSchedule resolves the configured digest timing, applying defaults
@@ -555,6 +581,7 @@ func (c *Config) Clone() *Config {
 	out := *c
 	out.DNS.Upstreams = append([]Upstream(nil), c.DNS.Upstreams...)
 	out.Blocking.Allowlist = append([]string(nil), c.Blocking.Allowlist...)
+	out.Blocking.TemporaryAllows = append([]TemporaryAllow(nil), c.Blocking.TemporaryAllows...)
 	out.Blocking.Denylist = append([]string(nil), c.Blocking.Denylist...)
 	out.Blocking.Services = append([]string(nil), c.Blocking.Services...)
 	out.Blocking.AllowedServices = append([]string(nil), c.Blocking.AllowedServices...)
@@ -806,6 +833,17 @@ func (c *Config) Validate() error {
 	for i, s := range c.Blocking.Services {
 		if !services.Exists(s) {
 			return fmt.Errorf("blocking.services[%d]: unknown service %q", i, s)
+		}
+	}
+	if len(c.Blocking.TemporaryAllows) > 1000 {
+		return fmt.Errorf("blocking.temporary_allows: at most 1000 entries")
+	}
+	for i, t := range c.Blocking.TemporaryAllows {
+		if !validDomain(t.Domain) {
+			return fmt.Errorf("blocking.temporary_allows[%d].domain: %q is not a valid domain", i, t.Domain)
+		}
+		if t.Until.IsZero() {
+			return fmt.Errorf("blocking.temporary_allows[%d].until: an expiry time is required", i)
 		}
 	}
 	for i, s := range c.Blocking.AllowedServices {

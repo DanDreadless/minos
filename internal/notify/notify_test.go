@@ -288,7 +288,7 @@ func TestUIBase(t *testing.T) {
 func TestMutableTypesMatchEvents(t *testing.T) {
 	sent := []string{
 		TypeDeviceNew, TypeUpstreamSick, TypeUpstreamRecovered, TypeDNSDown, TypeListFailing,
-		TypeListRecovered, TypeUpdateAvailable, TypeACMEFailed, TypeDigest,
+		TypeListRecovered, TypeUpdateAvailable, TypeACMEFailed, TypeDigest, TypeBreakage,
 	}
 	if !slices.Equal(sent, config.NotificationTypes) {
 		t.Errorf("config.NotificationTypes = %v, want %v", config.NotificationTypes, sent)
@@ -371,6 +371,9 @@ func TestEventWording(t *testing.T) {
 		{"only upstream down", UpstreamEvent("1.1.1.1:853", true, nil), "DNS is down: no resolver is answering",
 			"Every upstream resolver has stopped answering (the last was 1.1.1.1:853)"},
 		{"update", UpdateEvent("0.23.0", "0.24.0"), "Minos v0.24.0 is available", "This server runs v0.23.0."},
+		{"breakage", BreakageEvent(DeviceInfo{Key: "k", IP: "192.168.1.20", Name: "Living room TV"}, "api.app.example", "StevenBlack", 42),
+			"Something may be broken on Living room TV",
+			"Living room TV asked for api.app.example 42 times in two minutes, and StevenBlack blocks it"},
 		{"updated", UpdateResultEvent("done", "0.30.0", "v0.31.0", ""), "Minos updated to v0.31.0",
 			"The update from v0.30.0 finished and the new version is answering."},
 		{"rolled back", UpdateResultEvent("rolled_back", "0.30.0", "v0.31.0", ""), "Minos update to v0.31.0 was rolled back",

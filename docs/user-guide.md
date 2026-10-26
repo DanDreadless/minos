@@ -51,6 +51,7 @@ What your network did over a window you choose: queries, blocked, block rate, a 
 
 - Pick the window at the top (24 hours, 7, 30 or 90 days). It is remembered in this browser.
 - Click any number, domain or device to open exactly those queries in the Query Log.
+- Something may be broken: when a device asks for a blocked name again and again within a couple of minutes — the way an app retries when blocking has broken it — Needs attention names the device and the domain, with Allow, Allow 1 h and Dismiss. Ad and tracker SDKs that nag all day are recognised and left out, as are blocks you chose yourself (your blocked domains, blocked services, group rules, a blocked device). It can also notify you.
 - Needs attention appears only when something does: no rules loaded, a list failing or retired, a resolver not answering, no password or API token, a nearly full disk, DNSSEC unable to check answers, or new warnings in Logs. Each line links to its fix.
 - The line under the tiles gives totals since Minos last started; the cache hit rate is also since the last start.
 - The Host card (not shown in containers) reports the machine Minos runs on; the disk figure is the filesystem holding the query log.
@@ -66,7 +67,7 @@ Every DNS lookup your devices make — streaming live, and searchable across the
 - Any filter switches to Results: matches from the full history, newest first, with Load older.
 - Filter with the result buttons (All, Blocked, Allowed, Would block), the list menu and the time range — or click any device, domain, type, list or resolver in a row.
 - The search box takes filters as you type: blocked, allowed, would-block, client:192.168.1.5, domain:example.com (that exact name), type:AAAA, list:StevenBlack (quote names with spaces), upstream:1.1.1.1:853, dnssec:bogus, and -cdn to leave out names containing "cdn". Anything else matches domains, device addresses and device names — kitchen finds every query from the Kitchen iPad. Press / to search, Enter to apply, Esc to clear, Backspace to remove the last filter.
-- Row actions: Allow (on blocked rows) or Block (on allowed rows), Check (how the domain would be judged now) and Copy.
+- Row actions: Allow (on blocked rows) or Block (on allowed rows), 1 h (allow for an hour, then block again), Check (how the domain would be judged now) and Copy.
 - Export CSV or JSON downloads every match of the current filter, up to 100,000 rows.
 - The address bar keeps the filter, so a search can be bookmarked or shared.
 
@@ -126,6 +127,7 @@ Your own rules, which beat the blocklists: domains you always allow or always bl
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
 | Allowed domains<br><small>Blocking → Allowed</small> | `blocking.allowlist` | — | Always allowed, with subdomains. An entry written /pattern/ is a regex rule (case-insensitive, matched anywhere in the name): an allow regex beats any block. | at once |
+| Allowed for a limited time<br><small>Blocking → Allowed</small> | `blocking.temporary_allows` | — | Domains allowed until a time, then blocked again by themselves — "Allow for 1 hour" on a Query Log row or in Check a domain. Shown in the Query Log as allowed by temporary-allow. Up to a week; allowing a domain for good replaces its temporary allow.<br>`domain`: The domain, with subdomains.<br>`until`: When the allow ends (a timestamp, e.g. 2026-10-26T15:00:00Z). | at once |
 | Blocked domains<br><small>Blocking → Blocked</small> | `blocking.denylist` | — | Always blocked, with subdomains. An entry written /pattern/ is a regex rule, e.g. /^ad[0-9]*\./ — checked after the exact rules, so an allowed domain still wins. Regexes use RE2 (no backreferences or lookaround); up to 1000 per list. | at once |
 | Blocked services<br><small>Blocking → Allowed / Blocked → Services</small> | `blocking.services` | — | Services blocked for everyone. | at once |
 | Allowed services<br><small>Blocking → Allowed / Blocked → Services</small> | `blocking.allowed_services` | — | Services allowed for everyone; allowing beats blocking. | at once |
