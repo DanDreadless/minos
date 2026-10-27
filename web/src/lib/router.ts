@@ -10,7 +10,6 @@ export type Route =
   | 'lists'
   | 'allowed'
   | 'blocked'
-  | 'local'
   | 'privacy'
   | 'logs'
   | 'help'
@@ -42,8 +41,8 @@ function parse(): Route {
       return 'settings';
     case '#/logs':
       return 'logs';
-    case '#/local':
-      return 'local';
+    case '#/local': // Local DNS moved into Settings → DNS (the default tab)
+      return 'settings';
     case '#/privacy':
       return 'privacy';
     case '#/help':
@@ -108,7 +107,6 @@ export const hrefFor: Record<Route, string> = {
   blocked: '#/blocked',
   settings: '#/settings',
   logs: '#/logs',
-  local: '#/local',
   privacy: '#/privacy',
   help: '#/help',
 };

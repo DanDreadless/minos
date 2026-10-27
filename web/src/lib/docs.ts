@@ -317,7 +317,7 @@ export const docs: Section[] = [
   },
   {
     id: 'privacy',
-    title: 'Privacy',
+    title: 'Blocking → Privacy',
     page: '#/privacy',
     summary:
       'Which tracking companies your devices talked to — advertising, analytics and telemetry — what got through and what your blocklists stopped, for the whole network or one device (on its page).',
@@ -333,19 +333,20 @@ export const docs: Section[] = [
         label: 'Companies whose tracking is blocked',
         key: 'blocking.companies',
         default: 'none',
-        effect: 'Company IDs (from the Privacy page) whose advertising, analytics and telemetry names are blocked for everyone.',
+        effect: 'Company IDs (from Blocking → Privacy) whose advertising, analytics and telemetry names are blocked for everyone.',
         applies: 'live',
-        where: 'Privacy',
+        where: 'Blocking → Privacy',
       },
     ],
   },
   {
     id: 'localdns',
-    title: 'Local DNS',
-    page: '#/local',
+    title: 'Settings → DNS: names on your network',
+    page: '#/settings?tab=dns',
     summary:
       'Names on your own network: records Minos answers itself, and domains it sends to another resolver — usually your router, so device names from DHCP keep working.',
     howto: [
+      'Both live in Settings → DNS, below the upstream resolvers. Local records save the moment you add, edit or remove one; conditional forwarding is saved with the rest of the tab by Save changes.',
       'Local records: A (IPv4), AAAA (IPv6) or CNAME (alias). A leading *. matches all subdomains. Address records also answer reverse (PTR) lookups. Local records beat the blocklists and never leave your network.',
       'Conditional forwarding: send domains such as lan, home.arpa or your reverse zone (1.168.192.in-addr.arpa) to the router. A route is final: if its resolver fails, the lookup fails rather than going upstream.',
       'Lookups for private address ranges that no route covers are answered "not found" locally rather than leaking upstream.',
@@ -356,7 +357,7 @@ export const docs: Section[] = [
         key: 'dns.local_records',
         effect: 'Names Minos answers itself.',
         applies: 'live',
-        where: 'Local DNS',
+        where: 'Settings → DNS',
         fields: [
           { key: 'dns.local_records.name', effect: 'The name, e.g. nas.home.lab or *.home.lab.' },
           { key: 'dns.local_records.a', effect: 'IPv4 addresses.' },
@@ -377,7 +378,7 @@ export const docs: Section[] = [
         key: 'dns.routes',
         effect: 'Domains sent to a different resolver.',
         applies: 'live',
-        where: 'Local DNS',
+        where: 'Settings → DNS',
         fields: [
           { key: 'dns.routes.domains', effect: 'Domains it covers, with their subdomains.' },
           { key: 'dns.routes.upstream', effect: 'The resolver to use.' },

@@ -15,8 +15,8 @@ immediately. "After restart" settings live only in `minos.yaml`; restart Minos a
 - [Devices](#devices)
 - [Blocking → Blocklists](#blocklists)
 - [Blocking → Allowed and Blocked](#allowblock)
-- [Privacy](#privacy)
-- [Local DNS](#localdns)
+- [Blocking → Privacy](#privacy)
+- [Settings → DNS: names on your network](#localdns)
 - [Logs](#logs)
 - [Home Assistant](#home-assistant)
 - [Settings → DNS](#settings-dns)
@@ -144,7 +144,7 @@ Your own rules, which beat the blocklists: domains you always allow or always bl
 
 <a id="privacy"></a>
 
-## Privacy
+## Blocking → Privacy
 
 Which tracking companies your devices talked to — advertising, analytics and telemetry — what got through and what your blocklists stopped, for the whole network or one device (on its page).
 
@@ -156,23 +156,24 @@ Which tracking companies your devices talked to — advertising, analytics and t
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
-| Companies whose tracking is blocked<br><small>Privacy</small> | `blocking.companies` | none | Company IDs (from the Privacy page) whose advertising, analytics and telemetry names are blocked for everyone. | at once |
+| Companies whose tracking is blocked<br><small>Blocking → Privacy</small> | `blocking.companies` | none | Company IDs (from Blocking → Privacy) whose advertising, analytics and telemetry names are blocked for everyone. | at once |
 
 <a id="localdns"></a>
 
-## Local DNS
+## Settings → DNS: names on your network
 
 Names on your own network: records Minos answers itself, and domains it sends to another resolver — usually your router, so device names from DHCP keep working.
 
+- Both live in Settings → DNS, below the upstream resolvers. Local records save the moment you add, edit or remove one; conditional forwarding is saved with the rest of the tab by Save changes.
 - Local records: A (IPv4), AAAA (IPv6) or CNAME (alias). A leading *. matches all subdomains. Address records also answer reverse (PTR) lookups. Local records beat the blocklists and never leave your network.
 - Conditional forwarding: send domains such as lan, home.arpa or your reverse zone (1.168.192.in-addr.arpa) to the router. A route is final: if its resolver fails, the lookup fails rather than going upstream.
 - Lookups for private address ranges that no route covers are answered "not found" locally rather than leaking upstream.
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
-| Local records<br><small>Local DNS</small> | `dns.local_records` | — | Names Minos answers itself.<br>`name`: The name, e.g. nas.home.lab or *.home.lab.<br>`a`: IPv4 addresses.<br>`aaaa`: IPv6 addresses.<br>`cname`: An alias target (instead of addresses). | at once |
+| Local records<br><small>Settings → DNS</small> | `dns.local_records` | — | Names Minos answers itself.<br>`name`: The name, e.g. nas.home.lab or *.home.lab.<br>`a`: IPv4 addresses.<br>`aaaa`: IPv6 addresses.<br>`cname`: An alias target (instead of addresses). | at once |
 | Local record TTL<br><small>minos.yaml or the API</small> | `dns.local_ttl` | 300 | How long devices cache a local answer (seconds). | at once |
-| Conditional forwarding<br><small>Local DNS</small> | `dns.routes` | — | Domains sent to a different resolver.<br>`domains`: Domains it covers, with their subdomains.<br>`upstream`: The resolver to use.<br>`upstream.address`: host:port, or a URL for DoH.<br>`upstream.protocol`: udp, tcp, dot, doh, doh3 or doq. | at once |
+| Conditional forwarding<br><small>Settings → DNS</small> | `dns.routes` | — | Domains sent to a different resolver.<br>`domains`: Domains it covers, with their subdomains.<br>`upstream`: The resolver to use.<br>`upstream.address`: host:port, or a URL for DoH.<br>`upstream.protocol`: udp, tcp, dot, doh, doh3 or doq. | at once |
 | Forward private reverse lookups<br><small>minos.yaml</small> | `dns.forward_private_reverse` | false | Send reverse lookups for private addresses upstream instead of answering them locally. | after restart (minos.yaml) |
 
 <a id="logs"></a>

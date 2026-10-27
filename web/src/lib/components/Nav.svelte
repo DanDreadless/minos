@@ -14,8 +14,6 @@
     { key: 'querylog', ...copy.nav.querylog },
     { key: 'devices', ...copy.nav.devices },
     { key: 'lists', ...copy.nav.lists },
-    { key: 'privacy', ...copy.nav.privacy },
-    { key: 'local', ...copy.nav.local },
     { key: 'logs', ...copy.nav.logs },
     { key: 'settings', ...copy.nav.settings },
     { key: 'help', ...copy.nav.help },
@@ -82,7 +80,7 @@
           href={hrefFor[item.key]}
           class:active={$route === item.key ||
             ($route === 'device' && item.key === 'devices') ||
-            (($route === 'allowed' || $route === 'blocked') && item.key === 'lists')}
+            (($route === 'allowed' || $route === 'blocked' || $route === 'privacy') && item.key === 'lists')}
           title={item.hint}
           on:click={closeDrawer}
         >

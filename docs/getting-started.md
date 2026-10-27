@@ -478,7 +478,7 @@ not-blocking state also shows in the top bar.
   the blocked-services bundles deliberately leave out. An allowed domain beats any
   blocked domain or blocklist; to allow a service only for certain devices, set
   it on a group on the Devices page.
-- **Local DNS** — names on your own network. **Local records** are
+- **Local DNS** (Settings → DNS) — names on your own network. **Local records** are
   A/AAAA/CNAME records (wildcards like `*.home.lab` included) that Minos
   answers itself — they beat the blocklists, never leave your network, and
   address records answer reverse (PTR) lookups automatically.

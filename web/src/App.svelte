@@ -15,9 +15,7 @@
   import Devices from './pages/Devices.svelte';
   import QueryLog from './pages/QueryLog.svelte';
   import Help from './pages/Help.svelte';
-  import LocalDNS from './pages/LocalDNS.svelte';
   import Logs from './pages/Logs.svelte';
-  import Privacy from './pages/Privacy.svelte';
   import Settings from './pages/Settings.svelte';
 
   let status: Status | null = null;
@@ -192,12 +190,8 @@
         <Devices />
       {:else if $route === 'device'}
         <DevicePage />
-      {:else if $route === 'lists' || $route === 'allowed' || $route === 'blocked'}
+      {:else if $route === 'lists' || $route === 'allowed' || $route === 'blocked' || $route === 'privacy'}
         <Blocking />
-      {:else if $route === 'local'}
-        <LocalDNS />
-      {:else if $route === 'privacy'}
-        <Privacy />
       {:else if $route === 'logs'}
         <Logs />
       {:else if $route === 'settings'}

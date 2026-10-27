@@ -1,13 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type LocalRecord, type Upstream } from '../lib/api';
-  import HelpLink from '../lib/components/HelpLink.svelte';
-  import { copy } from '../lib/copy';
-  import { notify, notifyError } from '../lib/toast';
-
-  // Everything about names on your own network, in one place: records Minos
-  // answers itself, and domains it sends to another resolver (usually the
-  // router, so DHCP hostnames resolve).
+  // Settings → DNS: records Minos answers itself for names on your own
+  // network. Each add, edit or removal saves at once — like the other
+  // actions in Settings, not a draft for the Save changes bar.
+  import { api, type LocalRecord } from '../api';
+  import { copy } from '../copy';
+  import { notify, notifyError } from '../toast';
 
   let localRecords: LocalRecord[] = [];
   let newLocalName = '';
@@ -21,22 +19,10 @@
   let editLocalType = 'A';
   let editLocalValue = '';
 
-  interface RouteRow {
-    domains: string;
-    address: string;
-    protocol: Upstream['protocol'];
-  }
-  let routeRows: RouteRow[] = [];
-
   async function load(): Promise<void> {
     try {
       const cfg = await api.getConfig();
       localRecords = cfg.dns.local_records;
-      routeRows = cfg.dns.routes.map((r) => ({
-        domains: r.domains.join(', '),
-        address: r.upstream.address,
-        protocol: r.upstream.protocol,
-      }));
     } catch (e) {
       notifyError(e);
     }
@@ -127,54 +113,12 @@
     await saveLocalRecords(localRecords.filter((r) => r.name !== name));
   }
 
-  // A pasted https:// URL can only be DoH; switch the protocol to match
-  // rather than let the row save as DoT and fail every exchange.
-  function matchProtocol(row: RouteRow): void {
-    if (/^https:\/\//i.test(row.address.trim()) && row.protocol !== 'doh') {
-      row.protocol = 'doh';
-      routeRows = routeRows;
-    }
-  }
-
-  async function saveRoutes(): Promise<void> {
-    try {
-      const cfg = await api.updateConfig({
-        dns: {
-          routes: routeRows.map((r) => ({
-            domains: r.domains
-              .split(/[\s,]+/)
-              .map((s) => s.trim())
-              .filter(Boolean),
-            upstream: { address: r.address.trim(), protocol: r.protocol },
-          })),
-        },
-      });
-      routeRows = cfg.dns.routes.map((r) => ({
-        domains: r.domains.join(', '),
-        address: r.upstream.address,
-        protocol: r.upstream.protocol,
-      }));
-      notify(copy.settings.saved);
-    } catch (e) {
-      notifyError(e);
-    }
-  }
-
-  function addRoute(): void {
-    routeRows = [...routeRows, { domains: '', address: '', protocol: 'udp' }];
-  }
-
-  function removeRoute(i: number): void {
-    routeRows = routeRows.filter((_, idx) => idx !== i);
-  }
-
   onMount(() => void load());
 </script>
 
-<h1>{copy.nav.local.label} <small>{copy.nav.local.hint}</small><HelpLink section="localdns" /></h1>
-
 <section class="card">
   <h2>{copy.domains.localTitle} <small>{copy.domains.localHint}</small></h2>
+  <p class="note">{copy.domains.localSavesAtOnce}</p>
   <form class="local-add" on:submit|preventDefault={addLocalRecord}>
     <input placeholder={copy.domains.localNamePlaceholder} bind:value={newLocalName} required />
     <select bind:value={newLocalType} title="Record type">
@@ -243,54 +187,12 @@
   {/if}
 </section>
 
-<section class="card">
-  <h2>{copy.settings.routesTitle} <small>{copy.settings.routesHint}</small></h2>
-  {#if routeRows.length === 0}
-    <p class="note">{copy.settings.routesEmpty}</p>
-  {/if}
-  {#each routeRows as r, i (i)}
-    <div class="route-row">
-      <input
-        class="grow"
-        placeholder={copy.settings.routesDomainsPlaceholder}
-        title={copy.settings.routesDomains}
-        bind:value={r.domains}
-      />
-      <span class="route-arrow" aria-hidden="true">→</span>
-      <input
-        placeholder={r.protocol === 'doh' ? 'https://resolver/dns-query' : 'host:port'}
-        bind:value={r.address}
-        on:input={() => matchProtocol(r)}
-      />
-      <select bind:value={r.protocol} title="Protocol">
-        <option value="udp">UDP</option>
-        <option value="tcp">TCP</option>
-        <option value="dot">DoT</option>
-        <option value="doh">DoH</option>
-        <option value="doh3">DoH3</option>
-        <option value="doq">DoQ</option>
-      </select>
-      <button class="danger" title="Remove route" on:click={() => removeRoute(i)}>✕</button>
-    </div>
-  {/each}
-  <p class="note">{copy.settings.routesNote}</p>
-  <div class="section-actions">
-    <button on:click={addRoute}>{copy.settings.routesAdd}</button>
-    <button class="primary" on:click={saveRoutes}>{copy.settings.save}</button>
-  </div>
-</section>
-
 <style>
-  h1 small,
   h2 small {
     color: var(--text-dim);
     font-size: 0.78rem;
     margin-left: 0.5rem;
     letter-spacing: 0;
-  }
-
-  section + section {
-    margin-top: 1.25rem;
   }
 
   form {
@@ -388,28 +290,6 @@
   .local-edit .edit-value {
     flex: 1 1 12rem;
     min-width: 8rem;
-  }
-
-  .route-row {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    flex-wrap: wrap;
-    margin-bottom: 0.5rem;
-  }
-
-  .grow {
-    flex: 1;
-  }
-
-  .route-arrow {
-    color: var(--text-dim);
-  }
-
-  .section-actions {
-    display: flex;
-    gap: 0.6rem;
-    margin-top: 0.9rem;
   }
 
   .note {

@@ -34,7 +34,7 @@ is protected, with a clear answer to "why was this blocked?" one click away.
   the way an app does when it has stopped working, Minos says which device,
   what changed and since when — with Allow, Allow 1 h and Dismiss. Trackers
   that were blocked all along never trigger it.
-- **See who is tracking you, and stop them by company.** The Privacy page
+- **See who is tracking you, and stop them by company.** Blocking → Privacy
   shows which tracking companies each device talks to — what got through
   and what your lists stopped — and blocks a company's advertising,
   analytics and telemetry in one click, without breaking its own sites

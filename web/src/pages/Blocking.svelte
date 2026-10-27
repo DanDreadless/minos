@@ -4,16 +4,19 @@
   import { route } from '../lib/router';
   import AllowBlock from './AllowBlock.svelte';
   import Blocklists from './Blocklists.svelte';
+  import Privacy from './Privacy.svelte';
 
   // Everything that decides what is blocked, in one place: the subscribed
-  // lists, what you always allow, and what you always block. Each tab has
-  // its own address (#/lists, #/allowed, #/blocked; the old #/domains opens
-  // Allowed), so links and notification taps land on the right one.
+  // lists, what you always allow, what you always block, and the tracking
+  // companies your devices talk to (with a block by company). Each tab has
+  // its own address (#/lists, #/allowed, #/blocked, #/privacy; the old
+  // #/domains opens Allowed), so links and notification taps land on the
+  // right one.
 </script>
 
 <h1>
   {copy.nav.lists.label} <small>{copy.nav.lists.hint}</small><HelpLink
-    section={$route === 'lists' ? 'blocklists' : 'allowblock'}
+    section={$route === 'lists' ? 'blocklists' : $route === 'privacy' ? 'privacy' : 'allowblock'}
   />
 </h1>
 
@@ -27,12 +30,17 @@
   <a role="tab" href="#/blocked" class:active={$route === 'blocked'} aria-selected={$route === 'blocked'}
     >{copy.blocking.tabBlocked}</a
   >
+  <a role="tab" href="#/privacy" class:active={$route === 'privacy'} aria-selected={$route === 'privacy'}
+    >{copy.blocking.tabPrivacy}</a
+  >
 </div>
 
 {#if $route === 'allowed'}
   <AllowBlock mode="allow" />
 {:else if $route === 'blocked'}
   <AllowBlock mode="block" />
+{:else if $route === 'privacy'}
+  <Privacy />
 {:else}
   <Blocklists />
 {/if}
