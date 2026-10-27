@@ -257,6 +257,9 @@ the work it led to:
   malicious. Behaviour-based threat detection already covers what DGA
   domains are for. Help explains how to add one as an audit list.
 - **Router-assisted device identity** — see the device identity round above.
+- **Translations** (October 2026) — English only for now, by maintainer
+  decision. All UI text stays in `web/src/lib/copy.ts`, so a language
+  layer remains a contained change if it is ever wanted.
 
 ## Not building (pre-1.0)
 
