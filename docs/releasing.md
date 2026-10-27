@@ -47,6 +47,54 @@ Useful flags: `--assets-only <tag>` re-syncs assets onto an existing
 release (also the recovery path if a run dies partway), `--skip-verify`
 when the checks just ran, `--notes-file <path>` for hand-written notes.
 
+## When the GitHub release build fails
+
+The Release workflow runs its own tests (with the race detector) before it
+builds anything, so a test that passed locally can still stop it — a
+flaky one did, for v0.37.1. release.sh then stops with **"GitHub assets
+never appeared for vX.Y.Z"** or **"the GitHub Release workflow did not
+succeed"**. Nothing has been published: no GitHub release, no Gitea
+release, no assets — only the tag exists, on both sides. A Pi asked to
+install that version reports "the download failed; nothing was changed".
+
+1. **Find the cause.**
+
+   ```
+   gh run list --repo DanDreadless/minos --workflow Release --limit 1
+   gh run view <run-id> --repo DanDreadless/minos --log-failed
+   ```
+
+2. **If it was the build, not the code** (a runner hiccup, a registry
+   timeout): rerun just the failed jobs with
+   `gh run rerun <run-id> --repo DanDreadless/minos --failed`, then finish
+   with `scripts/release.sh --assets-only vX.Y.Z`. Same tag, same commit.
+
+3. **If it was the code or a test:** fix it on a branch and merge to main,
+   then release the **next patch version** with the same notes plus a line
+   saying the previous one was never published. Never move or reuse a tag
+   that was pushed — someone may have fetched it, and release.sh refuses a
+   used tag anyway.
+
+4. **Remove the dead tag**, once you have confirmed it has no release on
+   either side (`gh release view vX.Y.Z` says "release not found"; Gitea's
+   `GET /api/v1/repos/dreadless/minos/releases/tags/vX.Y.Z` answers 404):
+
+   ```
+   git tag -d vX.Y.Z
+   git push origin :refs/tags/vX.Y.Z
+   # carry the deletion to GitHub through the push mirror:
+   curl -X POST -H "Authorization: token $GITEA_TOKEN" \
+     http://vault-tec.local:3000/api/v1/repos/dreadless/minos/push_mirrors-sync
+   ```
+
+   `gh api repos/DanDreadless/minos/git/refs/tags/vX.Y.Z` answering 404
+   confirms it is gone there too.
+
+If instead the binaries and GitHub release exist but a later job failed
+(the Docker image, say), the release is half-published: rerun the failed
+job as in step 2 and finish with `--assets-only` — do not cut a new
+version for it.
+
 ## Release signing
 
 Every release's `checksums.txt` is signed (Ed25519) by the release workflow
