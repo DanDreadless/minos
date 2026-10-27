@@ -209,6 +209,12 @@ export const docs: Section[] = [
       '"Replace with…" appears on a list its publisher has retired; "Add mirrors" on catalog lists subscribed before mirrors existed.',
       'Is each list worth it? (shown with two or more blocklists switched on) compares them: how much of each the others already cover, how many lookups in the last 7, 30 or 90 days only that list would have blocked (with the busiest of them), and roughly how much memory removing it would free. A list that caught nothing the others would not have, and is mostly covered by another, is a candidate to remove. Audit-only lists are left out.',
     ],
+    tasks: [
+      {
+        q: 'Should I block newly registered domains?',
+        a: "They are not in the catalog, on purpose. Hagezi's lists of domains registered in the last 7 days hold 2.9 million names (the high-entropy \"DGA\" cut, 900,000); on a Raspberry Pi 4 they add 370 MB and 120 MB of memory and make every rule change take 19 and 3.5 seconds. Replayed on a real home network's week — 1.2 million lookups — both matched three lookups, all of a genuine new website, and nothing malicious. Threat detection already flags devices looking up bursts of random new domains. If you want one anyway, add it as an audit-only list first (Add a list, then tick Audit) to see what it would block: https://raw.githubusercontent.com/hagezi/nrd/main/adblock/dga7.txt (AdBlock format).",
+      },
+    ],
     settings: [
       {
         label: 'Check for updates every',

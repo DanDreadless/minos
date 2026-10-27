@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"runtime/pprof"
 	"syscall"
 	"time"
@@ -101,11 +102,21 @@ func parseCommon(name string, args []string) (*flag.FlagSet, *string, *string) {
 
 func serve(args []string) error {
 	fs, cfgPath, logLevel := parseCommon("serve", args)
-	// For maintainers measuring throughput (scripts/dnsload): a CPU profile
-	// of the whole run, written on shutdown.
+	// For maintainers measuring throughput and memory (scripts/bench.sh): a
+	// CPU profile of the whole run, and a heap profile taken at shutdown.
 	cpuProfile := fs.String("cpuprofile", "", "write a CPU profile to this file until shutdown")
+	memProfile := fs.String("memprofile", "", "write a heap profile to this file at shutdown")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *memProfile != "" {
+		defer func() {
+			if f, err := os.Create(*memProfile); err == nil {
+				runtime.GC() // Live objects only
+				_ = pprof.WriteHeapProfile(f)
+				_ = f.Close()
+			}
+		}()
 	}
 	if *cpuProfile != "" {
 		f, err := os.Create(*cpuProfile)

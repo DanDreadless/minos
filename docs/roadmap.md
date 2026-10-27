@@ -244,6 +244,20 @@ the work it led to:
 
 - Replica config sync (see above)
 
+## Considered and declined
+
+- **Newly registered domain lists in the catalog** (October 2026). Hagezi's
+  NRD 7-day list is 2.9M names and its high-entropy DGA cut 0.9M. Measured
+  on a Raspberry Pi 4 beside StevenBlack: NRD peaks at 401 MB and takes
+  19 s per rebuild (every rule change), and its 58 MB download sits just
+  under the 64 MB list cap, which a busy week exceeds; DGA settles at
+  154 MB and 3.5 s per rebuild. Replayed against a real home network's
+  week (1.24M lookups, `go test -tags replay ./internal/lists`), both
+  matched three lookups — all of a genuine new website — and nothing
+  malicious. Behaviour-based threat detection already covers what DGA
+  domains are for. Help explains how to add one as an audit list.
+- **Router-assisted device identity** — see the device identity round above.
+
 ## Not building (pre-1.0)
 
 Fixed decisions, restated from CLAUDE.md: no DHCP server, no recursive

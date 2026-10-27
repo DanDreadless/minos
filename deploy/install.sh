@@ -123,8 +123,96 @@ if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet minos 2>/
   RUNNING=1
 fi
 
+# Port 53. Minos needs it, and many systems already have something there.
+# systemd-resolved's stub listener (Ubuntu, some Debian) is switched off —
+# asked first when there is a terminal — in a way that keeps this machine's
+# own lookups working, checked, and undone if they stop. Anything else is
+# named with what to do, but never stopped from here: dnsmasq is often the
+# network's DHCP server too. MINOS_KEEP_PORT53=1 skips all of this.
+RESOLVED_DROPIN="/etc/systemd/resolved.conf.d/minos.conf"
+
+ask() { # $1: question; true unless answered no. Without a terminal: yes.
+  if (: </dev/tty) 2>/dev/null; then
+    printf '%s [Y/n] ' "$1" >/dev/tty
+    read -r answer </dev/tty || answer=""
+    case "$answer" in [Nn]*) return 1 ;; esac
+  fi
+  return 0
+}
+
+free_resolved() {
+  say ""
+  say "systemd-resolved's local stub (127.0.0.53) is using port 53."
+  if ! ask "Turn the stub off so Minos can use port 53? This machine keeps resolving names through systemd-resolved."; then
+    say "left as it is; Minos cannot start until port 53 is free (see the getting-started guide)."
+    return 0
+  fi
+  mkdir -p "$(dirname "$RESOLVED_DROPIN")"
+  printf '# Written by the Minos installer: frees port 53 for Minos.\n[Resolve]\nDNSStubListener=no\n' >"$RESOLVED_DROPIN"
+  # /etc/resolv.conf usually points at the stub, which is about to go:
+  # point it at resolved's list of real upstream servers instead.
+  RESOLV_BACKUP=""
+  if [ -L /etc/resolv.conf ] || grep -q '127\.0\.0\.53' /etc/resolv.conf 2>/dev/null; then
+    RESOLV_BACKUP="/etc/resolv.conf.minos-backup"
+    cp -P /etc/resolv.conf "$RESOLV_BACKUP"
+    # A bind-mounted resolv.conf (containers) cannot be replaced; the lookup
+    # check below then decides whether the change stands.
+    ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf 2>/dev/null ||
+      { rm -f "$RESOLV_BACKUP"; RESOLV_BACKUP=""; }
+  fi
+  systemctl restart systemd-resolved
+  sleep 1
+  if getent hosts github.com >/dev/null 2>&1; then
+    say "done: the stub is off and this machine still resolves names. To undo:"
+    say "  sudo rm ${RESOLVED_DROPIN}${RESOLV_BACKUP:+ && sudo mv -f ${RESOLV_BACKUP} /etc/resolv.conf} && sudo systemctl restart systemd-resolved"
+  else
+    rm -f "$RESOLVED_DROPIN"
+    if [ -n "$RESOLV_BACKUP" ]; then mv -f "$RESOLV_BACKUP" /etc/resolv.conf; fi
+    systemctl restart systemd-resolved
+    say "warning: this machine could not resolve names with the stub off, so it was put back as it was."
+    say "         Free port 53 by hand: see the getting-started guide."
+  fi
+}
+
+free_port53() {
+  [ "${MINOS_KEEP_PORT53:-0}" = "1" ] && return 0
+  command -v ss >/dev/null 2>&1 || return 0
+  OWNERS=$(
+    {
+      ss -Hlnup 'sport = :53' 2>/dev/null
+      ss -Hlntp 'sport = :53' 2>/dev/null
+    } | grep -o 'users:(("[^"]*"' | cut -d'"' -f2 | grep -vx 'minos' | sort -u
+  )
+  for owner in $OWNERS; do
+    case "$owner" in
+      systemd-resolve*) free_resolved ;;
+      dnsmasq)
+        say ""
+        say "dnsmasq is using port 53. If it is not also this network's DHCP server, stop it:"
+        say "  sudo systemctl disable --now dnsmasq"
+        ;;
+      pihole-FTL)
+        say ""
+        say "Pi-hole is using port 53. To bring its lists and rules across, then stop it:"
+        say "  sudo minos import pihole /etc/pihole -config /var/lib/minos/minos.yaml"
+        say "  sudo systemctl disable --now pihole-FTL"
+        ;;
+      *)
+        say ""
+        say "${owner} is using port 53; stop it before starting Minos."
+        ;;
+    esac
+  done
+}
+
+if [ "$RUNNING" = "0" ]; then
+  free_port53
+fi
+
 say ""
-if [ "$RUNNING" = "1" ] && [ "$RESTART" = "1" ]; then
+if [ "$RUNNING" = "1" ] && [ "$PREV" = "$("${INSTALL_DIR}/minos" version)" ] && [ "$UNIT_CHANGED" = "0" ]; then
+  say "already up to date — nothing to restart."
+elif [ "$RUNNING" = "1" ] && [ "$RESTART" = "1" ]; then
   say "restarting minos..."
   systemctl restart minos
   say "restarted — now running $("${INSTALL_DIR}/minos" version)"
@@ -141,7 +229,7 @@ elif [ "$UNIT_CHANGED" = "1" ] && [ -z "$PREV" ]; then
   say "systemd unit installed. To start Minos now and on every boot:"
   say "  sudo systemctl enable --now minos"
   say ""
-  say "Before first start, make sure port 53 is free — the walkthrough:"
+  say "If anything above says port 53 is still in use, free it first — the walkthrough:"
   say "  https://github.com/${REPO}/blob/main/docs/getting-started.md"
 else
   say "done. See https://github.com/${REPO}/blob/main/docs/getting-started.md to set up."

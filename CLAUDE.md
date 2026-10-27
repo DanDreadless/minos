@@ -173,8 +173,11 @@ CLI verbs mirror the plain API terms (`minos pause 5m`, `minos status`).
   the reversed-label form (`com.doubleclick.`): ~31 B/entry (2M domains =
   62 MB heap, 83 MB RSS — inside the budget) with binary-search lookups
   (~535 ns hit at 100k, ~500 ns at 2M — the 1 ms budget doesn't notice).
-  The builder still uses maps; Build() compacts, so rebuild peak RSS is
-  ~300 MB at 2M domains (transient, off the hot path — fine on Pi 4+).
+  The builder still uses maps; Build() compacts, so a rebuild peaks at
+  ~0.5 GB RSS with 2M domains in a running instance (measured on a Pi 4,
+  October 2026; the old matcher is live beside the builder), returned at
+  once afterwards (FreeOSMemory) — fine on a Pi 4 with 2 GB or more.
+  Settled RSS at 2M is 88 MB.
 - AdBlock-syntax rules compile to a small matcher; unsupported AdBlock
   features are skipped with a counted warning, never a parse failure.
 - List refresh builds a complete new matcher off the hot path, then
@@ -691,6 +694,32 @@ This is security software; hold it to that standard.
   and indexes — the deliberate price of fast stats and search. Any new
   stream consumer must stay O(1) per entry; check with dnsload before
   shipping one.
+- **List text lives on disk, not in memory** (fixed decision, October 2026,
+  `lists.Manager.body`): a heap profile with 2M rules showed 64 MB of
+  matcher beside 64 MB of raw list text kept for rebuilds, and RSS of
+  242 MB (the GC's default target lets it float to ~2× live). With a disk
+  cache, `cached[name]` holds nil once the body is stored and rebuilds read
+  it back (checksum-verified); a body that cannot be read back is
+  forgotten and fetched again at once (`lost`, guarded against recursion by
+  `refetchingLost`). Ephemeral mode and a failed disk write keep the body
+  in memory. Each rebuild ends with `debug.FreeOSMemory()` so the
+  transient peak is returned at once rather than over minutes. Measured on
+  the Pi 4, 2M rules: 88 MB settled (was 242); the rebuild peak is the
+  builder's maps beside the old matcher, ~0.5 GB at 2M. `minos serve
+  -memprofile` writes a heap profile at shutdown.
+- **Installer frees port 53** (fixed decisions, October 2026,
+  `deploy/install.sh`): only systemd-resolved's stub listener is changed —
+  a drop-in `DNSStubListener=no`, `/etc/resolv.conf` re-pointed at
+  `/run/systemd/resolve/resolv.conf` when it pointed at the stub (backup
+  kept), then `getent hosts github.com` must succeed or everything is put
+  back. Asked via /dev/tty when there is one; without a terminal it
+  proceeds; `MINOS_KEEP_PORT53=1` skips. dnsmasq, Pi-hole, unbound and
+  anything else are named with instructions and never stopped (dnsmasq is
+  often the DHCP server). Not run while Minos is already running. Tested in
+  a systemd Debian container (stub freed and Minos binding :53; the revert
+  path with `--dns 127.0.0.53` plus a resolved upstream; skip; re-run).
+  A bind-mounted resolv.conf (containers) cannot be replaced — `ln` failure
+  is tolerated and the lookup check decides.
 - **Privacy report & block by company** (fixed decisions, October 2026,
   `internal/trackers`, `GET /api/privacy`): company data is AdGuard
   companiesdb (CC BY-SA 4.0 — one-way GPLv3-compatible, so it ships in the

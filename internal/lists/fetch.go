@@ -334,6 +334,8 @@ func (m *Manager) refreshSource(ctx context.Context, src annotated) {
 		if m.disk != nil {
 			if err := m.disk.store(src.URL, res.body, meta); err != nil {
 				slog.Warn("list cache write failed", "list", src.Name, "err", err)
+			} else {
+				m.cached[src.Name] = nil // On disk: read back at rebuild
 			}
 		}
 	}
