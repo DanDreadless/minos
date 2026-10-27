@@ -11,6 +11,7 @@ import (
 	"minos/internal/config"
 	"minos/internal/filter"
 	"minos/internal/services"
+	"minos/internal/trackers"
 )
 
 const (
@@ -404,6 +405,13 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 			for _, d := range services.CustomAllowDomains(cs) {
 				b.AddAllow("service:"+cs.Name, d)
 			}
+		}
+	}
+	// Blocked companies: each one's advertising, analytics and telemetry
+	// domains, as the pseudo-list "company:<id>".
+	for _, id := range cfg.Blocking.Companies {
+		for _, d := range trackers.Domains(id) {
+			b.AddDeny("company:"+id, d)
 		}
 	}
 	// iCloud Private Relay (opt-in): Apple documents that denying these

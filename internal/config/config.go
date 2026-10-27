@@ -24,6 +24,7 @@ import (
 
 	"minos/internal/mqtt"
 	"minos/internal/services"
+	"minos/internal/trackers"
 )
 
 // Duration wraps time.Duration so YAML can use human strings ("5m", "24h").
@@ -234,6 +235,11 @@ type BlockingConfig struct {
 	// its compiled-in catalog. Keeping customs out of those keys is what
 	// lets a downgrade boot (the unknown keys are dropped whole).
 	CustomServices []services.Custom `yaml:"custom_services,omitempty"`
+	// Companies are company IDs (internal/trackers) whose advertising,
+	// analytics and telemetry domains are blocked for everyone, as the
+	// pseudo-list "company:<id>". A separate key, so an older binary drops
+	// it (the domains are simply not blocked).
+	Companies []string `yaml:"companies,omitempty"`
 	// SafeSearch rewrites search engines (and YouTube) to their
 	// enforced-safe variants for every device.
 	SafeSearch bool `yaml:"safe_search,omitempty"`
@@ -639,6 +645,7 @@ func (c *Config) Clone() *Config {
 	out.Blocking.Denylist = append([]string(nil), c.Blocking.Denylist...)
 	out.Blocking.Services = append([]string(nil), c.Blocking.Services...)
 	out.Blocking.AllowedServices = append([]string(nil), c.Blocking.AllowedServices...)
+	out.Blocking.Companies = append([]string(nil), c.Blocking.Companies...)
 	out.Blocking.CustomServices = make([]services.Custom, len(c.Blocking.CustomServices))
 	for i, cs := range c.Blocking.CustomServices {
 		out.Blocking.CustomServices[i] = cs
@@ -891,6 +898,11 @@ func (c *Config) Validate() error {
 	}
 	if err := validateHomeAssistant(c.HomeAssistant); err != nil {
 		return err
+	}
+	for i, id := range c.Blocking.Companies {
+		if !trackers.Exists(id) {
+			return fmt.Errorf("blocking.companies[%d]: unknown company %q", i, id)
+		}
 	}
 	if len(c.Threats.Ignore) > 500 {
 		return fmt.Errorf("threats.ignore: at most 500 entries")

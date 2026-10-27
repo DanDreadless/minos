@@ -1,0 +1,21 @@
+Minos — a DNS sinkhole. Copyright the Minos authors. Licensed under the GNU
+General Public License version 3 (see LICENSE).
+
+Minos includes data from third parties:
+
+internal/trackers/trackers.tsv
+  Company and tracker data derived from AdGuard companiesdb
+  (https://github.com/AdguardTeam/companiesdb), itself built from
+  WhoTracks.me. Licensed under the Creative Commons Attribution-ShareAlike
+  4.0 International licence (CC BY-SA 4.0), which Creative Commons has
+  declared one-way compatible with GPLv3; the adapted table is distributed
+  under GPLv3. Changes: reduced to domain, company and category, and
+  combined with the tracking names below.
+
+  Tracking names derived from the Hagezi DNS blocklists
+  (https://github.com/hagezi/dns-blocklists), Pro list. Licensed under
+  GPLv3.
+
+internal/oui/oui.bin
+  MAC address prefix assignments from the IEEE Registration Authority
+  public listings (MA-L, MA-M, MA-S, IAB).

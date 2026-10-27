@@ -149,7 +149,7 @@ func considered(list string) bool {
 		"safesearch", "icloud-private-relay":
 		return false
 	}
-	return !strings.HasPrefix(list, "service:") && !strings.HasPrefix(list, "group:")
+	return !strings.HasPrefix(list, "service:") && !strings.HasPrefix(list, "group:") && !strings.HasPrefix(list, "company:")
 }
 
 func (d *Detector) observe(ctx context.Context, e querylog.Entry) {

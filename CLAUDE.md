@@ -98,6 +98,7 @@ internal/release/      release-signature verification for the one-click updater 
 internal/applog/       application log ring + redaction (leaf pkg)
 internal/mqtt/         small MQTT 3.1.1 client (stdlib only, leaf pkg)
 internal/hass/         Home Assistant MQTT discovery bridge (config + mqtt only)
+internal/trackers/     tracker domain → company/category table (generated, leaf pkg)
 internal/notify/       webhook/ntfy event delivery (off the query path)
 internal/updates/      opt-in GitHub release check (release builds only)
 internal/querylog/     ring buffer + batched SQLite flush
@@ -668,6 +669,29 @@ This is security software; hold it to that standard.
   `dns.tls`, query-log storage, list headers by list name — so a restore can
   never lock anyone out or move a listener, and is itself recorded. A
   failed history write is logged, never fatal to the change.
+- **Privacy report & block by company** (fixed decisions, October 2026,
+  `internal/trackers`, `GET /api/privacy`): company data is AdGuard
+  companiesdb (CC BY-SA 4.0 — one-way GPLv3-compatible, so it ships in the
+  binary with attribution in NOTICE/README/UI). **Not** Disconnect or
+  DuckDuckGo Tracker Radar: both CC BY-NC-SA, incompatible (the plan had
+  assumed otherwise). The source classifies domains *as they appear in web
+  pages*: it files google.com, yandex.ru, yahoo.com as advertising and
+  lists 1e100.net and elasticbeanstalk.com — a DNS block on those breaks
+  whole services. So **tracking is decided by the tracking names** (T rows):
+  Hagezi Pro rules lying under a company's advertising/analytics/telemetry
+  domain (gen.go). Only those count as tracking and only those are blocked
+  by `blocking.companies` (`company:<id>` pseudo-list, compiled after the
+  services; breakage's `considered` treats it as deliberate);
+  `TestBlockingNeverTakesAServiceDown` pins the big companies' own sites.
+  Social widgets (connect.facebook.net) are left out — Hagezi leaves them
+  for sign-in buttons. Table is ~570 KB of TSV, parsed lazily (first report
+  or config validation). The report reads `roll_day_client` one device at a
+  time (primary-key ranges; a network-wide `bucket >=` scan would walk the
+  table) — whole UTC days. Checked on 7 days of the field Pi: tracking
+  that got through was Google ad-quality pings, Microsoft Clarity, Sentry,
+  Shopify and Amplitude analytics; ntp.org, www.google.com and AWS hosting
+  correctly fall under "other". Refresh with gen.go (three downloads) when
+  the sources move; the table updates with releases only.
 - **Blocklist value report** (fixed decisions, October 2026,
   `filter/overlap.go`, `GET /api/lists/value`): the builder's map value is
   now `uint32` — list index in the low 16 bits, a bit per **tracked** list

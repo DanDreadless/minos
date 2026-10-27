@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 )
@@ -93,6 +94,17 @@ func TestRollupsAnswerExactlyLikeTheLog(t *testing.T) {
 		both("totals "+w, func() (any, error) {
 			total, blocked, err := l.Totals(ctx, since)
 			return [2]int{total, blocked}, err
+		})
+		both("client names "+w, func() (any, error) {
+			names, start, err := l.ClientNames(ctx, []string{"10.0.0.1", "10.0.0.3"}, since)
+			sort.Slice(names, func(i, j int) bool {
+				a, b := names[i], names[j]
+				return a.Client+a.QName+a.Verdict < b.Client+b.QName+b.Verdict
+			})
+			return struct {
+				Names []ClientName
+				Start time.Time
+			}{names, start}, err
 		})
 	}
 }
