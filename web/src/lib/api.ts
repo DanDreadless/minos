@@ -202,6 +202,26 @@ export interface ListStats {
   lists: { list: string; count: number }[];
 }
 
+// The blocklist value report (GET /api/lists/value).
+export interface ListValue {
+  list: string;
+  rules: number;
+  unique_rules: number;
+  covered_by: { list: string; rules: number }[];
+  freed_bytes: number;
+  blocks: number;
+  only_blocks: number;
+  only_examples: { qname: string; count: number }[];
+}
+
+export interface ListValueReport {
+  days: number;
+  compared: string[];
+  blocked_lookups: number;
+  names_truncated: boolean;
+  lists: ListValue[];
+}
+
 export interface CheckResult {
   domain: string;
   verdict: 'blocked' | 'allowed';
@@ -588,6 +608,7 @@ export const api = {
       'GET',
       `/api/stats/client?client=${encodeURIComponent(clients.join(','))}&hours=${hours}`,
     ),
+  listValue: (days = 30) => request<ListValueReport>('GET', `/api/lists/value?days=${days}`),
   listStats: (hours = 168) => request<ListStats>('GET', `/api/stats/lists?hours=${hours}`),
   check: (domain: string) =>
     request<CheckResult>('GET', `/api/check?domain=${encodeURIComponent(domain)}`),

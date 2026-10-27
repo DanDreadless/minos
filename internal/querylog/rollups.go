@@ -111,6 +111,15 @@ func rankDomains(counts map[string]int, n int) []TopDomain {
 }
 
 func (l *Log) topBlockedRolled(ctx context.Context, since time.Time, n int) ([]TopDomain, error) {
+	counts, err := l.blockedCountsRolled(ctx, since)
+	if err != nil {
+		return nil, err
+	}
+	return rankDomains(counts, n), nil
+}
+
+// blockedCountsRolled counts every blocked name since the given time.
+func (l *Log) blockedCountsRolled(ctx context.Context, since time.Time) (map[string]int, error) {
 	sinceMs := since.UnixMilli()
 	full := alignUp(sinceMs, hourMs)
 	counts := make(map[string]int)
@@ -135,10 +144,7 @@ func (l *Log) topBlockedRolled(ctx context.Context, since time.Time, n int) ([]T
 		}
 		counts[q] += c
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return rankDomains(counts, n), nil
+	return counts, rows.Err()
 }
 
 // hourly visits roll_hour over [full, ∞) plus the raw head, as

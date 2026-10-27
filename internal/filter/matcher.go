@@ -8,6 +8,7 @@ package filter
 import (
 	"sort"
 	"strings"
+	"sync"
 )
 
 // Result is the verdict for a single query name.
@@ -23,8 +24,17 @@ type Result struct {
 type Builder struct {
 	lists   []string
 	listIdx map[string]int32
-	deny    map[string]int32 // reversed-label domain → index into lists
-	allow   map[string]int32
+	// deny and allow map a reversed-label domain to its index into lists
+	// (low 16 bits) and, for deny, a bit per tracked list that has the same
+	// domain (high 16 bits — see Track).
+	deny  map[string]uint32
+	allow map[string]uint32
+	// tracked lists get a bit each (trackBit), for the overlap report;
+	// curList/curBit cache the last lookup, since lists arrive one at a time.
+	tracked  []string
+	trackBit map[string]uint32
+	curList  string
+	curBit   uint32
 	// denyRe and allowRe hold /pattern/ rules (regex.go).
 	denyRe  []regexRule
 	allowRe []regexRule
@@ -39,8 +49,8 @@ type Builder struct {
 func NewBuilder() *Builder {
 	return &Builder{
 		listIdx: make(map[string]int32),
-		deny:    make(map[string]int32),
-		allow:   make(map[string]int32),
+		deny:    make(map[string]uint32),
+		allow:   make(map[string]uint32),
 	}
 }
 
@@ -53,6 +63,35 @@ func NewCountingBuilder() *Builder {
 
 // Counted reports the valid entries a counting builder has seen.
 func (b *Builder) Counted() int { return b.counted }
+
+// MaxTracked is how many lists the overlap report can compare.
+const MaxTracked = 16
+
+// Track names the lists (at most MaxTracked; extras are ignored) whose
+// overlap the built Matcher can report: every blocked domain then records
+// which of them contain it, at 2 bytes per rule. Call before adding rules.
+func (b *Builder) Track(lists []string) {
+	if len(lists) > MaxTracked {
+		lists = lists[:MaxTracked]
+	}
+	b.tracked = append([]string(nil), lists...)
+	b.trackBit = make(map[string]uint32, len(lists))
+	for i, l := range b.tracked {
+		b.trackBit[l] = 1 << i
+	}
+	b.curList, b.curBit = "", 0
+}
+
+// bitFor returns list's tracking bit (zero when it is not tracked).
+func (b *Builder) bitFor(list string) uint32 {
+	if b.trackBit == nil {
+		return 0
+	}
+	if list != b.curList {
+		b.curList, b.curBit = list, b.trackBit[list]
+	}
+	return b.curBit
+}
 
 func (b *Builder) listIndex(list string) int32 {
 	if idx, ok := b.listIdx[list]; ok {
@@ -86,8 +125,11 @@ func (b *Builder) AddDeny(list, domain string) {
 		return
 	}
 	key := reverseLabels(norm)
-	if _, exists := b.deny[key]; !exists {
-		b.deny[key] = b.listIndex(list)
+	bit := b.bitFor(list) << 16
+	if v, exists := b.deny[key]; !exists {
+		b.deny[key] = uint32(b.listIndex(list)) | bit
+	} else if v&bit != bit {
+		b.deny[key] = v | bit
 	}
 }
 
@@ -109,7 +151,7 @@ func (b *Builder) AddAllow(list, domain string) {
 	}
 	key := reverseLabels(norm)
 	if _, exists := b.allow[key]; !exists {
-		b.allow[key] = b.listIndex(list)
+		b.allow[key] = uint32(b.listIndex(list))
 	}
 }
 
@@ -141,10 +183,15 @@ func (b *Builder) Skip() { b.skipped++ }
 func (b *Builder) SkippedCount() int { return b.skipped }
 
 func (b *Builder) Build() *Matcher {
+	tracked := b.tracked
+	if len(tracked) < 2 {
+		tracked = nil // Nothing to compare: skip the per-rule bits
+	}
 	return &Matcher{
 		lists:   b.lists,
-		deny:    compactSet(b.deny),
-		allow:   compactSet(b.allow),
+		tracked: tracked,
+		deny:    compactSet(b.deny, tracked != nil),
+		allow:   compactSet(b.allow, false),
 		denyRe:  buildRegexSet(b.denyRe),
 		allowRe: buildRegexSet(b.allowRe),
 		skipped: b.skipped,
@@ -160,6 +207,12 @@ type Matcher struct {
 	denyRe  *regexSet // nil when there are none
 	allowRe *regexSet
 	skipped int
+
+	// tracked are the lists the overlap report compares (Builder.Track);
+	// deny.masks holds their bits. overlap is computed on first use.
+	tracked     []string
+	overlapOnce sync.Once
+	overlap     []ListOverlap
 }
 
 // domainSet is a compact, immutable domain → list-index set: every
@@ -175,10 +228,14 @@ type domainSet struct {
 	// with the trailing dot); listIndex fits 16 bits (a config carries
 	// dozens of lists, not thousands); offset gets the remaining 40.
 	idx []uint64
+	// masks, when the builder tracked lists, holds each entry's tracked-list
+	// bits, parallel to idx.
+	masks []uint16
 }
 
-// compactSet flattens a builder map into the slab + index form.
-func compactSet(m map[string]int32) domainSet {
+// compactSet flattens a builder map into the slab + index form, keeping the
+// tracked-list bits when withMasks is set.
+func compactSet(m map[string]uint32, withMasks bool) domainSet {
 	if len(m) == 0 {
 		return domainSet{}
 	}
@@ -191,12 +248,45 @@ func compactSet(m map[string]int32) domainSet {
 	sort.Strings(keys)
 	slab := make([]byte, 0, total)
 	idx := make([]uint64, len(keys))
+	var masks []uint16
+	if withMasks {
+		masks = make([]uint16, len(keys))
+	}
 	for i, k := range keys {
 		off := uint64(len(slab))
 		slab = append(slab, k...)
-		idx[i] = off<<24 | uint64(len(k))<<16 | uint64(uint16(m[k]))
+		v := m[k]
+		idx[i] = off<<24 | uint64(len(k))<<16 | uint64(uint16(v))
+		if masks != nil {
+			masks[i] = uint16(v >> 16)
+		}
 	}
-	return domainSet{slab: slab, idx: idx}
+	return domainSet{slab: slab, idx: idx, masks: masks}
+}
+
+// key returns entry i's reversed-label key.
+func (s *domainSet) key(i int) []byte {
+	e := s.idx[i]
+	off := e >> 24
+	return s.slab[off : off+(e>>16)&0xff]
+}
+
+// find binary-searches for key, returning its position in idx. The same
+// search as lookup, kept separate so the hot path's code is untouched.
+func (s *domainSet) find(key string) (int, bool) {
+	lo, hi := 0, len(s.idx)
+	for lo < hi {
+		mid := int(uint(lo+hi) >> 1)
+		switch c := compareStringBytes(key, s.key(mid)); {
+		case c == 0:
+			return mid, true
+		case c < 0:
+			hi = mid
+		default:
+			lo = mid + 1
+		}
+	}
+	return 0, false
 }
 
 // lookup binary-searches for key, returning its list index.

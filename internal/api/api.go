@@ -156,6 +156,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/services/custom", s.handleAddCustomService)
 		r.Put("/services/custom/{name}", s.handleUpdateCustomService)
 		r.Delete("/services/custom/{name}", s.handleDeleteCustomService)
+		r.Get("/lists/value", s.handleListValue)
 		r.Get("/lists", s.handleLists)
 		r.Post("/lists", s.handleAddList)
 		r.Post("/lists/refresh", s.handleListsRefresh)

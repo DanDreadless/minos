@@ -3,6 +3,7 @@
   import { api, type ListStats, type ListStatus, type Service } from '../lib/api';
   import { blocklistPresets, blocklistTiers, type BlocklistPreset } from '../lib/blocklists';
   import { confirmDialog } from '../lib/confirm';
+  import ListValueReport from '../lib/components/ListValueReport.svelte';
   import { copy } from '../lib/copy';
   import { fmtAgo, tidyDuration } from '../lib/format';
   import { docketHref } from '../lib/router';
@@ -381,6 +382,10 @@
         >{s.count.toLocaleString()}</a
       >{/each}
   </p>
+{/if}
+
+{#if lists.filter((l) => l.enabled && !l.audit && l.action !== 'allow').length >= 2}
+  <ListValueReport />
 {/if}
 
 <section class="card catalog">

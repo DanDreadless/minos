@@ -171,6 +171,54 @@ func (l *Log) TopBlockedDomains(ctx context.Context, since time.Time, n int) ([]
 	return out, nil
 }
 
+// MaxBlockedNames caps BlockedNames: a month of a home network blocks tens
+// of thousands of distinct names, and the long tail beyond this many is
+// noise for every use of the list.
+const MaxBlockedNames = 100_000
+
+// BlockedNames returns every name blocked since the given time with its
+// count, busiest first, up to MaxBlockedNames — for the blocklist value
+// report, which asks which lists would block each one.
+func (l *Log) BlockedNames(ctx context.Context, since time.Time) ([]TopDomain, error) {
+	if l.useRollups() {
+		counts, err := l.blockedCountsRolled(ctx, since)
+		if err != nil {
+			return nil, err
+		}
+		return rankDomains(counts, MaxBlockedNames), nil
+	}
+	if l.reader() != nil {
+		from := "querylog"
+		if l.indexed.Load() {
+			from = "querylog INDEXED BY idx_querylog_ts"
+		}
+		rows, err := l.reader().QueryContext(ctx, `SELECT qname, COUNT(*) AS c
+			FROM `+from+` WHERE ts >= ? AND verdict = ?
+			GROUP BY qname ORDER BY c DESC, qname LIMIT ?`,
+			since.UnixMilli(), VerdictBlocked, MaxBlockedNames)
+		if err != nil {
+			return nil, fmt.Errorf("blocked names query: %w", err)
+		}
+		defer rows.Close()
+		var out []TopDomain
+		for rows.Next() {
+			var d TopDomain
+			if err := rows.Scan(&d.QName, &d.Count); err != nil {
+				return nil, fmt.Errorf("blocked names scan: %w", err)
+			}
+			out = append(out, d)
+		}
+		return out, rows.Err()
+	}
+	counts := make(map[string]int)
+	l.scanRing(since, func(e Entry) {
+		if e.Verdict == VerdictBlocked {
+			counts[e.QName]++
+		}
+	})
+	return rankDomains(counts, MaxBlockedNames), nil
+}
+
 // TopAuditedDomains returns the domains a given audit source marked most
 // often — "what would this source block if you enforced it". The mirror of
 // TopBlockedDomains on the audit columns, so an audit list and DNSSEC's

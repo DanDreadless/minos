@@ -33,6 +33,10 @@ is protected, with a clear answer to "why was this blocked?" one click away.
   name, the way an app does when it has stopped working, shows up as
   "Something may be broken on Living room TV" with Allow, Allow 1 h and
   Dismiss — while tracker chatter that nags all day is left out.
+- **Know what each list is worth.** Minos compares your blocklists with
+  each other and with what was really blocked: "99% of Hagezi Normal is
+  already in Hagezi Pro, and it blocked nothing the others wouldn't have —
+  removing it frees 586 KB".
 - **Try a list before you trust it.** Audit mode shows what a new blocklist
   *would* block without blocking anything, so you can add a strict list
   without breaking the house.
@@ -140,6 +144,7 @@ As of October 2026, against each project's current release. ✅ yes ·
 |---|:-:|:-:|:-:|
 | Names the list *and rule* behind every block, with one-click allow | ✅ | ◐ | ✅ |
 | Audit (dry-run) blocklists | ✅ | — | — |
+| Blocklist overlap and value report | ✅ | — | — |
 | Flags infected devices by behaviour (DGA, DNS tunnelling) | ✅ | — | — |
 | In-process DNSSEC validation | ✅ | — | — |
 | Settings history with one-click undo | ✅ | — | — |

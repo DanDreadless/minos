@@ -352,6 +352,17 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 	}
 
 	b := filter.NewBuilder()
+	// The enforcing blocklists are compared in the value report: each
+	// rule records which of them contain it (filter.Builder.Track).
+	var compared []string
+	m.mu.Lock()
+	for _, src := range cfg.Lists.Sources {
+		if _, ok := m.cached[src.Name]; ok && src.Enabled && !src.Audit {
+			compared = append(compared, src.Name)
+		}
+	}
+	m.mu.Unlock()
+	b.Track(compared)
 	// Config-level entries compile first so they win domain-priority ties;
 	// pardons beat everything by matcher semantics anyway.
 	for _, d := range cfg.Blocking.Allowlist {
