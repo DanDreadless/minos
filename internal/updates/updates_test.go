@@ -2,8 +2,10 @@ package updates
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -120,5 +122,45 @@ func TestCheckSurvivesGarbage(t *testing.T) {
 	c.check(context.Background())
 	if v, avail := c.Latest(); v != "" || avail {
 		t.Errorf("Latest() after garbage = (%q, %v), want empty", v, avail)
+	}
+}
+
+// TestCheckNow: the Settings button checks at once, even with the daily
+// check off (it is the user's own request), says plainly when it cannot,
+// and announces a new version once however often it is pressed.
+func TestCheckNow(t *testing.T) {
+	status := http.StatusOK
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(`{"tag_name": "v0.3.0"}`))
+	}))
+	defer ts.Close()
+
+	c := NewChecker("0.2.0", testStore(t, false)) // Daily check off
+	c.url = ts.URL
+	announced := 0
+	c.OnUpdate(func(string) { announced++ })
+	for range 2 {
+		latest, available, err := c.CheckNow(context.Background())
+		if err != nil || latest != "0.3.0" || !available {
+			t.Fatalf("CheckNow = %q, %v, %v", latest, available, err)
+		}
+	}
+	if announced != 1 {
+		t.Errorf("announced %d times, want once", announced)
+	}
+	if v, avail := c.Latest(); v != "0.3.0" || !avail {
+		t.Errorf("Latest() after CheckNow = (%q, %v)", v, avail)
+	}
+
+	status = http.StatusForbidden // GitHub's rate limit
+	if _, _, err := c.CheckNow(context.Background()); err == nil || !strings.Contains(err.Error(), "403") {
+		t.Errorf("rate-limited check: %v", err)
+	}
+
+	dev := NewChecker("0.1.0-dev", testStore(t, true))
+	dev.url = ts.URL
+	if _, _, err := dev.CheckNow(context.Background()); !errors.Is(err, ErrNotRelease) {
+		t.Errorf("dev build: %v", err)
 	}
 }

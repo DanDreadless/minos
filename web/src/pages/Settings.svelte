@@ -226,6 +226,27 @@
     }
   }
 
+  // Check now: ask for the newest release at once instead of waiting for
+  // the daily check. A newer version also lights the banner at the top
+  // within a few seconds (the status poll sees it).
+  let checkingUpdates = false;
+  let updateResult: { text: string; bad: boolean } | null = null;
+  async function checkUpdatesNow(): Promise<void> {
+    checkingUpdates = true;
+    updateResult = null;
+    try {
+      const u = await api.checkUpdates();
+      updateResult =
+        u.available && u.latest
+          ? { text: copy.settings.newerAvailable(u.latest, u.current), bad: false }
+          : { text: copy.settings.upToDate(u.current), bad: false };
+    } catch (e) {
+      updateResult = { text: copy.settings.checkFailed(e instanceof Error ? e.message : String(e)), bad: true };
+    } finally {
+      checkingUpdates = false;
+    }
+  }
+
   async function save(upd: Parameters<typeof api.updateConfig>[0]): Promise<void> {
     try {
       initFrom(await api.updateConfig(upd));
@@ -1275,6 +1296,12 @@
       {copy.settings.updateCheck}
     </label>
     <p class="note">{copy.settings.updateCheckHint}</p>
+    <div class="section-actions">
+      <button on:click={checkUpdatesNow} disabled={checkingUpdates} title={copy.settings.checkNowHint}>
+        {checkingUpdates ? copy.settings.checkingNow : copy.settings.checkNow}
+      </button>
+      {#if updateResult}<span class="update-result" class:bad={updateResult.bad}>{updateResult.text}</span>{/if}
+    </div>
   </section>
   {/if}
 
@@ -1559,6 +1586,16 @@
 
   .grow {
     flex: 1;
+  }
+
+  .update-result {
+    align-self: center;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+
+  .update-result.bad {
+    color: var(--blocked);
   }
 
   .route-row {

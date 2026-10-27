@@ -1056,6 +1056,13 @@ export const copy = {
     updateCheckHint:
       'Asks GitHub for the latest release tag — nothing about you or your network is sent, only the request itself. Off unless you turn it on.',
     updateAvailable: (v: string) => `v${v} available`,
+    checkNow: 'Check now',
+    checkingNow: 'Checking…',
+    checkNowHint: 'Asks GitHub for the newest release once, now — whether or not the daily check is on.',
+    upToDate: (v: string) => `You are running the newest version (v${v}).`,
+    newerAvailable: (latest: string, current: string) =>
+      `Version ${latest} is available (you have ${current}). The banner at the top of the page has the release notes and how to update.`,
+    checkFailed: (why: string) => `Could not check: ${why}.`,
     backupTitle: 'Backup & restore',
     backupHint: 'Download or restore the full configuration',
     backupButton: 'Export configuration',

@@ -8,12 +8,14 @@ package updates
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -43,6 +45,7 @@ type Checker struct {
 	// onUpdate, when set (before Run), fires once per newly seen newer
 	// version — not on every daily re-confirmation.
 	onUpdate     func(version string)
+	notifyMu     sync.Mutex // Guards lastNotified: the loop and CheckNow
 	lastNotified string
 }
 
@@ -100,52 +103,82 @@ func (c *Checker) Run(ctx context.Context) {
 	}
 }
 
-// check fetches the latest release tag; failures are logged quietly and
-// retried on the next daily cycle.
+// check fetches the latest release tag for the daily loop; failures are
+// logged quietly and retried on the next daily cycle.
 func (c *Checker) check(ctx context.Context) {
 	if !isRelease(c.version) {
 		return // defense in depth; Run already refuses to get here
 	}
+	if _, err := c.fetch(ctx); err != nil {
+		slog.Debug("update check failed", "err", err)
+	}
+}
+
+// ErrNotRelease: a development build never checks for releases.
+var ErrNotRelease = errors.New("this is a development build, which does not check for releases")
+
+// CheckNow asks for the latest release immediately — the Settings button,
+// so nobody waits for the daily check. It is the user's own request, so it
+// runs whether or not the daily check is switched on; like it, it sends
+// nothing but the request. It returns the newest version and whether it is
+// newer than the one running.
+func (c *Checker) CheckNow(ctx context.Context) (latest string, available bool, err error) {
+	if !isRelease(c.version) {
+		return "", false, ErrNotRelease
+	}
+	tag, err := c.fetch(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	return tag, IsNewer(tag, c.version), nil
+}
+
+// fetch asks GitHub for the latest release tag, records it, and announces
+// a newly seen newer version once.
+func (c *Checker) fetch(ctx context.Context) (string, error) {
 	c.lastCheck.Store(time.Now().UnixNano())
 	reqCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, c.url, nil)
 	if err != nil {
-		return
+		return "", err
 	}
 	req.Header.Set("User-Agent", "Minos/"+c.version+" (+https://github.com/DanDreadless/minos)")
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := c.client.Do(req)
 	if err != nil {
-		slog.Debug("update check failed", "err", err)
-		return
+		return "", fmt.Errorf("could not reach GitHub: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		slog.Debug("update check failed", "status", resp.Status)
-		return
+		return "", fmt.Errorf("GitHub answered %s", resp.Status)
 	}
 	var release struct {
 		TagName string `json:"tag_name"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&release); err != nil {
-		slog.Debug("update check parse failed", "err", err)
-		return
+		return "", fmt.Errorf("GitHub's answer could not be read: %w", err)
 	}
 	tag := strings.TrimPrefix(strings.TrimSpace(release.TagName), "v")
 	if tag == "" {
-		return
+		return "", errors.New("GitHub reported no release")
 	}
 	c.latest.Store(&tag)
 	if IsNewer(tag, c.version) {
 		slog.Info("a newer minos release is available",
 			"running", c.version, "latest", tag)
-		// check runs only on the Run goroutine, so lastNotified needs no lock.
-		if c.onUpdate != nil && tag != c.lastNotified {
+		// The daily loop and the button can both get here.
+		c.notifyMu.Lock()
+		notify := c.onUpdate != nil && tag != c.lastNotified
+		if notify {
 			c.lastNotified = tag
+		}
+		c.notifyMu.Unlock()
+		if notify {
 			c.onUpdate(tag)
 		}
 	}
+	return tag, nil
 }
 
 // IsNewer reports whether latest is a strictly newer semantic version than

@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 // repo is the GitHub "owner/name" used in upgrade guidance URLs.
@@ -126,4 +128,28 @@ func upgradeCommand(method, tag string) string {
 		}
 		return cmd + "   # then restart Minos"
 	}
+}
+
+// updateChecker can check for a release on demand (updates.Checker).
+type updateChecker interface {
+	CheckNow(ctx context.Context) (latest string, available bool, err error)
+}
+
+// handleUpdateCheck is Settings' "Check now": it asks for the latest
+// release at once, rather than waiting for the daily check, and answers as
+// GET /api/update does. A failure (no network, GitHub's rate limit, a
+// development build) is a 502 with the reason in words.
+func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	c, ok := s.updates.(updateChecker)
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "checking for updates is not available here")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	if _, _, err := c.CheckNow(ctx); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	s.handleUpdate(w, r)
 }
