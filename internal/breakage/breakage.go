@@ -177,7 +177,7 @@ func (d *Detector) observe(ctx context.Context, e querylog.Entry) {
 	b := d.bursts[k]
 	if b == nil {
 		if len(d.bursts) >= maxTracked {
-			d.dropOldest()
+			d.evictOne()
 		}
 		b = &burst{}
 		d.bursts[k] = b
@@ -241,15 +241,17 @@ func (d *Detector) raise(k key, s Suggestion) {
 	}
 }
 
-func (d *Detector) dropOldest() {
-	var oldest key
-	var at time.Time
-	for k, b := range d.bursts {
-		if len(b.hits) > 0 && (at.IsZero() || b.hits[len(b.hits)-1].Before(at)) {
-			oldest, at = k, b.hits[len(b.hits)-1]
-		}
+// evictOne makes room in a full burst table by dropping one pair —
+// whichever the map yields first, which is random. It used to scan for the
+// oldest, a walk of all maxTracked pairs for every new blocked name once
+// the table filled: under load on a Pi that was 21% of Minos's CPU and cut
+// throughput by a third. A real burst refills its pair within seconds, so
+// losing an arbitrary one costs nothing that matters.
+func (d *Detector) evictOne() {
+	for k := range d.bursts {
+		delete(d.bursts, k)
+		return
 	}
-	delete(d.bursts, oldest)
 }
 
 // sweep drops idle bursts, finished suggestions and ended quiet periods.

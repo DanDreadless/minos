@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/pprof"
 	"syscall"
 	"time"
 
@@ -100,8 +101,24 @@ func parseCommon(name string, args []string) (*flag.FlagSet, *string, *string) {
 
 func serve(args []string) error {
 	fs, cfgPath, logLevel := parseCommon("serve", args)
+	// For maintainers measuring throughput (scripts/dnsload): a CPU profile
+	// of the whole run, written on shutdown.
+	cpuProfile := fs.String("cpuprofile", "", "write a CPU profile to this file until shutdown")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *cpuProfile != "" {
+		f, err := os.Create(*cpuProfile)
+		if err != nil {
+			return err
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			return err
+		}
+		defer func() {
+			pprof.StopCPUProfile()
+			_ = f.Close()
+		}()
 	}
 	levelFlagSet := false
 	fs.Visit(func(f *flag.Flag) { levelFlagSet = levelFlagSet || f.Name == "log-level" })
@@ -272,10 +289,7 @@ func serve(args []string) error {
 		if err != nil || ev.Worked < breakage.MinWorked {
 			return ev, err
 		}
-		rows, err := qlog.QueryHistory(ctx, querylog.HistoryFilter{
-			Domain: domain, Clients: []string{client}, Verdict: querylog.VerdictBlocked, Since: start.Add(-24 * time.Hour),
-		}, breakage.ChronicLimit+1, start)
-		ev.Blocked = len(rows)
+		ev.Blocked, err = qlog.BlockedBefore(ctx, client, domain, start.Add(-24*time.Hour), start, breakage.ChronicLimit+1)
 		return ev, err
 	})
 	broken.OnNew(func(s breakage.Suggestion) {

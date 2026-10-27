@@ -62,6 +62,12 @@
             {#each s.howto as h (h)}<li>{h}</li>{/each}
           </ul>
         {/if}
+        {#if s.examples?.length}
+          {#each s.examples as ex (ex.title)}
+            <p class="q">{ex.title}</p>
+            <pre class="example"><code>{ex.code}</code></pre>
+          {/each}
+        {/if}
         {#if s.tasks?.length}
           {#each s.tasks as t (t.q)}
             <p class="q">{t.q}</p>
@@ -176,6 +182,16 @@
 
   p {
     line-height: 1.5;
+  }
+
+  .example {
+    margin: 0.3rem 0 0.9rem;
+    padding: 0.6rem 0.75rem;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    overflow-x: auto;
   }
 
   .howto li {

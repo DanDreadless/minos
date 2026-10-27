@@ -34,6 +34,8 @@ export interface Section {
   summary: string;
   howto?: string[];
   tasks?: { q: string; a: string }[];
+  // examples are copyable snippets (YAML for Home Assistant, say).
+  examples?: { title: string; code: string }[];
   settings?: Setting[];
 }
 
@@ -410,6 +412,96 @@ export const docs: Section[] = [
     ],
   },
   {
+    id: 'home-assistant',
+    title: 'Home Assistant',
+    page: '#/settings?tab=homeassistant',
+    summary:
+      'Minos can appear in Home Assistant as a device of its own — a blocking switch, pause buttons, counters, problem sensors and a Block switch for each named device — with no YAML. It talks to Home Assistant through MQTT, the messaging system Home Assistant uses for devices like this.',
+    howto: [
+      "In Home Assistant, go to Settings → Add-ons, install the Mosquitto broker add-on and start it. Home Assistant then offers the MQTT integration under Settings → Devices & services; add it.",
+      "Still in Home Assistant, make a user for Minos (Settings → People → Users → Add person, with a login) — for example \"minos\" with its own password. The Mosquitto add-on lets any Home Assistant user log in to the broker.",
+      "In Minos, open Settings → Home Assistant. Enter the broker as mqtt://<Home Assistant's address>:1883 (for example mqtt://192.168.1.10:1883), the username and password you just made, tick Connect to Home Assistant and save. The status line turns green with \"Connected to the broker\".",
+      'In Home Assistant, open Settings → Devices & services → MQTT → Devices: Minos is listed. Add its entities to a dashboard like any other device.',
+      'Entities: switch.minos_blocking (off pauses blocking until turned back on); button.minos_pause_blocking_for_5_minutes and …_for_1_hour; sensor.minos_queries, sensor.minos_blocked_queries and sensor.minos_share_blocked (since Minos last started); sensor.minos_blocklist_rules; binary_sensor.minos_upstream_resolver_problem, binary_sensor.minos_threat_suspected and binary_sensor.minos_blocking_may_have_broken_something (on when there is a problem); update.minos_update (when Check for new releases is on); and switch.minos_block_<device> for each device you have named on the Devices page.',
+      'State is sent when it changes and every 30 seconds. If Minos stops, its entities show as unavailable; if you untick Connect to Home Assistant, they are removed.',
+      'Anything that can publish MQTT can control Minos too: minos/blocking/set (ON or OFF), minos/pause/set (minutes, e.g. 30) and minos/device/<id>/set (ON blocks, OFF unblocks). Do not send them retained — a retained command is ignored. Minos publishes minos/state (JSON), minos/availability (online/offline) and minos/device/<id>/state.',
+      "No MQTT broker? Home Assistant's REST integrations work against the Minos API instead: set an API token (Settings → Access & security) and send it as the X-Api-Token header. docs/home-assistant.md has ready-made REST sensors, a switch and commands.",
+    ],
+    examples: [
+      {
+        title: 'Bedtime: the kids\' tablet goes offline at 21:00 and back at 07:00',
+        code: `automation:
+  - alias: Kids tablet off at bedtime
+    triggers:
+      - trigger: time
+        at: "21:00:00"
+    actions:
+      - action: switch.turn_on
+        target:
+          entity_id: switch.minos_block_kids_tablet
+  - alias: Kids tablet back in the morning
+    triggers:
+      - trigger: time
+        at: "07:00:00"
+    actions:
+      - action: switch.turn_off
+        target:
+          entity_id: switch.minos_block_kids_tablet`,
+      },
+      {
+        title: 'Tell me on my phone when Minos suspects a threat',
+        code: `automation:
+  - alias: Minos threat
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.minos_threat_suspected
+        to: "on"
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          title: Minos suspects a threat
+          message: Open Minos to see which device.`,
+      },
+      {
+        title: 'Pause blocking for 15 minutes from a script or another automation',
+        code: `script:
+  minos_pause_15:
+    alias: Pause Minos for 15 minutes
+    sequence:
+      - action: mqtt.publish
+        data:
+          topic: minos/pause/set
+          payload: "15"`,
+      },
+    ],
+    tasks: [
+      {
+        q: 'The status says "not authorized" or "wrong username or password".',
+        a: 'The broker refused the login. Check the Home Assistant user and its password (log in to Home Assistant with it once to be sure), then type the password again in Minos — it is never shown, so retyping is the way to be sure it is right.',
+      },
+      {
+        q: 'The status says it cannot reach the broker.',
+        a: 'Check the address and port (1883, or 8883 for mqtts://), that the Mosquitto add-on is running, and that Home Assistant\'s machine accepts connections on that port from the machine Minos runs on.',
+      },
+      {
+        q: 'Minos says connected, but no Minos device appears in Home Assistant.',
+        a: 'The MQTT integration must use the same broker, and discovery must be on with the prefix "homeassistant" (Settings → Devices & services → MQTT → Configure). If you changed the prefix there, set the same Discovery prefix in Minos.',
+      },
+      {
+        q: 'A device has no Block switch.',
+        a: 'Switches are made for devices with a name: give the device one on the Devices page (or its own page) and the switch appears within half a minute. Add a Block switch for each named device must also be ticked.',
+      },
+      {
+        q: 'I run two Minos servers on one broker.',
+        a: 'Give each its own Topic prefix (minos and minos2, say) in Settings → Home Assistant, or their entities collide.',
+      },
+      {
+        q: 'How do I take Minos out of Home Assistant?',
+        a: 'Untick Connect to Home Assistant and save; Minos removes its entities before it disconnects.',
+      },
+    ],
+  },
+  {
     id: 'settings-dns',
     title: 'Settings → DNS',
     page: '#/settings?tab=dns',
@@ -641,7 +733,7 @@ export const docs: Section[] = [
     title: 'Settings → Home Assistant',
     page: '#/settings?tab=homeassistant',
     summary:
-      'Puts Minos in Home Assistant with no YAML. Minos announces itself over MQTT (Home Assistant\'s "MQTT discovery"), so a Minos device appears with everything below, kept up to date within seconds.',
+      'Puts Minos in Home Assistant with no YAML. Minos announces itself over MQTT (Home Assistant\'s "MQTT discovery"), so a Minos device appears with everything below, kept up to date within seconds. The Home Assistant section of Help has the step-by-step setup, the entity names and example automations.',
     howto: [
       'In Home Assistant, install the Mosquitto broker add-on (Settings → Add-ons) and add the MQTT integration if it isn\'t there already.',
       'Make a Home Assistant user for Minos (Settings → People → Users), for example "minos" — the Mosquitto add-on accepts Home Assistant users.',

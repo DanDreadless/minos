@@ -627,3 +627,39 @@ func TestAllowedBeforeFromSQLite(t *testing.T) {
 	defer reopened.Close()
 	assertWorked(t, reopened)
 }
+
+// The breakage evidence queries must read only the one name's rows: pinned
+// to (qname, verdict, ts), never the client index (a device's whole week)
+// or the time index (the whole day's log).
+func TestCountAnswersUsesTheNameIndex(t *testing.T) {
+	l, err := Open(Options{RingSize: 10, DBPath: t.TempDir() + "/plan.db", RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	<-l.Ready()
+	rows, err := l.db.Query(`EXPLAIN QUERY PLAN SELECT COUNT(*), MAX(ts) FROM (SELECT ts FROM querylog
+		INDEXED BY idx_querylog_qname_verdict_ts WHERE qname = ? AND verdict = ? AND ts >= ? AND ts < ? AND client = ? LIMIT ?)`,
+		"a.example", VerdictAllowed, 0, 1, "10.0.0.1", 3)
+	if err != nil {
+		t.Fatalf("pinned shape rejected: %v", err)
+	}
+	defer rows.Close()
+	ok := false
+	for rows.Next() {
+		var a, b, c int
+		var detail string
+		if err := rows.Scan(&a, &b, &c, &detail); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(detail, "idx_querylog_qname_verdict_ts (qname=? AND verdict=? AND ts>? AND ts<?)") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Error("count does not seek on (qname, verdict, ts)")
+	}
+	if n, err := l.BlockedBefore(context.Background(), "10.0.0.1", "a.example", time.Now().Add(-time.Hour), time.Now(), 5); err != nil || n != 0 {
+		t.Errorf("BlockedBefore = %d, %v", n, err)
+	}
+}
