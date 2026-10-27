@@ -9,11 +9,16 @@ import (
 	"time"
 
 	"minos/internal/querylog"
+	"minos/internal/threats"
 )
 
 // listValue is one blocklist's entry in the value report.
 type listValue struct {
 	List string `json:"list"`
+	// Security marks a threat-intelligence list (threats.ThreatFeed): for
+	// one of those, blocking nothing is the good outcome, not a reason to
+	// remove it.
+	Security bool `json:"security"`
 	// Rules, UniqueRules and CoveredBy compare the lists' exact-domain rules.
 	Rules       int            `json:"rules"`
 	UniqueRules int            `json:"unique_rules"`
@@ -104,9 +109,14 @@ func (s *Server) handleListValue(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	urls := map[string]string{}
+	for _, src := range s.store.Get().Lists.Sources {
+		urls[src.Name] = src.URL
+	}
 	for l, o := range overlap {
 		v := listValue{
-			List: o.List, Rules: o.Rules, UniqueRules: o.Unique, FreedBytes: o.FreedBytes,
+			Security: threats.ThreatFeed(o.List, urls[o.List]),
+			List:     o.List, Rules: o.Rules, UniqueRules: o.Unique, FreedBytes: o.FreedBytes,
 			Blocks: blocks[l], OnlyBlocks: only[l], OnlyExamples: examples[l], CoveredBy: []listCoverage{},
 		}
 		if v.OnlyExamples == nil {

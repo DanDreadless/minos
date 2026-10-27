@@ -205,6 +205,7 @@ export interface ListStats {
 // The blocklist value report (GET /api/lists/value).
 export interface ListValue {
   list: string;
+  security: boolean; // A threat-intelligence list
   rules: number;
   unique_rules: number;
   covered_by: { list: string; rules: number }[];

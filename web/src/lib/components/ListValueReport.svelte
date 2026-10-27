@@ -49,6 +49,7 @@
   function verdict(v: ListValue, d: number): { text: string; tone: 'good' | 'warn' | 'dim' } {
     const cover = topCover(v);
     if (v.only_blocks > 0) return { text: c.earns(v.only_blocks, d), tone: 'good' };
+    if (v.blocks === 0 && v.security) return { text: c.securityQuiet(d), tone: 'good' };
     if (v.blocks === 0) {
       return { text: c.unused(d) + (cover && cover.pct >= 80 ? ' ' + c.consider(fmtBytes(v.freed_bytes)) : ''), tone: 'dim' };
     }

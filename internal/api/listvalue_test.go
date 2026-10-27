@@ -72,6 +72,10 @@ func TestListValueReport(t *testing.T) {
 		t.Errorf("small %+v", small)
 	}
 
+	if big.Security || small.Security {
+		t.Error("ordinary lists marked as security lists")
+	}
+
 	if rec := doJSON(t, r, "GET", "/api/lists/value?days=0", "", nil); rec.Code != http.StatusBadRequest {
 		t.Errorf("days=0: %d", rec.Code)
 	}
