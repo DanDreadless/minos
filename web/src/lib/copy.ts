@@ -544,6 +544,8 @@ export const copy = {
         `Earns its keep: ${n.toLocaleString()} ${n === 1 ? 'lookup' : 'lookups'} in the last ${d} days that no other list would have blocked.`,
       redundant: (d: number) => `Everything it blocked in the last ${d} days, another list blocks too.`,
       unused: (d: number) => `Blocked nothing that was looked up in the last ${d} days.`,
+      securityQuiet: (d: number) =>
+        `Blocked nothing in the last ${d} days. For a malware and phishing list that is the good outcome: nothing on your network went near a known threat. Keep it.`,
       consider: (mb: string) => `Removing it would free about ${mb} of memory.`,
       rules: (n: number, unique: string) => `${n.toLocaleString()} rules, ${unique} found in no other list.`,
       coveredBy: (list: string, share: string) => ` ${share.charAt(0).toUpperCase()}${share.slice(1)} already in ${list}.`,
