@@ -132,6 +132,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/update", s.handleUpdate)
 		r.Get("/update/progress", s.handleUpdateProgress)
 		r.Post("/update/install", s.handleUpdateInstall)
+		r.Post("/update/check", s.handleUpdateCheck)
 		r.Get("/querylog", s.handleQueryLog)
 		r.Get("/querylog/history", s.handleQueryLogHistory)
 		r.Get("/querylog/export", s.handleQueryLogExport)

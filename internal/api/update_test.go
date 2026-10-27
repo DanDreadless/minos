@@ -1,6 +1,9 @@
 package api
 
 import (
+	"context"
+	"errors"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -85,5 +88,36 @@ func TestUpdateEndpointHonoursConfigOverride(t *testing.T) {
 	if !strings.Contains(body, `"install_method":"docker"`) ||
 		!strings.Contains(body, "docker compose pull") {
 		t.Errorf("override not honoured: %s", body)
+	}
+}
+
+type checkingSource struct {
+	latest string
+	err    error
+	calls  int
+}
+
+func (c *checkingSource) Latest() (string, bool) { return c.latest, c.latest != "" }
+func (c *checkingSource) CheckNow(context.Context) (string, bool, error) {
+	c.calls++
+	return c.latest, c.latest != "", c.err
+}
+
+func TestUpdateCheckNow(t *testing.T) {
+	s, _ := newTestServer(t, "")
+	r := s.Router()
+	if rec := doJSON(t, r, "POST", "/api/update/check", "", nil); rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("no checker: %d", rec.Code)
+	}
+	src := &checkingSource{latest: "9.9.9"}
+	s.updates = src
+	rec := doJSON(t, r, "POST", "/api/update/check", "", nil)
+	if rec.Code != http.StatusOK || src.calls != 1 || !strings.Contains(rec.Body.String(), `"latest":"9.9.9"`) {
+		t.Errorf("check: %d %s (calls %d)", rec.Code, rec.Body, src.calls)
+	}
+	src.err = errors.New("could not reach GitHub: no route to host")
+	rec = doJSON(t, r, "POST", "/api/update/check", "", nil)
+	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "could not reach GitHub") {
+		t.Errorf("failed check: %d %s", rec.Code, rec.Body)
 	}
 }

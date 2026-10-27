@@ -12,6 +12,7 @@
   } from '../lib/api';
   import { confirmDialog } from '../lib/confirm';
   import HelpLink from '../lib/components/HelpLink.svelte';
+  import LocalRecords from '../lib/components/LocalRecords.svelte';
   import SettingsHistory from '../lib/components/SettingsHistory.svelte';
   import { copy } from '../lib/copy';
   import { fmtBytes, fmtLogTime } from '../lib/format';
@@ -24,6 +25,14 @@
 
   // Editable working copies, initialised from the loaded config.
   let upstreams: Upstream[] = [];
+  // Conditional forwarding: domains sent to another resolver (usually the
+  // router, so DHCP hostnames resolve). Part of the DNS tab's draft.
+  interface RouteRow {
+    domains: string;
+    address: string;
+    protocol: Upstream['protocol'];
+  }
+  let routeRows: RouteRow[] = [];
   let dnssec: 'off' | 'permissive' | 'enforce' = 'off';
   let mode: string = 'zero_ip';
   let blockTTL = 60;
@@ -109,6 +118,11 @@
   function initFrom(c: ConfigView): void {
     cfg = c;
     upstreams = c.dns.upstreams.map((u) => ({ ...u }));
+    routeRows = c.dns.routes.map((r) => ({
+      domains: r.domains.join(', '),
+      address: r.upstream.address,
+      protocol: r.upstream.protocol,
+    }));
     savedUpstreams = new Set(c.dns.upstreams.map((u) => `${u.protocol} ${u.address}`));
     dnssec = c.dns.dnssec;
     mode = c.blocking.mode;
@@ -203,6 +217,36 @@
     return copy.settings.haStatusConnecting;
   }
 
+  // A pasted https:// URL can only be DoH; switch the protocol to match
+  // rather than let the route save as DoT and fail every exchange.
+  function matchRouteProtocol(row: RouteRow): void {
+    if (/^https:\/\//i.test(row.address.trim()) && row.protocol !== 'doh') {
+      row.protocol = 'doh';
+      routeRows = routeRows;
+    }
+  }
+
+  // Check now: ask for the newest release at once instead of waiting for
+  // the daily check. A newer version also lights the banner at the top
+  // within a few seconds (the status poll sees it).
+  let checkingUpdates = false;
+  let updateResult: { text: string; bad: boolean } | null = null;
+  async function checkUpdatesNow(): Promise<void> {
+    checkingUpdates = true;
+    updateResult = null;
+    try {
+      const u = await api.checkUpdates();
+      updateResult =
+        u.available && u.latest
+          ? { text: copy.settings.newerAvailable(u.latest, u.current), bad: false }
+          : { text: copy.settings.upToDate(u.current), bad: false };
+    } catch (e) {
+      updateResult = { text: copy.settings.checkFailed(e instanceof Error ? e.message : String(e)), bad: true };
+    } finally {
+      checkingUpdates = false;
+    }
+  }
+
   async function save(upd: Parameters<typeof api.updateConfig>[0]): Promise<void> {
     try {
       initFrom(await api.updateConfig(upd));
@@ -225,6 +269,13 @@
         return {
           dns: {
             upstreams,
+            routes: routeRows.map((r) => ({
+              domains: r.domains
+                .split(/[\s,]+/)
+                .map((s) => s.trim())
+                .filter(Boolean),
+              upstream: { address: r.address.trim(), protocol: r.protocol },
+            })),
             dnssec,
             cache: {
               enabled: cacheEnabled,
@@ -311,7 +362,7 @@
   // Every draft is named here so the comparison re-runs when any changes
   // (Svelte tracks only what a reactive statement names).
   $: draftKey = JSON.stringify([
-    upstreams, dnssec, mode, blockTTL, safeSearch, firefoxCanary, rebindProtect, cnameInspect, allowedNetworks, rateLimit, blockPrivateRelay, retentionDays,
+    upstreams, routeRows, dnssec, mode, blockTTL, safeSearch, firefoxCanary, rebindProtect, cnameInspect, allowedNetworks, rateLimit, blockPrivateRelay, retentionDays,
     threatsEnabled, threatsIgnore,
     haEnabled, haBroker, haUsername, haPassword, haDiscovery, haTopic, haSwitches,
     ringSize, memoryMB, cacheEnabled, cacheMaxEntries, cacheMinTTL, cacheMaxTTL, cacheServeStale,
@@ -806,6 +857,48 @@
       <p class="note">{copy.settings.cacheServeStaleHint}</p>
     {/if}
   </section>
+
+  <LocalRecords />
+
+  <section class="card">
+    <h2>{copy.settings.routesTitle} <small>{copy.settings.routesHint}</small></h2>
+    {#if routeRows.length === 0}
+      <p class="note">{copy.settings.routesEmpty}</p>
+    {/if}
+    {#each routeRows as r, i (i)}
+      <div class="route-row">
+        <input
+          class="grow"
+          placeholder={copy.settings.routesDomainsPlaceholder}
+          title={copy.settings.routesDomains}
+          bind:value={r.domains}
+        />
+        <span class="route-arrow" aria-hidden="true">→</span>
+        <input
+          placeholder={r.protocol === 'doh' ? 'https://resolver/dns-query' : 'host:port'}
+          bind:value={r.address}
+          on:input={() => matchRouteProtocol(r)}
+        />
+        <select bind:value={r.protocol} title="Protocol">
+          <option value="udp">UDP</option>
+          <option value="tcp">TCP</option>
+          <option value="dot">DoT</option>
+          <option value="doh">DoH</option>
+          <option value="doh3">DoH3</option>
+          <option value="doq">DoQ</option>
+        </select>
+        <button class="danger" title="Remove route" on:click={() => (routeRows = routeRows.filter((_, j) => j !== i))}
+          >✕</button
+        >
+      </div>
+    {/each}
+    <p class="note">{copy.settings.routesNote}</p>
+    <div class="section-actions">
+      <button on:click={() => (routeRows = [...routeRows, { domains: '', address: '', protocol: 'udp' }])}
+        >{copy.settings.routesAdd}</button
+      >
+    </div>
+  </section>
   {/if}
 
   {#if tab === 'filtering'}
@@ -1203,6 +1296,12 @@
       {copy.settings.updateCheck}
     </label>
     <p class="note">{copy.settings.updateCheckHint}</p>
+    <div class="section-actions">
+      <button on:click={checkUpdatesNow} disabled={checkingUpdates} title={copy.settings.checkNowHint}>
+        {checkingUpdates ? copy.settings.checkingNow : copy.settings.checkNow}
+      </button>
+      {#if updateResult}<span class="update-result" class:bad={updateResult.bad}>{updateResult.text}</span>{/if}
+    </div>
   </section>
   {/if}
 
@@ -1487,6 +1586,32 @@
 
   .grow {
     flex: 1;
+  }
+
+  .update-result {
+    align-self: center;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+
+  .update-result.bad {
+    color: var(--blocked);
+  }
+
+  .route-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+  }
+
+  .route-row .grow {
+    flex: 1 1 14rem;
+  }
+
+  .route-arrow {
+    color: var(--text-dim);
   }
 
   .section-actions {

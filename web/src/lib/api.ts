@@ -651,6 +651,7 @@ export const api = {
   // health light updates with the result.
   testUpstream: (u: Upstream) => request<UpstreamTestResult>('POST', '/api/upstreams/test', u),
   update: () => request<UpdateInfo>('GET', '/api/update'),
+  checkUpdates: () => request<UpdateInfo>('POST', '/api/update/check'),
   updateProgress: () => request<UpdateProgress>('GET', '/api/update/progress'),
   installUpdate: () => request<unknown>('POST', '/api/update/install'),
   stats: (hours = 24) => request<Stats>('GET', `/api/stats?hours=${hours}`),
