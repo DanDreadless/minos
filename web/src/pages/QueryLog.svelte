@@ -559,8 +559,10 @@
               </td>
               <td>
                 {#if e.list}
-                  <button class="cell" title="rule: {e.rule}" on:click={() => narrow({ list: e.list })}
-                    >{e.list}</button
+                  <button
+                    class="cell"
+                    title={e.list === 'paused' ? copy.querylog.pausedTitle(e.rule ?? '') : `rule: ${e.rule}`}
+                    on:click={() => narrow({ list: e.list })}>{e.list}</button
                   >
                 {:else if e.upstream}
                   <button class="cell" title={copy.querylog.filterHint} on:click={() => narrow({ upstream: e.upstream })}

@@ -727,6 +727,14 @@ func (s *Server) handle(w dns.ResponseWriter, req *dns.Msg) {
 		// pardoning list in the docket, like blocks name theirs.
 		entry.List = verdict.List
 		entry.Rule = verdict.Rule
+	} else if !pol.Bypasses() && s.engine.PausedNow() {
+		// Let through only because blocking is paused: say so, with the
+		// rule that would have blocked it. Only the docket entry changes
+		// (verdict stays empty, so CNAME and rebinding checks behave as
+		// before), and the second match runs only while paused.
+		if res := s.engine.Current().Match(qname); res.Blocked {
+			entry.List, entry.Rule = filter.ListPaused, res.List+": "+res.Rule
+		}
 	}
 
 	// Audit-mode lists: attribution without enforcement. Only allowed

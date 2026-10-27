@@ -380,9 +380,15 @@ func TestEventWording(t *testing.T) {
 		{"known", ThreatEvent(DeviceInfo{Key: "k", IP: "192.168.1.21", Name: "Phone"}, "known_threat", "evil.example", "URLhaus", 3, 2, nil),
 			"Phone tried to reach a known malicious domain",
 			"Phone looked up evil.example and 1 other known malicious domain (URLhaus)"},
-		{"breakage", BreakageEvent(DeviceInfo{Key: "k", IP: "192.168.1.20", Name: "Living room TV"}, "api.app.example", "StevenBlack", 42),
+		{"breakage", BreakageEvent(DeviceInfo{Key: "k", IP: "192.168.1.20", Name: "Living room TV"}, "api.app.example", "StevenBlack", 42, 212, time.Now()),
 			"Something may be broken on Living room TV",
-			"Living room TV asked for api.app.example 42 times in two minutes, and StevenBlack blocks it"},
+			"Living room TV reached api.app.example without trouble 212 times in the past week"},
+		{"breakage, unnamed", BreakageEvent(DeviceInfo{Key: "aa:bb", IP: "192.168.1.20"}, "api.app.example", "StevenBlack", 42, 5, time.Now()),
+			"Something may be broken on the device at 192.168.1.20",
+			"The device at 192.168.1.20 reached api.app.example"},
+		{"threat, unnamed", ThreatEvent(DeviceInfo{Key: "k", IP: "192.168.1.21", Vendor: "Apple"}, "known_threat", "evil.example", "URLhaus", 1, 1, nil),
+			"Apple device 192.168.1.21 tried to reach a known malicious domain",
+			"Apple device 192.168.1.21 looked up evil.example (URLhaus)"},
 		{"updated", UpdateResultEvent("done", "0.30.0", "v0.31.0", ""), "Minos updated to v0.31.0",
 			"The update from v0.30.0 finished and the new version is answering."},
 		{"rolled back", UpdateResultEvent("rolled_back", "0.30.0", "v0.31.0", ""), "Minos update to v0.31.0 was rolled back",
@@ -398,6 +404,16 @@ func TestEventWording(t *testing.T) {
 		}
 		if c.e.Link == "" {
 			t.Errorf("%s: no link — every notification must say where to act on it", c.name)
+		}
+	}
+	// Alerts about one device open that device (field report: a breakage
+	// alert that neither named nor linked the device it was about).
+	for _, e := range []Event{
+		BreakageEvent(DeviceInfo{Key: "aa:bb:cc:dd:ee:ff", IP: "192.168.1.20"}, "api.app.example", "L", 20, 9, time.Now()),
+		ThreatEvent(DeviceInfo{Key: "aa:bb:cc:dd:ee:ff", IP: "192.168.1.20"}, "dga", "", "", 14, 0, nil),
+	} {
+		if e.Link != "#/device/aa:bb:cc:dd:ee:ff" || len(e.Actions) != 2 || !strings.Contains(e.Actions[1].URL, "client=192.168.1.20") {
+			t.Errorf("%s links to %q, actions %+v", e.Type, e.Link, e.Actions)
 		}
 	}
 	if e := UpstreamEvent("1.1.1.1:853", true, nil); e.Priority != PriorityUrgent || e.Type != TypeDNSDown {

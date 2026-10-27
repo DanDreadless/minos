@@ -200,6 +200,7 @@ export const copy = {
   },
 
   querylog: {
+    pausedTitle: (rule: string) => `Allowed only because blocking was paused; ${rule} would have blocked it`,
     title: 'Query Log',
     subtitle: 'Every DNS lookup, live and searchable',
     empty: 'No queries yet. Point a device at Minos and every lookup it makes is judged here.',
@@ -348,15 +349,17 @@ export const copy = {
     threatFineHint: 'Expected behaviour — hide this for now',
     threatNever: (domain: string) => `Never flag ${domain}`,
     threatNeverHint: 'Add this domain to the threat detection ignore list',
-    broken: (device: string, domain: string, count: number, list: string) =>
-      `Something may be broken on ${device}: it asked for ${domain} ${count} times in a couple of minutes, and ${list} blocks it.`,
+    brokenOn: 'Something may be broken on',
+    broken: (domain: string, count: number, list: string, worked: number, last: string) =>
+      `it keeps asking for ${domain} (${count} times in a couple of minutes), which worked ${worked} times in the past week, last at ${last}, until ${list} started blocking it.`,
     brokenAllow: 'Allow',
     brokenAllowHint: 'Always allow this domain and its subdomains',
     brokenHour: 'Allow 1 h',
     brokenHourHint: 'Allow it for one hour, then block it again',
     brokenDismiss: 'Dismiss',
-    brokenDismissHint: 'Not broken — do not suggest this again today',
+    brokenDismissHint: 'Not broken: do not suggest this for this device for a week',
     brokenLookups: 'See lookups',
+    openDevice: 'Open device',
     noRules: 'Nothing is being blocked: no blocklist rules are loaded.',
     list: (name: string, state: string) =>
       ({
@@ -920,7 +923,7 @@ export const copy = {
       { types: ['update_available'], label: 'Minos updates', hint: 'A new release is out (needs the update check on)' },
       { types: ['acme_renewal_failed'], label: 'Certificate problems', hint: 'The DoT/DoH certificate cannot be renewed' },
       { types: ['threat_suspected'], label: 'Possible threats', hint: 'A device behaves like malware: random-looking domains, data through DNS, or a known malicious domain' },
-      { types: ['breakage_suspected'], label: 'Something may be broken', hint: 'A device keeps retrying a blocked name, the way an app does when blocking breaks it' },
+      { types: ['breakage_suspected'], label: 'Something may be broken', hint: 'A device keeps retrying a name it used to reach, which a blocklist has started blocking' },
     ] as { types: string[]; label: string; hint: string }[],
     dnsDownNote: '"DNS is down" — every resolver failing — is always sent, at urgent priority.',
     quietTitle: 'Quiet hours',

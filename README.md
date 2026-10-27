@@ -29,10 +29,11 @@ is protected, with a clear answer to "why was this blocked?" one click away.
   sending data out hidden in long DNS names, or reaching for known
   malicious domains is flagged by name — tuned on 90 days of a real home
   network to stay quiet when nothing is wrong.
-- **Notices when blocking breaks something.** A device retrying a blocked
-  name, the way an app does when it has stopped working, shows up as
-  "Something may be broken on Living room TV" with Allow, Allow 1 h and
-  Dismiss — while tracker chatter that nags all day is left out.
+- **Notices when blocking breaks something.** When a blocklist starts
+  blocking a name a device used to reach, and the device keeps retrying it
+  the way an app does when it has stopped working, Minos says which device,
+  what changed and since when — with Allow, Allow 1 h and Dismiss. Trackers
+  that were blocked all along never trigger it.
 - **Know what each list is worth.** Minos compares your blocklists with
   each other and with what was really blocked: "99% of Hagezi Normal is
   already in Hagezi Pro, and it blocked nothing the others wouldn't have —

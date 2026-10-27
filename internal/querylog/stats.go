@@ -219,6 +219,40 @@ func (l *Log) BlockedNames(ctx context.Context, since time.Time) ([]TopDomain, e
 	return rankDomains(counts, MaxBlockedNames), nil
 }
 
+// AllowedBefore counts a device's ordinary allowed lookups of exactly qname
+// in [since, before) — answered with no rule involved, so neither let
+// through by an allow rule nor while blocking was paused (both carry a
+// list) — up to limit, with the time of the latest. It is the "this used to
+// work" evidence for the breakage detector.
+func (l *Log) AllowedBefore(ctx context.Context, client, qname string, since, before time.Time, limit int) (int, time.Time, error) {
+	if l.reader() != nil {
+		var n int
+		var last sql.NullInt64
+		err := l.reader().QueryRowContext(ctx, `SELECT COUNT(*), MAX(ts) FROM (SELECT ts FROM querylog
+			WHERE qname = ? AND verdict = ? AND ts >= ? AND ts < ? AND client = ? AND (list = '' OR list IS NULL)
+			LIMIT ?)`,
+			qname, VerdictAllowed, since.UnixMilli(), before.UnixMilli(), client, limit).Scan(&n, &last)
+		if err != nil {
+			return 0, time.Time{}, fmt.Errorf("allowed before query: %w", err)
+		}
+		if !last.Valid {
+			return n, time.Time{}, nil
+		}
+		return n, time.UnixMilli(last.Int64), nil
+	}
+	n, last := 0, time.Time{}
+	l.scanRing(since, func(e Entry) {
+		if n < limit && e.QName == qname && e.Client == client && e.Verdict == VerdictAllowed &&
+			e.List == "" && e.Time.Before(before) {
+			n++
+			if e.Time.After(last) {
+				last = e.Time
+			}
+		}
+	})
+	return n, last, nil
+}
+
 // TopAuditedDomains returns the domains a given audit source marked most
 // often — "what would this source block if you enforced it". The mirror of
 // TopBlockedDomains on the audit columns, so an audit list and DNSSEC's

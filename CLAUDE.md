@@ -737,18 +737,34 @@ This is security software; hold it to that standard.
   ignore; `threats.ignore` adds more. Reads the query-log stream, so the
   query path pays nothing; findings are in memory (24 h).
 - **"Something broke" detection** (fixed decisions, October 2026,
-  `internal/breakage`): a burst of blocked lookups of one name by one device
-  (15 in 2 minutes) is an app retrying because blocking broke it — but ad
-  and tracker SDKs retry all day, so a burst counts only when the device did
-  not hit that name more than 45 times in the 24 hours before it (one
-  bounded, indexed QueryHistory call, made only when a burst crosses the
-  threshold, in its own goroutine; ephemeral mode skips the check). Only
+  `internal/breakage`, **reworked after a field report**): a suggestion
+  needs a burst (15 blocked lookups of one name by one device in 2 minutes)
+  **and** evidence the name used to work — at least `MinWorked` (3)
+  ordinary answers to that device in the week before
+  (`querylog.AllowedBefore`: verdict allowed with an empty list, so neither
+  an allow rule nor a pause counts). The first version required only that
+  the device hadn't been hammering the name the day before, and announced
+  Google Tag Manager as a broken app after a quiet day: page tags are asked
+  for on every page load, so they arrive in bursts. Replayed on 30 days of
+  the field Pi (4.8M lookups, `go test -tags replay`): 98 suggestions under
+  the old rule, all trackers; 1 under the new. No history (or a failed
+  read) means no suggestion. Still also skipped: more than 45 blocked
+  lookups in the 24 hours before (blocked and retried for a day already).
+  Lookups let through only because blocking is paused are logged with list
+  `paused` (`filter.ListPaused`, rule "<list>: <rule>") — set in handle()
+  after judging, so `verdict` stays empty and CNAME/rebinding behave as
+  before; the second match runs only while paused, and the unpaused cost is
+  one atomic load (BenchmarkHandleCacheHit unchanged, ~387 ns). Dismiss
+  quiets a pair for a week. The notification names an unnamed device by
+  address (`DeviceInfo.named`) and opens its page, with the lookups as a
+  second action; threat notifications link the same way. Only
   blocks from subscribed lists, CNAME cloaking and rebinding count — the
   user's own denylist, services, group rules and device blocks are
   deliberate (`considered`). Reads the query-log *stream* (slow subscribers
   drop, never stall), so the query path pays nothing; suggestions live in
-  memory, end an hour after the last hit or the moment the name passes, and
-  a dismissal (or a chronic verdict) quiets the pair for a day. Allowing the
+  memory, end an hour after the last hit or the moment the name passes; a
+  failed evidence test quiets the pair for a day, a dismissal for a week.
+  Allowing the
   domain through the API calls `Resolve`.
 - **Temporary allows** (fixed decisions, October 2026): a separate key,
   `blocking.temporary_allows` ({domain, until}), compiled as list
