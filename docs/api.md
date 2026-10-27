@@ -491,6 +491,33 @@ Add with `POST` (`{"domain": "example.com"}`); remove with
 `DELETE /api/allowlist/{domain}`. Entries cover subdomains, and allow
 always beats deny.
 
+## Weekly summary
+
+### `GET /api/summary`
+
+The dashboard's "This week" card: the last 7 days, and the 7 before for
+comparison.
+
+```json
+{"start": "2026-10-20T14:00:00Z", "lookups": 172410, "blocked": 24890,
+ "prev_lookups": 165220, "prev_blocked": 23011,
+ "new_devices": [{"key": "aa:bb:cc:dd:ee:ff", "name": "Kids tablet", "address": "192.168.1.50"}],
+ "new_device_count": 1,
+ "busiest": {"key": "…", "name": "Laptop", "address": "192.168.1.20", "lookups": 61250},
+ "security": {"blocked": 3, "devices": [{"key": "…", "name": "Phone", "address": "192.168.1.21"}], "lists": ["URLhaus (malware-filter)"]},
+ "security_lists": ["URLhaus (malware-filter)"],
+ "tracking": {"companies": 41, "allowed": 1073, "blocked": 24410,
+   "top": [{"id": "google", "name": "Google", "allowed": 640}]},
+ "settings_changes": 3, "last_change": {"id": "…", "time": "…", "actor": "Home Assistant (MQTT)", "keys": ["clients"]}}
+```
+
+`new_devices` are those first seen in the window (newest five of
+`new_device_count`). `security` counts blocks by the threat-feed lists
+(`security_lists` names those switched on; empty means none are).
+`tracking` sums the privacy report's tracking companies over the same
+week, with the three that got through most. Settings changes exclude the
+"before history began" starting point. Same 20-second cap as `/api/stats`.
+
 ## Privacy
 
 ### `GET /api/privacy?days=7&client=`

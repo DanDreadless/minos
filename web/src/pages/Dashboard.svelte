@@ -6,6 +6,7 @@
   import SetupCard from '../lib/components/SetupCard.svelte';
   import StatTile from '../lib/components/StatTile.svelte';
   import TimelineChart from '../lib/components/TimelineChart.svelte';
+  import WeeklySummary from '../lib/components/WeeklySummary.svelte';
   import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
   import { deviceNames } from '../lib/devicenames';
@@ -137,6 +138,8 @@
 {/if}
 
 <AttentionPanel {status} {diskLow} dnssecBlind={dnssecUpstreamBlind} />
+
+<WeeklySummary />
 
 <div class="window" role="group" aria-label={copy.dashboard.windowLabel}>
   <span>{copy.dashboard.windowLabel}</span>

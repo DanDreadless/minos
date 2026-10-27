@@ -158,6 +158,7 @@ func (s *Server) Router() http.Handler {
 		r.Delete("/services/custom/{name}", s.handleDeleteCustomService)
 		r.Get("/lists/value", s.handleListValue)
 		r.Get("/privacy", s.handlePrivacy)
+		r.Get("/summary", s.handleSummary)
 		r.Post("/privacy/companies", s.handleBlockCompany)
 		r.Get("/lists", s.handleLists)
 		r.Post("/lists", s.handleAddList)

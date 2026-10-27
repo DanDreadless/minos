@@ -711,6 +711,36 @@ export const copy = {
     openDevice: 'Open this device’s page',
   },
 
+  summary: {
+    title: 'This week',
+    hint: 'The last 7 days, compared with the 7 before',
+    loading: 'Loading…',
+    failed: 'The weekly summary could not be loaded.',
+    lookups: (n: number) => `${n.toLocaleString()} ${n === 1 ? 'lookup' : 'lookups'}`,
+    blocked: (pct: string) => `${pct} blocked`,
+    more: (pct: number) => `${pct}% more than the week before`,
+    fewer: (pct: number) => `${pct}% fewer than the week before`,
+    same: 'about the same as the week before',
+    noNewDevices: 'No new devices.',
+    newDevices: (n: number) => `${n} new ${n === 1 ? 'device' : 'devices'}:`,
+    andMore: (n: number) => ` and ${n} more`,
+    noSecurityLists: 'No security blocklist is switched on, so known malware and phishing domains are not blocked.',
+    addSecurityList: 'Add one',
+    securityQuiet: 'Your security blocklists blocked nothing: no device went near a known threat.',
+    securityBlocked: (n: number, lists: string) =>
+      `Your security blocklists (${lists}) blocked ${n.toLocaleString()} ${n === 1 ? 'lookup' : 'lookups'} of known threats, from`,
+    seeLookups: 'See them',
+    noTracking: 'No lookups of known tracking names.',
+    trackingCompanies: (n: number) => `${n} tracking ${n === 1 ? 'company' : 'companies'}`,
+    trackingCounts: (through: number, blocked: number) =>
+      `${through.toLocaleString()} of their lookups got through, ${blocked.toLocaleString()} were blocked`,
+    trackingTop: (names: string[]) =>
+      ` — most of what got through went to ${names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0]}`,
+    busiest: 'Busiest device:',
+    noSettingsChanges: 'No settings changes.',
+    settingsChanges: (n: number) => `${n} settings ${n === 1 ? 'change' : 'changes'}`,
+    lastChange: (actor: string, when: string) => `, the latest by ${actor} at ${when}`,
+  },
   privacy: {
     title: 'Privacy',
     intro:
