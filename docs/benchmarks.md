@@ -1,7 +1,7 @@
 # Benchmarks
 
 What Minos costs on the hardware it is built for: a **Raspberry Pi 4 Model B
-(8 GB)** running Debian 13, Minos 0.37.3. Measured on 27 October 2026.
+(8 GB)** running Debian 13, Minos 0.37.3 (dashboard times: 0.37.4). Measured on 27 October 2026.
 
 ## Method
 
@@ -77,10 +77,10 @@ the SD card. Each figure is the median of three requests.
 | Search for a common name (apple.com) | 103 ms |
 | Search for a name never looked up | 47 ms |
 | Search for blocked lookups of "netflix" | 60 ms |
-| Dashboard, 24 hours | 159 ms |
-| Dashboard, 7 days | 277 ms |
-| Dashboard, 30 days | 652 ms |
-| Dashboard, 90 days | 1.8 s |
+| Dashboard, 24 hours | 98 ms |
+| Dashboard, 7 days | 159 ms |
+| Dashboard, 30 days | 179 ms |
+| Dashboard, 90 days | 325 ms |
 | Privacy report, whole network, 7 days | 304 ms |
 | Blocklist value report, 30 days | 196 ms |
 
@@ -100,3 +100,5 @@ this round did not do. Until then, nothing here compares Minos with them.
 - **v0.37.3** stopped keeping downloaded list text in memory beside the
   compiled rules: with 2 million rules, settled memory fell from 242 MB
   to 88 MB.
+- **v0.37.4** added daily statistics tables: the 90-day dashboard went from
+  1.8 s to 0.33 s and the 30-day from 0.65 s to 0.18 s on the same log.
