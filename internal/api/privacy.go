@@ -77,13 +77,33 @@ func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
 		}
 		days = n
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), statsDeadline)
+	defer cancel()
+	companies, start, err := s.companyReport(ctx, r.URL.Query().Get("client"), days)
+	if err != nil {
+		writeStatsErr(ctx, w, err, days*24)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Days        int           `json:"days"`
+		WindowStart time.Time     `json:"window_start"`
+		Attribution string        `json:"attribution"`
+		Companies   []companyView `json:"companies"`
+	}{days, start, trackers.Attribution, companies})
+}
+
+// companyReport aggregates the companies the network — or, with client
+// (comma-separated addresses), one device — looked up over the last days
+// whole UTC days: tracking companies first, by what got through. Shared by
+// the Privacy page and the weekly summary.
+func (s *Server) companyReport(ctx context.Context, client string, days int) ([]companyView, time.Time, error) {
 	cfg := s.store.Get()
 	devs := s.clients.Devices(cfg)
 	var clients []string
 	single := false
-	if v := r.URL.Query().Get("client"); v != "" {
+	if client != "" {
 		single = true
-		for _, c := range strings.Split(v, ",") {
+		for _, c := range strings.Split(client, ",") {
 			if c = strings.TrimSpace(c); c != "" && len(clients) < 64 {
 				clients = append(clients, c)
 			}
@@ -98,13 +118,9 @@ func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
 	}
 	slices.Sort(clients)
 	clients = slices.Compact(clients)
-
-	ctx, cancel := context.WithTimeout(r.Context(), statsDeadline)
-	defer cancel()
 	names, start, err := s.qlog.ClientNames(ctx, clients, time.Now().AddDate(0, 0, -(days-1)))
 	if err != nil {
-		writeStatsErr(ctx, w, err, days*24)
-		return
+		return nil, start, err
 	}
 
 	blocked := map[string]bool{}
@@ -169,12 +185,7 @@ func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	out := struct {
-		Days        int           `json:"days"`
-		WindowStart time.Time     `json:"window_start"`
-		Attribution string        `json:"attribution"`
-		Companies   []companyView `json:"companies"`
-	}{Days: days, WindowStart: start, Attribution: trackers.Attribution, Companies: []companyView{}}
+	companies := []companyView{}
 	for _, a := range byID {
 		v := a.view
 		for c := range a.cats {
@@ -194,11 +205,11 @@ func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
 			v.Devices = append(v.Devices, companyDevice{Key: k, Name: name})
 		}
 		sort.Slice(v.Devices, func(i, j int) bool { return v.Devices[i].Name < v.Devices[j].Name })
-		out.Companies = append(out.Companies, v)
+		companies = append(companies, v)
 	}
 	// Tracking companies first, then by what got through.
-	sort.Slice(out.Companies, func(i, j int) bool {
-		a, b := out.Companies[i], out.Companies[j]
+	sort.Slice(companies, func(i, j int) bool {
+		a, b := companies[i], companies[j]
 		if a.Tracking != b.Tracking {
 			return a.Tracking
 		}
@@ -210,7 +221,7 @@ func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
 		}
 		return a.Other > b.Other
 	})
-	writeJSON(w, http.StatusOK, out)
+	return companies, start, nil
 }
 
 // handleBlockCompany blocks or unblocks a company's advertising, analytics

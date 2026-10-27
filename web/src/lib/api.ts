@@ -206,6 +206,30 @@ export interface ListStats {
   lists: { list: string; count: number }[];
 }
 
+// The dashboard's weekly summary (GET /api/summary).
+export interface SummaryDevice {
+  key: string;
+  name: string;
+  address: string;
+  lookups?: number;
+}
+
+export interface WeekSummary {
+  start: string;
+  lookups: number;
+  blocked: number;
+  prev_lookups: number;
+  prev_blocked: number;
+  new_devices: SummaryDevice[];
+  new_device_count: number;
+  busiest?: SummaryDevice;
+  security: { blocked: number; devices: SummaryDevice[]; lists: string[] };
+  security_lists: string[];
+  tracking: { companies: number; allowed: number; blocked: number; top: { id: string; name: string; allowed: number }[] };
+  settings_changes: number;
+  last_change?: HistoryEntry;
+}
+
 // The privacy report (GET /api/privacy).
 export interface CompanyReport {
   id: string;
@@ -635,6 +659,7 @@ export const api = {
       'GET',
       `/api/stats/client?client=${encodeURIComponent(clients.join(','))}&hours=${hours}`,
     ),
+  summary: () => request<WeekSummary>('GET', '/api/summary'),
   privacy: (days = 7, clients: string[] = []) =>
     request<PrivacyReport>(
       'GET',

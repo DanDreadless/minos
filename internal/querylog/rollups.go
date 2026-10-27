@@ -401,3 +401,63 @@ func (l *Log) ClientNames(ctx context.Context, clients []string, since time.Time
 	}
 	return out, start, nil
 }
+
+// ListClientCount is one device's blocked lookups attributed to one list.
+type ListClientCount struct {
+	List   string
+	Client string
+	Count  int
+}
+
+// BlocksByListClient counts blocked lookups by list and device since the
+// given time — what the weekly summary asks of the security lists. From
+// the rollups when ready, else the raw log (its list index), else the ring.
+func (l *Log) BlocksByListClient(ctx context.Context, since time.Time) ([]ListClientCount, error) {
+	type key struct{ list, client string }
+	counts := map[key]int{}
+	switch {
+	case l.useRollups():
+		if err := l.hourly(ctx, since, func(client, verdict, list string, n int) {
+			if verdict == VerdictBlocked && list != "" {
+				counts[key{list, client}] += n
+			}
+		}); err != nil {
+			return nil, err
+		}
+	case l.reader() != nil:
+		rows, err := l.reader().QueryContext(ctx, `SELECT list, client, COUNT(*) FROM querylog
+			WHERE ts >= ? AND verdict = ? AND list != '' GROUP BY list, client`, since.UnixMilli(), VerdictBlocked)
+		if err != nil {
+			return nil, fmt.Errorf("blocks by list and client: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var k key
+			var n int
+			if err := rows.Scan(&k.list, &k.client, &n); err != nil {
+				return nil, fmt.Errorf("blocks by list and client scan: %w", err)
+			}
+			counts[k] += n
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	default:
+		l.scanRing(since, func(e Entry) {
+			if e.Verdict == VerdictBlocked && e.List != "" {
+				counts[key{e.List, e.Client}]++
+			}
+		})
+	}
+	out := make([]ListClientCount, 0, len(counts))
+	for k, n := range counts {
+		out = append(out, ListClientCount{List: k.list, Client: k.client, Count: n})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].List+out[i].Client < out[j].List+out[j].Client
+	})
+	return out, nil
+}

@@ -53,6 +53,7 @@ Minos is a DNS server for your home network that blocks ads, trackers and malwar
 
 What your network did over a window you choose: queries, blocked, block rate, a volume chart, the most-blocked domains and the busiest devices — every number for the same window.
 
+- This week (under Needs attention) always covers the last 7 days, whatever window is chosen: lookups and the share blocked against the week before, devices seen for the first time, what your security blocklists caught and from which devices (or a nudge if none is switched on), how many tracking companies your devices talked to and which got through most, the busiest device, and settings changes with the latest. Every line links to where you can look into it.
 - Pick the window at the top (24 hours, 7, 30 or 90 days). It is remembered in this browser.
 - Click any number, domain or device to open exactly those queries in the Query Log.
 - Possible threats (in red): a device behaving like malware — many random-looking domains in a few minutes, long random names under one domain (data leaving through DNS), or lookups of known malicious domains. See lookups shows the evidence; This is fine hides it; Never flag adds a domain to the ignore list (Settings → Filtering).
