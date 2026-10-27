@@ -1,5 +1,19 @@
 # Getting started
 
+**What you are setting up, in one paragraph.** Every device on your network
+looks names up (www.example.com → an address) before it connects to
+anything — that is DNS, the internet's phone book. Minos becomes the phone
+book for your home: your router tells every device to ask Minos, and Minos
+refuses to look up advertisers, trackers and malware, so they never load.
+Everything else it looks up through a public DNS service you choose
+(Cloudflare by default, encrypted). You need an always-on machine for Minos
+(a Raspberry Pi 3 or newer is plenty) and the login to your router.
+
+The short path for most people: **[Install](#install)** with the one-line
+script → open the web interface → **[point your network at
+Minos](#point-your-network-at-minos-step-by-step)** → choose blocklists. The
+rest of this guide is reference you can come back to.
+
 ## Install
 
 **Install script (Linux amd64/arm64/armv7/armv6)** — downloads the latest release,
@@ -44,6 +58,59 @@ port 53 needs root/admin on most systems; on Linux prefer the systemd unit in
 Then point a client (or your router's DHCP DNS option) at the machine's IP.
 The dashboard shows a short setup checklist until the first queries arrive
 — it walks through exactly these steps and links the relevant pages.
+
+## Point your network at Minos (step by step)
+
+1. **Give the Minos machine an address that never changes.** Your router
+   hands out addresses and may give the machine a different one next week,
+   which would leave every device asking a phone book that has moved. In
+   the router's settings, look for *DHCP reservation*, *address
+   reservation*, *static lease* or *fixed IP* and reserve the machine's
+   current address. (On the Minos machine, `hostname -I` prints it; it is
+   also the address you use to open the web interface.)
+2. **Open the router's settings.** Usually a web page at an address
+   printed on the router (often `192.168.1.1`, `192.168.0.1` or
+   `192.168.68.1`), or the router maker's phone app for mesh systems.
+3. **Find the DNS server setting for your home network.** It is normally
+   under *LAN*, *DHCP*, *Network* or *Advanced → DNS*. Be careful to change
+   the setting handed to your devices (LAN/DHCP), not the router's own
+   internet-side (WAN) DNS — on some routers only the WAN one exists; that
+   works too, but every device then shows up as the router.
+4. **Enter Minos's address as the DNS server** and save. If there is a
+   second (secondary) DNS box, leave it empty or enter Minos's address
+   again. Do *not* put a public service such as 8.8.8.8 there — devices
+   pick either one at random, so half their lookups would skip Minos.
+5. **Reconnect your devices.** Each device picks up the change when it
+   rejoins the network: toggle Wi-Fi, restart it, or wait (most renew
+   within a day).
+6. **Check it works.** The dashboard starts counting lookups and the
+   Devices page fills up with your phones, laptops and TVs. Each lookup
+   appears in the Query Log as it happens.
+7. **Choose blocklists** on Blocking → Blocklists (Balanced is a good
+   start) and **set a password** under Settings → Access & security.
+
+**If the internet stops working**, put the router's DNS setting back to
+automatic (or what it was) and reconnect — everything goes back to how it
+was. Then check that the Minos machine is switched on, still has the
+address you entered, and that `sudo systemctl status minos` says it is
+running.
+
+**Common snags**
+
+- *A device never appears on the Devices page.* It has its own DNS server
+  set, or uses a VPN, Android's *Private DNS*, or iCloud Private Relay.
+  Turn that off on the device, or set its DNS server to Minos by hand.
+- *Every lookup shows as coming from the router.* The router is relaying
+  DNS itself (you changed its WAN DNS, step 3). Blocking still works for
+  everyone; for per-device names and rules, find the LAN/DHCP DNS setting
+  instead.
+- *The router will not let you change DNS.* Some internet providers'
+  routers lock it. Set the DNS server on each device's Wi-Fi settings
+  instead, or ask whoever supports your network.
+- *Something you use stopped working.* Open the Query Log, find the
+  blocked lookup from that moment and press **Allow** (or *Allow 1 h* to
+  test). Pause blocking from the side menu to check whether Minos is the
+  cause at all.
 
 ## CLI
 
@@ -478,7 +545,11 @@ not-blocking state also shows in the top bar.
   the blocked-services bundles deliberately leave out. An allowed domain beats any
   blocked domain or blocklist; to allow a service only for certain devices, set
   it on a group on the Devices page.
-- **Local DNS** (Settings → DNS) — names on your own network. **Local records** are
+- **Blocking → Privacy** — which tracking companies each device talks
+  to, what got through and what your lists stopped, with a one-click block
+  for a company's advertising, analytics and telemetry.
+- **Local DNS** (Settings → DNS) — names on your own network.
+  Records save the moment you add or edit them. **Local records** are
   A/AAAA/CNAME records (wildcards like `*.home.lab` included) that Minos
   answers itself — they beat the blocklists, never leave your network, and
   address records answer reverse (PTR) lookups automatically.
@@ -510,7 +581,8 @@ not-blocking state also shows in the top bar.
   (see Bypass resistance below), query-log retention and buffer
   size, the password and API token, a one-click YAML config backup, and an
   opt-in daily update check (a banner announces a newer release, with
-  **Update now** on script installs — nothing is sent beyond the request).
+  **Update now** on script installs — nothing is sent beyond the request),
+  and **Check now** to ask at once instead of waiting a day.
 
 **Sign-in.** Set a password under Settings → Access & security and opening
 the interface asks for it; a sign-in lasts 30 days on that browser, and

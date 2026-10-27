@@ -14,6 +14,18 @@ static binary with the web interface built in, light enough for a
 Raspberry Pi. Point your router's DNS at it and every device on the network
 is protected, with a clear answer to "why was this blocked?" one click away.
 
+**New to this?** Before any device loads a website or an app talks to its
+server, it asks a *DNS server* — the internet's phone book — for that
+name's address. Normally your router passes these lookups to your internet
+provider. Minos takes over that job for your home: it answers the lookups
+itself and refuses the ones for advertisers, trackers and dangerous sites,
+so they never load — on phones, laptops, smart TVs and games consoles
+alike, with nothing to install on them. You need a small always-on computer
+(a Raspberry Pi is ideal) and access to your router's settings. The
+[getting-started guide](docs/getting-started.md#point-your-network-at-minos-step-by-step)
+walks through it step by step, and the built-in **Help** explains every
+page and every word in plain terms.
+
 <p align="center">
   <img src="docs/assets/screenshots/dashboard.png" alt="The Minos dashboard: queries, blocks, a 24-hour chart, the most blocked domains and the busiest devices" width="900" />
 </p>
@@ -186,8 +198,11 @@ curl -fsSL https://raw.githubusercontent.com/DanDreadless/minos/main/deploy/inst
 sudo systemctl enable --now minos
 ```
 
-Then open `http://<host>:8080`, set a password (Settings → Access &
-security), and point your router's DHCP DNS option at the machine. Before
+Then open `http://<host>:8080` (the machine's address, port 8080), set a
+password (Settings → Access & security), and point your router's DNS
+setting at the machine — [step by
+step](docs/getting-started.md#point-your-network-at-minos-step-by-step),
+with how to undo it. Before
 the first start, free port 53 (the `systemd-resolved` stub or `dnsmasq`)
 — the walkthrough in [docs/getting-started.md](docs/getting-started.md)
 covers it, along with a fixed IP and a firewall for ports 53 and 8080.
@@ -221,7 +236,7 @@ minos logs -f                     # follow Minos's own log (also on the Logs pag
 ## Updating
 
 With the update check on (Settings → System), a banner announces new
-releases. On installs made with the script above, **Update now** downloads
+releases; **Check now** there asks straight away. On installs made with the script above, **Update now** downloads
 the release, checks its signature and that it is newer, installs it and
 restarts — and puts the previous version back by itself if the new one does
 not answer within 30 seconds. Minos itself never runs as root: a small

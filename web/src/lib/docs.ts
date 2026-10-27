@@ -41,17 +41,48 @@ export interface Section {
 
 export const docs: Section[] = [
   {
+    id: 'how-it-works',
+    title: 'How Minos works, in plain words',
+    summary:
+      "Every time a phone, laptop, TV or smart speaker goes online, it first has to turn a name like www.example.com into the address of the computer that serves it. That step is called a DNS lookup, and it works like looking someone up in a phone book. Minos becomes your home network's phone book: every lookup comes to Minos first, and it refuses to give out the numbers of advertisers, trackers and dangerous sites — so those never load, on any device, without installing anything on them.",
+    howto: [
+      'A device asks Minos for a name. If the name is on one of your blocklists (lists of advertising, tracking and malware names that other people maintain), Minos answers "no such place" and the advert, tracker or malicious page simply does not load.',
+      'If the name is fine, Minos asks a public DNS service on the internet (called an upstream resolver — Cloudflare, Quad9 and Google run well-known ones) and passes the answer back. It remembers answers for a while, so repeat visits are faster.',
+      'Your own rules win over the lists: you can always allow a name a list blocks, or block one no list does.',
+      'Because it works at the network level, Minos also covers devices you cannot install an ad blocker on — smart TVs, games consoles, voice assistants, apps.',
+      'Minos keeps a log of every lookup (the Query Log), so you can see what each device is doing, and why anything was blocked.',
+      'Minos cannot block adverts that come from the same place as the content (YouTube video adverts, for example, come from YouTube itself), and it cannot see what you do on a site — only which names your devices look up.',
+      'If the machine Minos runs on is switched off or crashes, devices that rely on it cannot look anything up and the internet will seem to be down. Getting started explains how to undo the change in a minute if that ever happens.',
+    ],
+  },
+  {
     id: 'start',
     title: 'Getting started',
     summary:
-      'Minos is a DNS server for your home network that blocks ads, trackers and malware before they load. Every device that uses it as its DNS server has each lookup checked against your blocklists and your own rules: blocked names get an empty answer, everything else is looked up through your upstream resolvers.',
+      'From installed to protecting your whole home in a few steps. You only need to change one setting on your router; nothing has to be installed on your devices.',
     howto: [
-      "Point devices at Minos: set your router's DHCP DNS option to this machine's address, so every device follows, or set the DNS server on individual devices.",
-      'Choose blocklists on Blocking → Blocklists — the catalog has curated picks; Balanced is the recommended start.',
-      'Watch the Query Log for a day. If something you use breaks, find its blocked lookup and press Allow.',
-      'Set a password (Settings → Access & security) so only you can change Minos. Then, optionally, notifications and the update check.',
+      "1 — Find Minos's address. It is the address in your browser's address bar right now, without the :8080 at the end — for example 192.168.1.10. This must not change: on your router, give this machine a fixed address (often called a DHCP reservation or static lease), or ask whoever set it up.",
+      "2 — Tell your router to hand out Minos as the DNS server. Open your router's settings (its address is usually on a sticker on the router, such as 192.168.1.1, or in its phone app) and look under LAN, DHCP or Network for a setting called DNS server, primary DNS or similar. Enter Minos's address there and save. Leave the second DNS box empty or put Minos's address in it again — a public DNS service there would let devices go around Minos at random. Some mesh systems call this Advanced → DNS.",
+      '3 — Let devices pick up the change. Each device learns the new DNS server when it next joins the network: turn Wi-Fi off and on, restart it, or simply wait — most do within a day.',
+      '4 — Check it is working. The Dashboard starts counting lookups, and the Devices page fills with your devices. If a device does not appear after reconnecting, see the questions below.',
+      '5 — Choose your blocklists on Blocking → Blocklists. Balanced is the recommended start: it blocks most adverts and tracking and rarely breaks anything.',
+      '6 — Set a password (Settings → Access & security), so only you can change Minos.',
+      '7 — Use your devices normally for a day. If something stops working, open the Query Log, find the blocked lookup at that time and press Allow. The dashboard also points out when a device keeps retrying something that blocking has broken.',
+      'Prefer not to change the router? You can instead set the DNS server on individual devices (in their Wi-Fi or network settings) to Minos\'s address. Only those devices are protected.',
     ],
     tasks: [
+      {
+        q: 'The internet stopped working after I changed the router. How do I undo it?',
+        a: "Go back into your router's DNS setting and set it back to automatic (or to what it was before), then reconnect your devices. Everything works as it did, without Minos. The usual cause is that the machine running Minos was off, or its address changed — check it is on and has the address you entered.",
+      },
+      {
+        q: 'A device does not show up on the Devices page.',
+        a: 'It is still using another DNS server. Reconnect it to Wi-Fi or restart it. If it still does not appear, it may have a DNS server set by hand in its own network settings, or use a VPN or "private DNS" feature (Android calls it Private DNS, iPhones iCloud Private Relay) — switch that off, or set its DNS server to Minos\'s address.',
+      },
+      {
+        q: 'My router does not let me change the DNS server.',
+        a: "Some internet providers' routers lock it. You can still point each device at Minos by hand (see above): in its Wi-Fi or network settings, change DNS from automatic to manual and enter Minos's address. Ask whoever supports your network if you are unsure.",
+      },
       {
         q: 'What is at the bottom of the side menu?',
         a: 'Whether Minos is blocking right now ("Blocking · 73k rules", "Blocking paused until 14:20", or in red "Not blocking — no blocklist rules loaded"), Pause blocking, and Check a domain (also Ctrl+K / ⌘K on any page): paste a name or URL to see whether it is blocked and why, then allow or block it. On a phone, a paused or not-blocking state also shows in the top bar.',
@@ -63,6 +94,82 @@ export const docs: Section[] = [
       {
         q: 'How do I turn blocking off for a moment?',
         a: 'Pause blocking at the bottom of the side menu: 5 or 30 minutes, an hour, until you resume, or any duration such as 2h. Device-level blocks (Devices → Block DNS) still apply while paused.',
+      },
+    ],
+  },
+  {
+    id: 'words',
+    title: 'Words used in Minos',
+    summary:
+      'The handful of technical words you will meet in Minos, each in plain terms. You do not need to know any of them to use Minos day to day.',
+    tasks: [
+      {
+        q: 'DNS, lookup, query',
+        a: 'DNS is the internet\'s phone book: it turns names (www.example.com) into the addresses computers actually connect to. A lookup — also called a query — is one device asking for one name. A busy home makes tens of thousands a day.',
+      },
+      {
+        q: 'Domain, subdomain',
+        a: 'A domain is a name such as example.com. A subdomain sits in front of it: ads.example.com and www.example.com are subdomains of example.com. Allowing or blocking a domain in Minos covers all of its subdomains too.',
+      },
+      {
+        q: 'Blocklist, allowlist',
+        a: 'A blocklist is a list of names to block — advertising, tracking or malware — kept up to date by people who specialise in it. Minos downloads the ones you choose and checks them again every day. An allowlist is the opposite: names that are always let through.',
+      },
+      {
+        q: 'Upstream resolver',
+        a: 'The public DNS service Minos asks for names it does not block — the next phone book along. Cloudflare (1.1.1.1), Quad9 (9.9.9.9) and Google (8.8.8.8) run well-known ones. You can list several; Minos uses the first that answers.',
+      },
+      {
+        q: 'Encrypted DNS (DoH, DoT, DoQ)',
+        a: 'Ordinary DNS travels unencrypted, so your internet provider can see every name your home looks up. DNS over HTTPS (DoH), over TLS (DoT) and over QUIC (DoQ) are three ways of encrypting it. Minos uses an encrypted one to talk to its upstream resolver by default.',
+      },
+      {
+        q: 'Router, DHCP',
+        a: 'Your router is the box that connects your home to the internet. One of its jobs (called DHCP) is to give each device an address on your network when it joins — and tell it which DNS server to use. That is why changing the DNS setting on the router points every device at Minos at once.',
+      },
+      {
+        q: 'IP address, MAC address',
+        a: 'An IP address (like 192.168.1.23) is a device\'s address on your network; it can change from day to day. A MAC address (like a4:83:e7:12:9b:01) is fixed into the device\'s network hardware, so Minos uses it, when it can see it, to recognise a device even after its IP address changes. Some phones invent a new "private" MAC address per network, which Minos shows as a private address.',
+      },
+      {
+        q: 'Cache',
+        a: 'Minos remembers recent answers for a while, so when a device asks for the same name again the answer comes back at once instead of being fetched again.',
+      },
+      {
+        q: 'Query Log',
+        a: 'Minos\'s record of every lookup: which device asked for which name, when, and whether it was blocked (and by which list and rule) or allowed.',
+      },
+      {
+        q: 'Tracker, telemetry',
+        a: 'A tracker is a service that follows what you do across websites and apps, usually to sell advertising. Telemetry is a device or app reporting how it is used back to its maker. Both are what most blocklists target.',
+      },
+      {
+        q: 'DNSSEC',
+        a: 'A way for a website\'s owner to sign their DNS answers, so a forged answer can be spotted. Minos can check those signatures. Most sites do not sign their answers yet, so most lookups show as unsigned, which is normal.',
+      },
+      {
+        q: 'Local records, conditional forwarding',
+        a: 'Local records are names Minos answers itself for things on your own network — nas.home pointing at your storage box, say. Conditional forwarding sends lookups for certain names to another DNS server, usually your router, which knows the names of your devices.',
+      },
+      {
+        q: 'CNAME',
+        a: 'An alias: a DNS answer that says "this name is really that other name". Some trackers hide behind aliases on a site\'s own name, which Minos checks for (CNAME inspection).',
+      },
+      {
+        q: 'mDNS, NetBIOS, UPnP, DHCP names',
+        a: 'Ways devices announce their own names on a home network — printers, speakers, Windows PCs and TVs each tend to use one. Minos listens for them to name your devices; nothing leaves your network.',
+      },
+      {
+        q: 'API, API token',
+        a: 'The API is how other programs (scripts, Home Assistant) talk to Minos instead of a person using the web pages. An API token is the password those programs use.',
+      },
+      {
+        q: 'Audit (would block)',
+        a: 'A way to try a blocklist without it blocking anything: Minos only notes what it would have blocked, so you can see whether it would break something before switching it on for real.',
+      },
+      {
+        q: 'MQTT',
+        a: 'A messaging system smart-home software uses to talk to devices. Home Assistant uses it, and Minos can use it to appear in Home Assistant.',
       },
     ],
   },
@@ -149,7 +256,7 @@ export const docs: Section[] = [
     title: 'Devices',
     page: '#/devices',
     summary:
-      'Every device that has used Minos, named where Minos could find out (router names, mDNS, NetBIOS, UPnP, DHCP), with groups that give devices different rules and schedules.',
+      "Every device that has used Minos — phones, laptops, TVs, speakers — named where Minos could find out (it listens for the names devices give themselves, and asks your router). Groups give some devices different rules, for example stricter blocking and a bedtime for the children's tablets.",
     howto: [
       'Give a device a label, put it in a group, or Block DNS to refuse all of its lookups (this applies even while blocking is paused).',
       'Open a device for its page: every address it has used, what it looked up most, its full query history and notes.',
@@ -513,8 +620,10 @@ export const docs: Section[] = [
     id: 'settings-dns',
     title: 'Settings → DNS',
     page: '#/settings?tab=dns',
-    summary: 'Where Minos looks up allowed names, whether it checks DNSSEC, and its answer cache.',
+    summary:
+      'Where Minos asks about names it does not block, and how it answers names on your own network. The defaults work for almost everyone: you only need this tab to choose a different DNS provider, or to give names to things at home.',
     howto: [
+      'In short: upstream resolvers are the public DNS services Minos asks on your behalf. Local DNS records and conditional forwarding (further down) are for names on your own network. DNSSEC and the cache can be left as they are.',
       'Upstream resolvers are tried in order: the first is the primary. The light beside each is green when it is answering, red when failing, hollow when it has not been needed yet.',
       'Encrypted protocols (DoH, DoT) keep your lookups private from your internet provider; the presets are verified to work.',
       'Changes on every Settings tab are drafts until you press Save changes in the bar at the bottom.',
@@ -596,7 +705,8 @@ export const docs: Section[] = [
     id: 'settings-filtering',
     title: 'Settings → Filtering',
     page: '#/settings?tab=filtering',
-    summary: 'How blocked lookups are answered, and the protections against devices working around Minos.',
+    summary:
+      'How blocked lookups are answered, and the protections that stop devices quietly going around Minos (some apps and browsers bring their own DNS). The defaults are sensible; change them only if you know you need to.',
     settings: [
       {
         label: 'Block response',
@@ -716,7 +826,8 @@ export const docs: Section[] = [
     id: 'settings-discovery',
     title: 'Settings → Device discovery',
     page: '#/settings?tab=discovery',
-    summary: 'How Minos learns the names of the devices on your network. Everything stays on your network.',
+    summary:
+      'How Minos learns the names of the devices on your network, so the Devices page says "Living room TV" rather than a number. Devices announce their own names in several ways; each switch here lets Minos listen to one of them. Everything stays on your network, and leaving them all on is fine.',
     settings: [
       {
         label: 'Ask UPnP devices to introduce themselves (SSDP)',
@@ -827,7 +938,8 @@ export const docs: Section[] = [
     id: 'settings-access',
     title: 'Settings → Access & security',
     page: '#/settings?tab=access',
-    summary: 'Who can use this interface and the API, and which devices may use Minos for DNS.',
+    summary:
+      'Who can use this interface and the API, and which devices may use Minos for DNS. At the very least, set a password: without one, anyone on your network can open these pages and change or switch off your blocking.',
     tasks: [
       {
         q: 'I forgot the password.',
@@ -909,14 +1021,15 @@ export const docs: Section[] = [
     id: 'settings-system',
     title: 'Settings → System',
     page: '#/settings?tab=system',
-    summary: 'Query-log storage, the application log level, and updates.',
+    summary:
+      'Query-log storage, the application log level, and updates. Check now, in the Updates card, asks for the newest release straight away instead of waiting for the daily check.',
     settings: [
       {
         label: 'Check for new releases once a day',
         key: 'update_check',
         default: 'off',
         effect:
-          'Asks GitHub for the latest release — nothing about you or your network is sent. A banner shows how to upgrade. On Linux installs made with the install script, and once a password or API token is set, it has an Update now button: Minos downloads the release, checks it is signed by the Minos release key and is newer, installs it and restarts. If the new version does not answer within 30 seconds, the previous one is put back and you are told.',
+          'Asks GitHub for the latest release — nothing about you or your network is sent. A banner shows how to upgrade. Check now asks at once, whether or not this is on. On Linux installs made with the install script, and once a password or API token is set, it has an Update now button: Minos downloads the release, checks it is signed by the Minos release key and is newer, installs it and restarts. If the new version does not answer within 30 seconds, the previous one is put back and you are told.',
         applies: 'live',
         where: 'Settings → System',
       },
@@ -954,7 +1067,7 @@ export const docs: Section[] = [
     id: 'cli',
     title: 'Command line',
     summary:
-      'The minos command talks to the running server through its API, using -config to find the address and credentials — the API token, or with only a password set, a sign-in it makes from the config file itself.',
+      'For people comfortable typing commands on the Minos machine; everything here can also be done in the web pages. The minos command talks to the running server through its API, using -config to find the address and credentials — the API token, or with only a password set, a sign-in it makes from the config file itself.',
     howto: [
       'minos status — counters, rules and pause state.',
       'minos pause 30m / minos resume — pause and resume blocking.',

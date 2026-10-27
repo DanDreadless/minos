@@ -1,5 +1,12 @@
 # Home Assistant
 
+[Home Assistant](https://www.home-assistant.io/) is a popular smart-home
+hub. Connecting Minos to it lets you see Minos's counters there, pause
+blocking from a dashboard or voice assistant, and switch a device's internet
+off on a schedule (bedtime for the children's tablet, say). The easy way
+uses MQTT — a small messaging service Home Assistant offers as an add-on —
+and needs no configuration files at all.
+
 ## MQTT discovery (recommended)
 
 Minos announces itself to Home Assistant over MQTT, so a **Minos** device
