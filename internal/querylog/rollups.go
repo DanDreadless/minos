@@ -2,7 +2,9 @@ package querylog
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -71,24 +73,34 @@ func (l *Log) timelineRolled(ctx context.Context, since time.Time, bucketMs int6
 	}); err != nil {
 		return false, err
 	}
-	rows, err := l.reader().QueryContext(ctx, `SELECT bucket, verdict, SUM(n) FROM `+table+`
-		WHERE bucket >= ? GROUP BY bucket, verdict`, full)
-	if err != nil {
-		return false, fmt.Errorf("timeline rollup: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
+	scan := func(rows *sql.Rows) error {
 		var bucket int64
 		var verdict string
 		var n int
 		if err := rows.Scan(&bucket, &verdict, &n); err != nil {
-			return false, fmt.Errorf("timeline rollup scan: %w", err)
+			return fmt.Errorf("timeline rollup scan: %w", err)
 		}
 		b := 0
 		if verdict == VerdictBlocked {
 			b = n
 		}
 		add(bucket, n, b)
+		return nil
+	}
+	const q = `SELECT bucket, verdict, SUM(n) FROM %s WHERE bucket >= ? AND bucket < ? GROUP BY bucket, verdict`
+	if table == "roll_hour" && bucketMs%dayMs == 0 {
+		// Day-sized buckets: whole days come from the daily table.
+		return true, l.tiered(ctx, full, "roll_hour", "roll_day", q, scan)
+	}
+	rows, err := l.reader().QueryContext(ctx, fmt.Sprintf(q, table), full, int64(math.MaxInt64))
+	if err != nil {
+		return false, fmt.Errorf("timeline rollup: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if err := scan(rows); err != nil {
+			return false, err
+		}
 	}
 	return true, rows.Err()
 }
@@ -130,21 +142,18 @@ func (l *Log) blockedCountsRolled(ctx context.Context, since time.Time) (map[str
 	}); err != nil {
 		return nil, err
 	}
-	rows, err := l.reader().QueryContext(ctx, `SELECT qname, SUM(n) FROM roll_hour_blocked
-		WHERE bucket >= ? GROUP BY qname`, full)
-	if err != nil {
-		return nil, fmt.Errorf("top blocked rollup: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var q string
-		var c int
-		if err := rows.Scan(&q, &c); err != nil {
-			return nil, fmt.Errorf("top blocked rollup scan: %w", err)
-		}
-		counts[q] += c
-	}
-	return counts, rows.Err()
+	err := l.tiered(ctx, full, "roll_hour_blocked", "roll_day_blocked",
+		`SELECT qname, SUM(n) FROM %s WHERE bucket >= ? AND bucket < ? GROUP BY qname`,
+		func(rows *sql.Rows) error {
+			var q string
+			var c int
+			if err := rows.Scan(&q, &c); err != nil {
+				return fmt.Errorf("top blocked rollup scan: %w", err)
+			}
+			counts[q] += c
+			return nil
+		})
+	return counts, err
 }
 
 // hourly visits roll_hour over [full, ∞) plus the raw head, as
@@ -157,21 +166,50 @@ func (l *Log) hourly(ctx context.Context, since time.Time, visit func(client, ve
 	}); err != nil {
 		return err
 	}
-	rows, err := l.reader().QueryContext(ctx, `SELECT client, verdict, list, SUM(n) FROM roll_hour
-		WHERE bucket >= ? GROUP BY client, verdict, list`, full)
-	if err != nil {
-		return fmt.Errorf("hourly rollup: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var c, v, list string
-		var n int
-		if err := rows.Scan(&c, &v, &list, &n); err != nil {
-			return fmt.Errorf("hourly rollup scan: %w", err)
+	return l.tiered(ctx, full, "roll_hour", "roll_day",
+		`SELECT client, verdict, list, SUM(n) FROM %s WHERE bucket >= ? AND bucket < ? GROUP BY client, verdict, list`,
+		func(rows *sql.Rows) error {
+			var c, v, list string
+			var n int
+			if err := rows.Scan(&c, &v, &list, &n); err != nil {
+				return fmt.Errorf("hourly rollup scan: %w", err)
+			}
+			visit(c, v, list, n)
+			return nil
+		})
+}
+
+// tiered reads a rollup from the hour-aligned start full to now: the hourly
+// table up to the first UTC midnight after full, the daily table from there
+// (whose current day is maintained live, like every rollup). query has one
+// %s for the table and binds [lo, hi). A 90-day window reads ~12x fewer
+// rows than the hourly table alone would give it.
+func (l *Log) tiered(ctx context.Context, full int64, hourTable, dayTable, query string, scan func(*sql.Rows) error) error {
+	day := alignUp(full, dayMs)
+	for _, part := range []struct {
+		table  string
+		lo, hi int64
+	}{{hourTable, full, day}, {dayTable, day, math.MaxInt64}} {
+		if part.lo >= part.hi {
+			continue
 		}
-		visit(c, v, list, n)
+		rows, err := l.reader().QueryContext(ctx, fmt.Sprintf(query, part.table), part.lo, part.hi)
+		if err != nil {
+			return fmt.Errorf("%s rollup: %w", part.table, err)
+		}
+		for rows.Next() {
+			if err := scan(rows); err != nil {
+				_ = rows.Close()
+				return err
+			}
+		}
+		err = rows.Err()
+		_ = rows.Close()
+		if err != nil {
+			return err
+		}
 	}
-	return rows.Err()
+	return nil
 }
 
 func (l *Log) topClientsRolled(ctx context.Context, since time.Time, n int) ([]ClientStat, error) {

@@ -305,8 +305,18 @@ This is security software; hold it to that standard.
   `aggregate.go`/`rollups.go`): `roll_10m` (verdict; kept 48 h),
   `roll_hour` (client × verdict × list), `roll_hour_blocked` (qname; the
   dashboard only ranks blocked names) and `roll_day_client` (client ×
-  verdict × qname), all maintained by the derived-table machinery (live in
-  the insert's transaction, backfilled exactly-once). Buckets align as the
+  verdict × qname), plus the **daily tiers** `roll_day` and
+  `roll_day_blocked` (roll_hour and roll_hour_blocked by UTC day, derived
+  version 3), all maintained by the derived-table machinery (live in
+  the insert's transaction, backfilled exactly-once). Long windows read
+  through `tiered()`: the raw head, roll_hour up to the first UTC midnight,
+  roll_day from there — on the field Pi's 90-day log the 90-day dashboard
+  went 1.9 s → 0.24 s (the time was SQLite's GROUP BY sort over 160k hourly
+  rows; plain row reads are cheap). Upgrading from version 2 does **not**
+  replay the log: prepareDerived marks `daily_seed`, and `seedDaily` fills
+  the daily tiers from the hourly ones in one writer transaction after the
+  backfill (1.7 s there) — exact, because every live batch updates both
+  tiers; `TestDailyTiersSeedOnUpgrade` holds it to the raw log. Buckets align as the
   raw Timeline always did (`ts / width * width`, UTC), and every dashboard
   aggregate adds a raw read of the **partial leading bucket** — so the
   rollup answer equals the raw answer; `TestRollupsAnswerExactlyLikeTheLog`

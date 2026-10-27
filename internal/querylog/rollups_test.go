@@ -171,3 +171,63 @@ func TestPruneTrimsRollups(t *testing.T) {
 		}
 	}
 }
+
+// TestDailyTiersSeedOnUpgrade: a log from before the daily tiers (derived
+// version 2) gets them filled from its hourly tables — no replay of the
+// whole log — and every long-window aggregate still equals the raw log.
+func TestDailyTiersSeedOnUpgrade(t *testing.T) {
+	rng := rand.New(rand.NewSource(11))
+	path := filepath.Join(t.TempDir(), "q.db")
+	l := openReady(t, path)
+	if err := l.writeBatch(randomRows(rng, 3000, 6*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	// Make it a version-2 log: no daily tiers, the old version number.
+	for _, stmt := range []string{`DROP TABLE roll_day`, `DROP TABLE roll_day_blocked`,
+		`UPDATE querylog_meta SET value = '2' WHERE key = 'derived_version'`} {
+		if _, err := l.db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l.Close()
+
+	l = openReady(t, path)
+	defer l.Close()
+	if !l.derivedReady.Load() {
+		t.Fatal("not ready after the upgrade")
+	}
+	var seeded, live int
+	if err := l.db.QueryRow(`SELECT COALESCE(SUM(n), 0) FROM roll_day`).Scan(&seeded); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.db.QueryRow(`SELECT COALESCE(SUM(n), 0) FROM roll_hour`).Scan(&live); err != nil {
+		t.Fatal(err)
+	}
+	if seeded == 0 || seeded != live {
+		t.Fatalf("daily tier holds %d lookups, hourly %d", seeded, live)
+	}
+	// Live writes after the seed land in both tiers.
+	if err := l.writeBatch(randomRows(rng, 500, 2*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for _, window := range []time.Duration{3*24*time.Hour + 7*time.Minute, 5*24*time.Hour + 11*time.Minute} {
+		since := time.Now().Add(-window)
+		l.derivedReady.Store(false)
+		wantTop, _ := l.TopBlockedDomains(ctx, since, 50)
+		wantClients, _ := l.TopClients(ctx, since, 50)
+		wantLine, _ := l.Timeline(ctx, since, 24*time.Hour)
+		l.derivedReady.Store(true)
+		gotTop, _ := l.TopBlockedDomains(ctx, since, 50)
+		gotClients, _ := l.TopClients(ctx, since, 50)
+		gotLine, _ := l.Timeline(ctx, since, 24*time.Hour)
+		if !reflect.DeepEqual(gotTop, wantTop) || !reflect.DeepEqual(gotClients, wantClients) || !reflect.DeepEqual(gotLine, wantLine) {
+			t.Errorf("%s: seeded tiers disagree with the log", window)
+		}
+	}
+	// The seed ran once; reopening does not redo it.
+	var flag string
+	if err := l.db.QueryRow(`SELECT value FROM querylog_meta WHERE key = 'daily_seed'`).Scan(&flag); err != nil || flag != "false" {
+		t.Errorf("daily_seed = %q, %v", flag, err)
+	}
+}

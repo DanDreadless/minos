@@ -38,6 +38,20 @@ CREATE TABLE IF NOT EXISTS roll_hour_blocked (
 	n      INTEGER NOT NULL,
 	PRIMARY KEY (bucket, qname)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS roll_day (
+	bucket  INTEGER NOT NULL,
+	client  TEXT NOT NULL,
+	verdict TEXT NOT NULL,
+	list    TEXT NOT NULL,
+	n       INTEGER NOT NULL,
+	PRIMARY KEY (bucket, client, verdict, list)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS roll_day_blocked (
+	bucket INTEGER NOT NULL,
+	qname  TEXT NOT NULL,
+	n      INTEGER NOT NULL,
+	PRIMARY KEY (bucket, qname)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS roll_day_client (
 	client  TEXT NOT NULL,
 	bucket  INTEGER NOT NULL,
@@ -48,7 +62,11 @@ CREATE TABLE IF NOT EXISTS roll_day_client (
 ) WITHOUT ROWID;`
 
 // derivedTables are dropped and rebuilt when derivedVersion changes.
-var derivedTables = []string{"qnames", "roll_10m", "roll_hour", "roll_hour_blocked", "roll_day_client"}
+// roll_day and roll_day_blocked are roll_hour and roll_hour_blocked by UTC
+// day: a 90-day dashboard read 162,000 hourly rows (1.8 s on a Pi 4) and
+// reads ~34,000 daily ones instead.
+var derivedTables = []string{"qnames", "roll_10m", "roll_hour", "roll_hour_blocked", "roll_day_client",
+	"roll_day", "roll_day_blocked"}
 
 type (
 	tenKey struct {
@@ -80,6 +98,8 @@ type derivedAgg struct {
 	hour      map[hourKey]int64
 	hourBlock map[hourBlockKey]int64
 	dayClient map[dayClientKey]int64
+	day       map[hourKey]int64      // roll_day: hourKey with a day bucket
+	dayBlock  map[hourBlockKey]int64 // roll_day_blocked
 }
 
 func newDerivedAgg() *derivedAgg {
@@ -89,6 +109,8 @@ func newDerivedAgg() *derivedAgg {
 		hour:      make(map[hourKey]int64),
 		hourBlock: make(map[hourBlockKey]int64),
 		dayClient: make(map[dayClientKey]int64),
+		day:       make(map[hourKey]int64),
+		dayBlock:  make(map[hourBlockKey]int64),
 	}
 }
 
@@ -107,11 +129,14 @@ func (a *derivedAgg) add(ts int64, client, qname, verdict, list string) {
 	}
 	a.tenMin[tenKey{ts / tenMinMs * tenMinMs, verdict}]++
 	hour := ts / hourMs * hourMs
+	day := ts / dayMs * dayMs
 	a.hour[hourKey{hour, client, verdict, list}]++
+	a.day[hourKey{day, client, verdict, list}]++
 	if verdict == VerdictBlocked {
 		a.hourBlock[hourBlockKey{hour, qname}]++
+		a.dayBlock[hourBlockKey{day, qname}]++
 	}
-	a.dayClient[dayClientKey{client, ts / dayMs * dayMs, verdict, qname}]++
+	a.dayClient[dayClientKey{client, day, verdict, qname}]++
 }
 
 // upsert adds the increments to the derived tables inside tx.
@@ -159,6 +184,26 @@ func (a *derivedAgg) upsert(tx *sql.Tx) error {
 			func(exec func(...any) error) error {
 				for k, n := range a.dayClient {
 					if err := exec(k.client, k.bucket, k.verdict, k.qname, n); err != nil {
+						return err
+					}
+				}
+				return nil
+			}},
+		{`INSERT INTO roll_day (bucket, client, verdict, list, n) VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT(bucket, client, verdict, list) DO UPDATE SET n = n + excluded.n`,
+			func(exec func(...any) error) error {
+				for k, n := range a.day {
+					if err := exec(k.bucket, k.client, k.verdict, k.list, n); err != nil {
+						return err
+					}
+				}
+				return nil
+			}},
+		{`INSERT INTO roll_day_blocked (bucket, qname, n) VALUES (?, ?, ?)
+			ON CONFLICT(bucket, qname) DO UPDATE SET n = n + excluded.n`,
+			func(exec func(...any) error) error {
+				for k, n := range a.dayBlock {
+					if err := exec(k.bucket, k.qname, n); err != nil {
 						return err
 					}
 				}

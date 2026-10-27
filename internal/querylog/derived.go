@@ -32,7 +32,7 @@ import (
 
 // derivedVersion identifies the derived-table schema. Bump it whenever a
 // derived table is added or its meaning changes.
-const derivedVersion = 2 // 2: stats rollups
+const derivedVersion = 3 // 2: stats rollups; 3: daily tiers (roll_day, roll_day_blocked)
 
 // backfillChunkRows per transaction: small enough that the writer lock is
 // released often (the flush loop interleaves), large enough to be efficient.
@@ -69,6 +69,18 @@ func prepareDerived(db *sql.DB) error {
 	var maxID sql.NullInt64
 	if err := db.QueryRow(`SELECT MAX(id) FROM querylog`).Scan(&maxID); err != nil {
 		return fmt.Errorf("read max id: %w", err)
+	}
+	if version == 2 {
+		// v2 → v3 adds only the daily tiers, which are sums of the hourly
+		// tables already here. Rather than drop everything and replay a log
+		// of millions of rows (minutes on a Pi, with slow dashboards meanwhile),
+		// mark them to be seeded from the hourly tables in the background
+		// (seedDaily). The tables exist now (the schema above), so live
+		// writes maintain them from this moment.
+		if err := writeMeta(db, map[string]any{"derived_version": derivedVersion, "daily_seed": true}); err != nil {
+			return err
+		}
+		version = derivedVersion
 	}
 	if version != derivedVersion {
 		// New or changed derived schema: start the derived tables over and
@@ -213,7 +225,57 @@ func (l *Log) backfillDerived() {
 	if total > 0 {
 		slog.Info("query log backfill finished", "rows", total, "took", time.Since(start).Round(time.Millisecond))
 	}
+	if err := l.seedDaily(); err != nil {
+		slog.Error("query log daily rollups could not be built; stats use the slower paths", "err", err)
+		return
+	}
 	l.derivedReady.Store(true)
+}
+
+// seedDaily fills the daily tiers from the hourly tables after an upgrade
+// that added them (prepareDerived's v2 → v3 step): one transaction on the
+// writer connection, so it serialises with live batches — each of which
+// updates both tiers — and the result is exact either way. It runs after
+// the backfill, when the hourly tables hold every row. Measured on a Pi 4
+// with 90 days (160k hourly rows): a few seconds, once.
+func (l *Log) seedDaily() error {
+	var pending bool
+	switch err := l.db.QueryRow(`SELECT value FROM querylog_meta WHERE key = 'daily_seed'`).Scan(&pending); {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil
+	case err != nil:
+		return fmt.Errorf("read daily seed flag: %w", err)
+	}
+	if !pending {
+		return nil
+	}
+	start := time.Now()
+	tx, err := l.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin daily seed: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, stmt := range []string{
+		`DELETE FROM roll_day`,
+		`INSERT INTO roll_day (bucket, client, verdict, list, n)
+			SELECT bucket / 86400000 * 86400000, client, verdict, list, SUM(n) FROM roll_hour
+			GROUP BY 1, client, verdict, list`,
+		`DELETE FROM roll_day_blocked`,
+		`INSERT INTO roll_day_blocked (bucket, qname, n)
+			SELECT bucket / 86400000 * 86400000, qname, SUM(n) FROM roll_hour_blocked GROUP BY 1, qname`,
+	} {
+		if _, err := tx.Exec(stmt); err != nil {
+			return fmt.Errorf("daily seed: %w", err)
+		}
+	}
+	if err := writeMeta(tx, map[string]any{"daily_seed": false}); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit daily seed: %w", err)
+	}
+	slog.Info("query log daily rollups built", "took", time.Since(start).Round(time.Millisecond))
+	return nil
 }
 
 // backfillChunk processes up to backfillChunk ids from the first pending
@@ -288,6 +350,8 @@ func (l *Log) pruneDerived(cutoffMs int64) {
 		{`DELETE FROM roll_hour WHERE bucket < ?`, cutoffMs/hourMs*hourMs - hourMs},
 		{`DELETE FROM roll_hour_blocked WHERE bucket < ?`, cutoffMs/hourMs*hourMs - hourMs},
 		{`DELETE FROM roll_day_client WHERE bucket < ?`, cutoffMs/dayMs*dayMs - dayMs},
+		{`DELETE FROM roll_day WHERE bucket < ?`, cutoffMs/dayMs*dayMs - dayMs},
+		{`DELETE FROM roll_day_blocked WHERE bucket < ?`, cutoffMs/dayMs*dayMs - dayMs},
 		{`DELETE FROM roll_10m WHERE bucket < ?`, now - roll10mKeepMs},
 	} {
 		if _, err := l.db.Exec(p.sql, p.arg); err != nil {
