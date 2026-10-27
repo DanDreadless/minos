@@ -223,3 +223,31 @@ func TestFetchSendsVersionedUserAgent(t *testing.T) {
 		t.Errorf("User-Agent = %q, want %q", got, want)
 	}
 }
+
+// TestBlockedCompanies: a company picked in config blocks its advertising
+// and analytics domains as "company:<id>", and nothing else of it.
+func TestBlockedCompanies(t *testing.T) {
+	store, err := config.Open(t.TempDir() + "/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Update(func(c *config.Config) error {
+		c.Blocking.Companies = []string{"google"}
+		c.Lists.Sources = nil
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	engine := filter.NewEngine()
+	m := NewManager(engine, store)
+	m.rebuild(context.Background(), false)
+	if res := engine.Match("stats.g.doubleclick.net"); !res.Blocked || res.List != "company:google" {
+		t.Errorf("doubleclick = %+v, want blocked by company:google", res)
+	}
+	// Tag Manager is "essential" in the source; Google search is not a tracker.
+	for _, name := range []string{"www.googletagmanager.com", "www.google.com"} {
+		if res := engine.Match(name); res.Blocked {
+			t.Errorf("%s blocked: %+v", name, res)
+		}
+	}
+}

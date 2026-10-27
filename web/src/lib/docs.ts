@@ -307,6 +307,30 @@ export const docs: Section[] = [
     ],
   },
   {
+    id: 'privacy',
+    title: 'Privacy',
+    page: '#/privacy',
+    summary:
+      'Which tracking companies your devices talked to — advertising, analytics and telemetry — what got through and what your blocklists stopped, for the whole network or one device (on its page).',
+    howto: [
+      'Each company shows how many of its tracking lookups got through and how many were blocked; the bar is the blocked share. Open it for its names, what each is for, and (for the whole network) which devices looked it up.',
+      "A name counts as tracking only when it is one of the company's advertising, analytics or telemetry names that a curated DNS blocklist (Hagezi Pro) also blocks. A company's own sites and services — Google search, YouTube, Facebook itself, time servers — never count, and are listed separately as other companies.",
+      "Block (company)'s tracking blocks that company's tracking names for every device, as the list \"company:<id>\" in the Query Log. Its own sites, apps and sign-in keep working. Stop blocking undoes it; it is also in Settings → History.",
+      'Periods are whole days (UTC): today, the last 7 days or the last 30 days.',
+      'Company data: AdGuard companiesdb (built from WhoTracks.me), CC BY-SA 4.0. Tracking names: Hagezi DNS blocklists, GPLv3. Both are built into Minos and updated with releases; nothing is sent anywhere.',
+    ],
+    settings: [
+      {
+        label: 'Companies whose tracking is blocked',
+        key: 'blocking.companies',
+        default: 'none',
+        effect: 'Company IDs (from the Privacy page) whose advertising, analytics and telemetry names are blocked for everyone.',
+        applies: 'live',
+        where: 'Privacy',
+      },
+    ],
+  },
+  {
     id: 'localdns',
     title: 'Local DNS',
     page: '#/local',

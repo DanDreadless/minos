@@ -206,6 +206,28 @@ export interface ListStats {
   lists: { list: string; count: number }[];
 }
 
+// The privacy report (GET /api/privacy).
+export interface CompanyReport {
+  id: string;
+  name: string;
+  categories: string[];
+  tracking: boolean;
+  allowed: number; // Tracking lookups that got through
+  blocked: number;
+  other: number; // Lookups of its own sites and services
+  domains: { name: string; tracker: string; category: string; tracking: boolean; allowed: number; blocked: number }[];
+  devices?: { key: string; name: string }[];
+  blockable: boolean;
+  blocked_all: boolean;
+}
+
+export interface PrivacyReport {
+  days: number;
+  window_start: string;
+  attribution: string;
+  companies: CompanyReport[];
+}
+
 // The blocklist value report (GET /api/lists/value).
 export interface ListValue {
   list: string;
@@ -613,6 +635,13 @@ export const api = {
       'GET',
       `/api/stats/client?client=${encodeURIComponent(clients.join(','))}&hours=${hours}`,
     ),
+  privacy: (days = 7, clients: string[] = []) =>
+    request<PrivacyReport>(
+      'GET',
+      `/api/privacy?days=${days}` + (clients.length ? `&client=${encodeURIComponent(clients.join(','))}` : ''),
+    ),
+  blockCompany: (id: string, blocked: boolean) =>
+    request<{ id: string; blocked: boolean; domains: number }>('POST', '/api/privacy/companies', { id, blocked }),
   listValue: (days = 30) => request<ListValueReport>('GET', `/api/lists/value?days=${days}`),
   listStats: (hours = 168) => request<ListStats>('GET', `/api/stats/lists?hours=${hours}`),
   check: (domain: string) =>

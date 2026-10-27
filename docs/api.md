@@ -491,6 +491,43 @@ Add with `POST` (`{"domain": "example.com"}`); remove with
 `DELETE /api/allowlist/{domain}`. Entries cover subdomains, and allow
 always beats deny.
 
+## Privacy
+
+### `GET /api/privacy?days=7&client=`
+
+The tracking companies the network (or one device: `client` = its
+addresses, comma-separated) looked up in the last `days` (1–90), whole UTC
+days from `window_start`:
+
+```json
+{"days": 7, "window_start": "2026-10-21T00:00:00Z",
+ "attribution": "Company data: AdGuard companiesdb …",
+ "companies": [{"id": "microsoft", "name": "Microsoft Corporation",
+   "categories": ["Analytics", "Sites and services"], "tracking": true,
+   "allowed": 303, "blocked": 732, "other": 60657,
+   "domains": [{"name": "a.clarity.ms", "tracker": "Microsoft Clarity",
+     "category": "Analytics", "tracking": true, "allowed": 90, "blocked": 0}],
+   "devices": [{"key": "aa:bb:cc:dd:ee:ff", "name": "Laptop"}],
+   "blockable": true, "blocked_all": false}]}
+```
+
+`allowed`/`blocked` count lookups of the company's **tracking names** —
+its advertising, analytics and telemetry names that a curated DNS blocklist
+(Hagezi Pro) also blocks; `other` counts its remaining names (its own sites
+and services, which the source data files under advertising too). Tracking
+companies come first, by what got through. `domains` is the busiest ten;
+`devices` is present for the network report only. Read from the per-device
+daily rollups (one primary-key range per device); same 20-second cap as
+`/api/stats`.
+
+### `POST /api/privacy/companies`
+
+`{"id": "microsoft", "blocked": true}` blocks that company's tracking names
+for everyone (config `blocking.companies`; list `company:<id>` in the Query
+Log); `"blocked": false` stops. Answers `{"id", "blocked", "domains"}`
+(how many names). Unknown companies are a 400. Recorded in the settings
+history.
+
 ## Lists
 
 - `GET /api/lists` — per-list status: `{name, url, format, action, enabled,

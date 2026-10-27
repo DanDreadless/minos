@@ -17,6 +17,7 @@
   import Help from './pages/Help.svelte';
   import LocalDNS from './pages/LocalDNS.svelte';
   import Logs from './pages/Logs.svelte';
+  import Privacy from './pages/Privacy.svelte';
   import Settings from './pages/Settings.svelte';
 
   let status: Status | null = null;
@@ -195,6 +196,8 @@
         <Blocking />
       {:else if $route === 'local'}
         <LocalDNS />
+      {:else if $route === 'privacy'}
+        <Privacy />
       {:else if $route === 'logs'}
         <Logs />
       {:else if $route === 'settings'}

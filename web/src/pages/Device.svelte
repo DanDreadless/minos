@@ -5,6 +5,7 @@
   import { copy } from '../lib/copy';
   import { fmtLogTime, fmtLogTimeFull } from '../lib/format';
   import { currentDeviceKey, docketHref, hrefFor } from '../lib/router';
+  import PrivacyReport from '../lib/components/PrivacyReport.svelte';
   import { notify, notifyError } from '../lib/toast';
 
   const HISTORY_PAGE = 200;
@@ -359,6 +360,15 @@
       <p class="empty">{copy.devices.activityLoading}</p>
     {/if}
   </section>
+
+  {#if device}
+    <section class="card">
+      <h2>{copy.privacy.deviceTitle} <small>{copy.privacy.deviceHint}</small></h2>
+      {#key device.ips?.join(',') ?? device.ip}
+        <PrivacyReport clients={device.ips ?? [device.ip]} />
+      {/key}
+    </section>
+  {/if}
 
   <section class="history">
     <div class="history-head">

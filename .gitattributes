@@ -4,3 +4,4 @@
 # writes LF, so web/dist reads as modified the moment it is rebuilt — and
 # scripts/release.sh refuses to release on exactly that noise.
 web/dist/** -text
+*.tsv text eol=lf

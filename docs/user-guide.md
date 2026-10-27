@@ -15,6 +15,7 @@ immediately. "After restart" settings live only in `minos.yaml`; restart Minos a
 - [Devices](#devices)
 - [Blocking → Blocklists](#blocklists)
 - [Blocking → Allowed and Blocked](#allowblock)
+- [Privacy](#privacy)
 - [Local DNS](#localdns)
 - [Logs](#logs)
 - [Settings → DNS](#settings-dns)
@@ -136,6 +137,22 @@ Your own rules, which beat the blocklists: domains you always allow or always bl
 | Blocked services<br><small>Blocking → Allowed / Blocked → Services</small> | `blocking.services` | — | Services blocked for everyone. | at once |
 | Allowed services<br><small>Blocking → Allowed / Blocked → Services</small> | `blocking.allowed_services` | — | Services allowed for everyone; allowing beats blocking. | at once |
 | Your custom services<br><small>Blocking → Allowed / Blocked → Your custom services</small> | `blocking.custom_services` | — | Your own service bundles.<br>`name`: Its ID (derived from the label if not given).<br>`label`: Its display name.<br>`domains`: The domains it covers.<br>`allow_extra`: Extra hosts allowed only while the service is allowed.<br>`blocked`: Blocked for everyone.<br>`allowed`: Allowed for everyone. | at once |
+
+<a id="privacy"></a>
+
+## Privacy
+
+Which tracking companies your devices talked to — advertising, analytics and telemetry — what got through and what your blocklists stopped, for the whole network or one device (on its page).
+
+- Each company shows how many of its tracking lookups got through and how many were blocked; the bar is the blocked share. Open it for its names, what each is for, and (for the whole network) which devices looked it up.
+- A name counts as tracking only when it is one of the company's advertising, analytics or telemetry names that a curated DNS blocklist (Hagezi Pro) also blocks. A company's own sites and services — Google search, YouTube, Facebook itself, time servers — never count, and are listed separately as other companies.
+- Block (company)'s tracking blocks that company's tracking names for every device, as the list "company:<id>" in the Query Log. Its own sites, apps and sign-in keep working. Stop blocking undoes it; it is also in Settings → History.
+- Periods are whole days (UTC): today, the last 7 days or the last 30 days.
+- Company data: AdGuard companiesdb (built from WhoTracks.me), CC BY-SA 4.0. Tracking names: Hagezi DNS blocklists, GPLv3. Both are built into Minos and updated with releases; nothing is sent anywhere.
+
+| Setting | Config key | Default | What it does | Applies |
+|---|---|---|---|---|
+| Companies whose tracking is blocked<br><small>Privacy</small> | `blocking.companies` | none | Company IDs (from the Privacy page) whose advertising, analytics and telemetry names are blocked for everyone. | at once |
 
 <a id="localdns"></a>
 

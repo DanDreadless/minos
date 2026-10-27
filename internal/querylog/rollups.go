@@ -282,3 +282,84 @@ func (l *Log) clientOverviewRolled(ctx context.Context, clients []string, since 
 	out.TopAllowed, out.TopBlocked = rankDomains(allowed, n), rankDomains(blocked, n)
 	return out, nil
 }
+
+// ClientName is one device's lookups of one name with one verdict.
+type ClientName struct {
+	Client  string
+	QName   string
+	Verdict string
+	Count   int
+}
+
+// ClientNames returns every name the given devices looked up since the
+// start of since's UTC day (the returned window start), with counts by
+// verdict — the privacy report's input. From roll_day_client one device at
+// a time, so each read is a primary-key range; before the rollups are
+// ready, the raw log (client index) or the ring.
+func (l *Log) ClientNames(ctx context.Context, clients []string, since time.Time) ([]ClientName, time.Time, error) {
+	start := time.UnixMilli(since.UnixMilli() / dayMs * dayMs)
+	var out []ClientName
+	if len(clients) == 0 {
+		return out, start, nil
+	}
+	if l.useRollups() {
+		for _, c := range clients {
+			rows, err := l.reader().QueryContext(ctx, `SELECT verdict, qname, SUM(n) FROM roll_day_client
+				WHERE client = ? AND bucket >= ? GROUP BY verdict, qname`, c, start.UnixMilli())
+			if err != nil {
+				return nil, start, fmt.Errorf("client names: %w", err)
+			}
+			for rows.Next() {
+				cn := ClientName{Client: c}
+				if err := rows.Scan(&cn.Verdict, &cn.QName, &cn.Count); err != nil {
+					rows.Close()
+					return nil, start, fmt.Errorf("client names scan: %w", err)
+				}
+				out = append(out, cn)
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return nil, start, err
+			}
+		}
+		return out, start, nil
+	}
+	if l.reader() != nil {
+		in := strings.Repeat("?,", len(clients))
+		args := make([]any, 0, len(clients)+1)
+		for _, c := range clients {
+			args = append(args, c)
+		}
+		args = append(args, start.UnixMilli())
+		rows, err := l.reader().QueryContext(ctx, `SELECT client, qname, verdict, COUNT(*) FROM querylog
+			WHERE client IN (`+in[:len(in)-1]+`) AND ts >= ? GROUP BY client, qname, verdict`, args...)
+		if err != nil {
+			return nil, start, fmt.Errorf("client names: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var cn ClientName
+			if err := rows.Scan(&cn.Client, &cn.QName, &cn.Verdict, &cn.Count); err != nil {
+				return nil, start, fmt.Errorf("client names scan: %w", err)
+			}
+			out = append(out, cn)
+		}
+		return out, start, rows.Err()
+	}
+	want := map[string]bool{}
+	for _, c := range clients {
+		want[c] = true
+	}
+	counts := map[ClientName]int{}
+	l.scanRing(start, func(e Entry) {
+		if want[e.Client] {
+			counts[ClientName{Client: e.Client, QName: e.QName, Verdict: e.Verdict}]++
+		}
+	})
+	for k, n := range counts {
+		k.Count = n
+		out = append(out, k)
+	}
+	return out, start, nil
+}

@@ -11,6 +11,7 @@ export type Route =
   | 'allowed'
   | 'blocked'
   | 'local'
+  | 'privacy'
   | 'logs'
   | 'help'
   | 'settings';
@@ -43,6 +44,8 @@ function parse(): Route {
       return 'logs';
     case '#/local':
       return 'local';
+    case '#/privacy':
+      return 'privacy';
     case '#/help':
       return 'help';
     default:
@@ -106,6 +109,7 @@ export const hrefFor: Record<Route, string> = {
   settings: '#/settings',
   logs: '#/logs',
   local: '#/local',
+  privacy: '#/privacy',
   help: '#/help',
 };
 

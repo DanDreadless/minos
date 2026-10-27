@@ -34,6 +34,11 @@ is protected, with a clear answer to "why was this blocked?" one click away.
   the way an app does when it has stopped working, Minos says which device,
   what changed and since when — with Allow, Allow 1 h and Dismiss. Trackers
   that were blocked all along never trigger it.
+- **See who is tracking you, and stop them by company.** The Privacy page
+  shows which tracking companies each device talks to — what got through
+  and what your lists stopped — and blocks a company's advertising,
+  analytics and telemetry in one click, without breaking its own sites
+  and apps.
 - **Know what each list is worth.** Minos compares your blocklists with
   each other and with what was really blocked: "99% of Hagezi Normal is
   already in Hagezi Pro, and it blocked nothing the others wouldn't have —
@@ -242,4 +247,6 @@ performance budgets.
 
 ## License
 
-GPLv3.
+GPLv3. Minos includes company and tracker data from AdGuard companiesdb
+(built from WhoTracks.me, CC BY-SA 4.0) and tracking names from the Hagezi
+DNS blocklists (GPLv3); see [NOTICE](NOTICE).
