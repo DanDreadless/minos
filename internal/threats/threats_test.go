@@ -160,3 +160,25 @@ func TestThreatFeed(t *testing.T) {
 		t.Error("the built-in ignore list must stay security vendors only")
 	}
 }
+
+func TestHasLongLabel(t *testing.T) {
+	for name, want := range map[string]bool{
+		"www.google.com": false, "googleapis.com": true, "a.b.c": false,
+		"kqlxtqptsmys.com": true, "x.123456789.net": false, "x.1234567890.net": true, "": false,
+	} {
+		if got := hasLongLabel(name, 10); got != want {
+			t.Errorf("hasLongLabel(%q) = %v", name, got)
+		}
+	}
+}
+
+// BenchmarkObserveOrdinary is the common case: an allowed lookup of an
+// ordinary name, which can be neither pattern.
+func BenchmarkObserveOrdinary(b *testing.B) {
+	d := New(Options{})
+	e := querylog.Entry{Time: time.Now(), Client: "c", QName: "www.example.co.uk", Verdict: querylog.VerdictAllowed}
+	b.ReportAllocs()
+	for b.Loop() {
+		d.Observe(e)
+	}
+}

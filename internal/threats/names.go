@@ -165,3 +165,18 @@ func tunnelLike(sub string) bool {
 	}
 	return entropy(data.String()) >= 2.9
 }
+
+// hasLongLabel reports whether any label of name is at least n bytes.
+func hasLongLabel(name string, n int) bool {
+	run := 0
+	for i := 0; i < len(name); i++ {
+		if name[i] == '.' {
+			run = 0
+			continue
+		}
+		if run++; run >= n {
+			return true
+		}
+	}
+	return false
+}

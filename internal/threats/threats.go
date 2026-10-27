@@ -196,6 +196,13 @@ func (d *Detector) Observe(e querylog.Entry) {
 	case "local", "clients", "rate-limit", "firefox-doh-canary":
 		return // Answered locally or refused: not the device's own lookups
 	}
+	// Both patterns need a label of 10+ characters (randomLabel; tunnelLike
+	// wants 16+), so an allowed name without one cannot match: skip the
+	// public-suffix lookup, the costliest step, for most of the stream.
+	// Blocked names go on — a threat feed may have blocked them.
+	if e.Verdict != querylog.VerdictBlocked && !hasLongLabel(e.QName, 10) {
+		return
+	}
 	reg, sub, ok := split(e.QName)
 	if !ok || d.ignored(reg) {
 		return

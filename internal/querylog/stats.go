@@ -225,15 +225,41 @@ func (l *Log) BlockedNames(ctx context.Context, since time.Time) ([]TopDomain, e
 // list) — up to limit, with the time of the latest. It is the "this used to
 // work" evidence for the breakage detector.
 func (l *Log) AllowedBefore(ctx context.Context, client, qname string, since, before time.Time, limit int) (int, time.Time, error) {
+	return l.countAnswers(ctx, client, qname, VerdictAllowed, true, since, before, limit)
+}
+
+// BlockedBefore counts a device's blocked lookups of exactly qname in
+// [since, before), up to limit — the breakage detector's "blocked and
+// retried all day already" test.
+func (l *Log) BlockedBefore(ctx context.Context, client, qname string, since, before time.Time, limit int) (int, error) {
+	n, _, err := l.countAnswers(ctx, client, qname, VerdictBlocked, false, since, before, limit)
+	return n, err
+}
+
+// countAnswers counts one device's lookups of exactly qname with verdict in
+// [since, before), up to limit, with the latest time; plain keeps only
+// those no rule decided (no list).
+func (l *Log) countAnswers(ctx context.Context, client, qname, verdict string, plain bool, since, before time.Time, limit int) (int, time.Time, error) {
 	if l.reader() != nil {
 		var n int
 		var last sql.NullInt64
-		err := l.reader().QueryRowContext(ctx, `SELECT COUNT(*), MAX(ts) FROM (SELECT ts FROM querylog
-			WHERE qname = ? AND verdict = ? AND ts >= ? AND ts < ? AND client = ? AND (list = '' OR list IS NULL)
-			LIMIT ?)`,
-			qname, VerdictAllowed, since.UnixMilli(), before.UnixMilli(), client, limit).Scan(&n, &last)
+		// Pinned to (qname, verdict, ts): exactly this name's lookups in the
+		// window. Left alone the planner may take the client index and walk
+		// the device's whole week — measured at 5% of Minos's CPU under load.
+		// Conditional, as naming an unbuilt index is an error.
+		from := "querylog"
+		if l.indexed.Load() {
+			from = "querylog INDEXED BY idx_querylog_qname_verdict_ts"
+		}
+		cond := ""
+		if plain {
+			cond = " AND (list = '' OR list IS NULL)"
+		}
+		err := l.reader().QueryRowContext(ctx, `SELECT COUNT(*), MAX(ts) FROM (SELECT ts FROM `+from+`
+			WHERE qname = ? AND verdict = ? AND ts >= ? AND ts < ? AND client = ?`+cond+` LIMIT ?)`,
+			qname, verdict, since.UnixMilli(), before.UnixMilli(), client, limit).Scan(&n, &last)
 		if err != nil {
-			return 0, time.Time{}, fmt.Errorf("allowed before query: %w", err)
+			return 0, time.Time{}, fmt.Errorf("count answers: %w", err)
 		}
 		if !last.Valid {
 			return n, time.Time{}, nil
@@ -242,8 +268,8 @@ func (l *Log) AllowedBefore(ctx context.Context, client, qname string, since, be
 	}
 	n, last := 0, time.Time{}
 	l.scanRing(since, func(e Entry) {
-		if n < limit && e.QName == qname && e.Client == client && e.Verdict == VerdictAllowed &&
-			e.List == "" && e.Time.Before(before) {
+		if n < limit && e.QName == qname && e.Client == client && e.Verdict == verdict &&
+			(!plain || e.List == "") && e.Time.Before(before) {
 			n++
 			if e.Time.After(last) {
 				last = e.Time

@@ -2,6 +2,7 @@ package breakage
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -176,5 +177,39 @@ func TestSweepEndsOldSuggestions(t *testing.T) {
 	d.sweep(now.Add(KeepFor + 2*time.Minute))
 	if len(d.Suggestions()) != 0 {
 		t.Error("a suggestion outlived KeepFor")
+	}
+}
+
+// TestTableStaysBounded: a flood of distinct blocked names (a page full of
+// ad slots, a scan) never grows the burst table past maxTracked.
+func TestTableStaysBounded(t *testing.T) {
+	d := New(usedToWork(50))
+	now := time.Now()
+	for i := range maxTracked + 500 {
+		d.observe(context.Background(), blocked("c", fmt.Sprintf("ad%d.example", i), "L", now))
+	}
+	if n := len(d.bursts); n > maxTracked {
+		t.Errorf("burst table grew to %d", n)
+	}
+}
+
+// BenchmarkObserveFullTable is the field regression: blocked lookups of new
+// names with the burst table full. Each must cost about the same as any
+// other lookup, not a walk of the table (~150 µs on a Pi before the fix).
+func BenchmarkObserveFullTable(b *testing.B) {
+	d := New(usedToWork(50))
+	now := time.Now()
+	for i := range maxTracked {
+		d.observe(context.Background(), blocked("c", fmt.Sprintf("seed%d.example", i), "L", now))
+	}
+	names := make([]string, 4096)
+	for i := range names {
+		names[i] = fmt.Sprintf("ad%d.tracker.example", i)
+	}
+	b.ReportAllocs()
+	i := 0
+	for b.Loop() {
+		d.observe(context.Background(), blocked("c", names[i%len(names)], "L", now))
+		i++
 	}
 }

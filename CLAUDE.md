@@ -669,6 +669,28 @@ This is security software; hold it to that standard.
   `dns.tls`, query-log storage, list headers by list name — so a restore can
   never lock anyone out or move a listener, and is itself recorded. A
   failed history write is logged, never fatal to the change.
+- **Throughput is measured end to end, release against release**
+  (October 2026, `scripts/dnsload`): micro-benchmarks missed a regression a
+  user asked about. dnsload brings its own instant upstream and a 200k-name
+  list, drives a stress mix (mostly new names: hard on the query log) or a
+  home mix (`-mix home`: Zipf over a few thousand names, 15% blocked), open
+  loop with `-rate` or flat out, and with `-pid` reports Minos's CPU per
+  1,000 lookups — the steadiest figure. `minos serve -cpuprofile file`
+  profiles a run. Run both builds on the Pi from /dev/shm with identical
+  configs (rate_limit 0, discovery off) and compare at a fixed rate where
+  neither drops log entries ("writer is behind" counts), because a
+  saturated writer sheds work and flatters the slower build. Found this
+  way: `breakage.dropOldest` walked the 20,000-pair table for every new
+  blocked name once full — 21% of CPU, peak 11.0k → 6.9k lookups/s
+  (v0.32–v0.37); now `evictOne`, O(1). Also fixed: the breakage evidence
+  queries are pinned to (qname, verdict, ts) (`countAnswers`), and threat
+  detection skips the public-suffix lookup for allowed names with no label
+  of 10+ characters (676 ns → 13 ns). After: peak 9.6k/s against v0.21.2's
+  10.9k; at 3,000/s, 259 vs 201 ms CPU per 1,000 lookups on the home mix;
+  at 100/s, identical latency. The rest is the query-log writer's rollups
+  and indexes — the deliberate price of fast stats and search. Any new
+  stream consumer must stay O(1) per entry; check with dnsload before
+  shipping one.
 - **Privacy report & block by company** (fixed decisions, October 2026,
   `internal/trackers`, `GET /api/privacy`): company data is AdGuard
   companiesdb (CC BY-SA 4.0 — one-way GPLv3-compatible, so it ships in the
