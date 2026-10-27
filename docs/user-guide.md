@@ -109,6 +109,7 @@ The lists Minos blocks from, downloaded and kept up to date automatically. If a 
 - Audit: tick it to try a list without enforcing it — its matches are recorded as "would block" in the Query Log. Untick to enforce.
 - Allowlists (subscribed lists of always-allowed domains) can be added too; they beat every blocklist.
 - "Replace with…" appears on a list its publisher has retired; "Add mirrors" on catalog lists subscribed before mirrors existed.
+- Is each list worth it? (shown with two or more blocklists switched on) compares them: how much of each the others already cover, how many lookups in the last 7, 30 or 90 days only that list would have blocked (with the busiest of them), and roughly how much memory removing it would free. A list that caught nothing the others would not have, and is mostly covered by another, is a candidate to remove. Audit-only lists are left out.
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|

@@ -534,6 +534,32 @@ always beats deny.
 - `DELETE /api/lists/{name}`
 - `POST /api/lists/refresh` — refetch everything now (synchronous)
 
+### `GET /api/lists/value?days=30`
+
+The blocklist value report (`days` 1–90). Compares the enabled, enforcing
+blocklists (up to 16; audit-only lists and allowlists are left out) with
+each other and with the lookups blocked in the window, judged against the
+rules in force now:
+
+```json
+{"days": 30, "compared": ["Hagezi Pro", "OISD Small"], "blocked_lookups": 48211,
+ "names_truncated": false,
+ "lists": [{"list": "OISD Small", "rules": 55890, "unique_rules": 1840,
+   "covered_by": [{"list": "Hagezi Pro", "rules": 52400}],
+   "freed_bytes": 2310000, "blocks": 30112, "only_blocks": 0,
+   "only_examples": []}]}
+```
+
+`covered_by` counts the list's exact-domain rules another list also blocks
+(the same domain or a parent); `unique_rules` are covered by none.
+`freed_bytes` is roughly the memory of the rules no other list has exactly.
+`blocks` is the window's blocked lookups the list blocks today, and
+`only_blocks` those no other compared list would block, with the busiest
+five names. Regex rules are not compared. `lists` is empty when fewer than
+two lists are compared. The overlap is computed once per rule set (about
+80 ms per million rules on a Pi 4); the lookups come from the query-log
+rollups, under the same 20-second cap as `/api/stats`.
+
 ## Services
 
 - `GET /api/services` — `{"catalog": [{name, label, domains}],

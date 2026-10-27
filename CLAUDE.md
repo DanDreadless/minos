@@ -668,6 +668,25 @@ This is security software; hold it to that standard.
   `dns.tls`, query-log storage, list headers by list name — so a restore can
   never lock anyone out or move a listener, and is itself recorded. A
   failed history write is logged, never fatal to the change.
+- **Blocklist value report** (fixed decisions, October 2026,
+  `filter/overlap.go`, `GET /api/lists/value`): the builder's map value is
+  now `uint32` — list index in the low 16 bits, a bit per **tracked** list
+  (`Builder.Track`, the enabled enforcing blocklists, at most
+  `MaxTracked` = 16) in the high 16 — so recording which lists hold each
+  rule costs the builder nothing extra. The compiled `domainSet` keeps the
+  bits in a parallel `masks []uint16` (2 B/rule, only when ≥ 2 lists are
+  tracked; `lookup`/`Match` never read it). Overlap is computed **on first
+  use, once per matcher**, in one pass over the sorted keys: a domain's
+  parents sort directly before it (all keys with a prefix are contiguous),
+  so a stack of covering ancestors gives every rule's coverage with no
+  lookups — 76 ms per 1M rules on the Pi; `TestOverlapMatchesBruteForce`
+  holds it to a naive answer on names built from `a`, `a-b`, `ab` labels
+  (the `-` < `.` ordering trap). Pi benchmarks before/after: MatchHit
+  4.05 → 4.03 µs, Build100k 240 → 240 ms. The traffic half asks
+  `Covering(name)` for every blocked name in the window
+  (`querylog.BlockedNames`, rollup-backed, capped at 100k names) and skips
+  names an allow rule decides now. Judged against today's rules — a list
+  added last week is credited for older lookups; the UI says so.
 - **Home Assistant over MQTT** (fixed decisions, October 2026,
   `internal/mqtt` + `internal/hass`): the MQTT client is **hand-rolled**
   (maintainer decision — paho.mqtt.golang would have brought a second
