@@ -39,6 +39,36 @@ func (d DeviceInfo) label() string {
 // DeviceHref is the UI path of a device's page.
 func DeviceHref(key string) string { return "#/device/" + url.PathEscape(key) }
 
+// named says which device, for a message about something it did: its name,
+// or failing that what is known plus its address, so an unnamed device can
+// still be found ("Apple device 192.168.1.20", "the device at 192.168.1.20").
+func (d DeviceInfo) named() string {
+	switch {
+	case d.Name != "":
+		return d.Name
+	case d.Vendor != "":
+		return d.Vendor + " device " + d.IP
+	}
+	return "the device at " + d.IP
+}
+
+// lookupsHref is the Query Log narrowed to a device (and a name, if given).
+func lookupsHref(ip, qname string) string {
+	v := url.Values{}
+	v.Set("client", ip)
+	if qname != "" {
+		v.Set("qname", qname)
+	}
+	return "#/querylog?" + v.Encode()
+}
+
+func capitalized(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
 // NewDevicesEvent announces devices that made their first DNS query. One
 // device gets its own message and a link to its page; several (a router
 // reboot, guests arriving) are one message linking to the Devices list.
@@ -177,32 +207,41 @@ func DNSDownEvent(last string) Event {
 	}
 }
 
-// BreakageEvent: a device is retrying a name a blocklist blocks, the way an
-// app does when blocking has broken it. Links to the dashboard, where the
-// suggestion offers Allow, Allow for 1 hour and Dismiss.
-func BreakageEvent(dev DeviceInfo, domain, list string, count int) Event {
-	who := dev.label()
+// BreakageEvent: a device keeps retrying a name it used to reach, which a
+// blocklist now blocks — an app blocking has probably broken. worked is how
+// often the name was answered normally in the week before, last at
+// workedLast. Links to the device; the lookups (with Allow on each row) are
+// one tap away.
+func BreakageEvent(dev DeviceInfo, domain, list string, count, worked int, workedLast time.Time) Event {
+	who := dev.named()
 	return Event{
 		Type:     TypeBreakage,
 		Priority: PriorityDefault,
 		Title:    "Something may be broken on " + who,
-		Message: fmt.Sprintf("%s asked for %s %d times in two minutes, and %s blocks it — an app on it has "+
-			"probably stopped working. If so, allow the domain from the Minos dashboard, for an hour or for good.",
-			who, domain, count, list),
-		Link:    "#/",
-		Actions: []Action{{Label: "Open Minos", URL: "#/"}},
+		Message: fmt.Sprintf("%s reached %s without trouble %d times in the past week, last at %s. Now %s blocks it, "+
+			"and %s has asked for it %d times in two minutes — the way an app retries when it has stopped working. "+
+			"If something isn't working there, allow %s for an hour to test.",
+			capitalized(who), domain, worked, workedLast.Local().Format("Mon 15:04"), list, who, count, domain),
+		Link: DeviceHref(dev.Key),
+		Actions: []Action{
+			{Label: "Open the device", URL: DeviceHref(dev.Key)},
+			{Label: "See the lookups", URL: lookupsHref(dev.IP, domain)},
+		},
 	}
 }
 
 // ThreatEvent: a device is behaving like malware (internal/threats). kind is
 // dga, tunnel or known_threat; distinct counts known-threat domains.
 func ThreatEvent(dev DeviceInfo, kind, domain, list string, count, distinct int, samples []string) Event {
-	who := dev.label()
+	who := dev.named()
 	e := Event{
 		Type:     TypeThreat,
 		Priority: PriorityHigh,
-		Link:     "#/",
-		Actions:  []Action{{Label: "Open Minos", URL: "#/"}},
+		Link:     DeviceHref(dev.Key),
+		Actions: []Action{
+			{Label: "Open the device", URL: DeviceHref(dev.Key)},
+			{Label: "See its lookups", URL: lookupsHref(dev.IP, "")},
+		},
 	}
 	const advice = " If you don't recognise this, disconnect the device and check it; if it is expected, mark it as fine in Minos."
 	switch kind {
@@ -213,13 +252,13 @@ func ThreatEvent(dev DeviceInfo, kind, domain, list string, count, distinct int,
 			eg = " (e.g. " + strings.Join(samples[:min(2, len(samples))], ", ") + ")"
 		}
 		e.Message = fmt.Sprintf("%s looked up %d random-looking domains in a few minutes%s — how malware searches "+
-			"for its control server.%s", who, count, eg, advice)
+			"for its control server.%s", capitalized(who), count, eg, advice)
 	case "tunnel":
 		e.Title = "Possible data leak from " + who
 		e.Message = fmt.Sprintf("%s looked up %d long, random names under %s in a few minutes — the pattern of data "+
-			"being sent out through DNS.%s", who, count, domain, advice)
+			"being sent out through DNS.%s", capitalized(who), count, domain, advice)
 	default:
-		e.Title = who + " tried to reach a known malicious domain"
+		e.Title = capitalized(who) + " tried to reach a known malicious domain"
 		others := ""
 		if distinct > 1 {
 			others = fmt.Sprintf(" and %d other known malicious domain", distinct-1)
@@ -228,7 +267,7 @@ func ThreatEvent(dev DeviceInfo, kind, domain, list string, count, distinct int,
 			}
 		}
 		e.Message = fmt.Sprintf("%s looked up %s%s (%s). Minos blocked it — often a link in a scam message or a "+
-			"malicious ad; it can also mean malware on the device.%s", who, domain, others, list, advice)
+			"malicious ad; it can also mean malware on the device.%s", capitalized(who), domain, others, list, advice)
 	}
 	return e
 }

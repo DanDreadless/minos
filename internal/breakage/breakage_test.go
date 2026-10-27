@@ -29,9 +29,18 @@ func feed(d *Detector, client, name, list string, start time.Time, n int) {
 	}
 }
 
+// usedToWork is a history in which the name answered normally n times in
+// the week before, last an hour before the burst, and was not blocked in
+// the day before.
+func usedToWork(n int) History {
+	return func(_ context.Context, _, _ string, start time.Time) (Evidence, error) {
+		return Evidence{Worked: n, WorkedLast: start.Add(-time.Hour)}, nil
+	}
+}
+
 func TestBurstIsSuggested(t *testing.T) {
 	var got []Suggestion
-	d := New(func(context.Context, string, string, time.Time, time.Time) (int, error) { return 0, nil })
+	d := New(usedToWork(212))
 	done := make(chan Suggestion, 1)
 	d.OnNew(func(s Suggestion) { done <- s })
 	now := time.Now()
@@ -42,7 +51,8 @@ func TestBurstIsSuggested(t *testing.T) {
 	}
 	feed(d, "192.168.1.20", "api.app.example", "StevenBlack", now.Add(20*time.Second), 1)
 	got = d.Suggestions()
-	if len(got) != 1 || got[0].Domain != "api.app.example" || got[0].List != "StevenBlack" || got[0].Count != Threshold {
+	if len(got) != 1 || got[0].Domain != "api.app.example" || got[0].List != "StevenBlack" || got[0].Count != Threshold ||
+		got[0].Worked != 212 || got[0].WorkedLast.IsZero() {
 		t.Fatalf("suggestions = %+v", got)
 	}
 	select {
@@ -65,8 +75,42 @@ func TestBurstIsSuggested(t *testing.T) {
 	}
 }
 
-func TestSlowRetriesAreNotABurst(t *testing.T) {
+// TestBlockedAllAlongIsNotSuggested is the field report that reshaped
+// this package: Google Tag Manager, asked for on every page load, came in
+// a burst after a quiet day and was announced as a broken app. It was
+// blocked all along — it never worked — so it must never be suggested.
+func TestBlockedAllAlongIsNotSuggested(t *testing.T) {
+	d := New(usedToWork(0))
+	now := time.Now()
+	feed(d, "phone", "www.googletagmanager.com", "StevenBlack", now, Threshold*2)
+	if len(d.Suggestions()) != 0 {
+		t.Fatal("a tag blocked all along was suggested")
+	}
+	// Two answers in a week (a stray one, say) is still not "used to work".
+	d = New(usedToWork(MinWorked - 1))
+	feed(d, "phone", "www.googletagmanager.com", "StevenBlack", now, Threshold)
+	if len(d.Suggestions()) != 0 {
+		t.Fatal("suggested on too little evidence")
+	}
+}
+
+func TestNoHistoryNoSuggestion(t *testing.T) {
 	d := New(nil)
+	feed(d, "phone", "api.app.example", "StevenBlack", time.Now(), Threshold*2)
+	if len(d.Suggestions()) != 0 {
+		t.Fatal("suggested with no evidence that the name ever worked")
+	}
+	d = New(func(context.Context, string, string, time.Time) (Evidence, error) {
+		return Evidence{}, context.DeadlineExceeded
+	})
+	feed(d, "phone", "api.app.example", "StevenBlack", time.Now(), Threshold)
+	if len(d.Suggestions()) != 0 {
+		t.Fatal("suggested when the history could not be read")
+	}
+}
+
+func TestSlowRetriesAreNotABurst(t *testing.T) {
+	d := New(usedToWork(50))
 	now := time.Now()
 	for i := range Threshold * 2 {
 		d.observe(context.Background(), blocked("c", "slow.example", "StevenBlack", now.Add(time.Duration(i)*20*time.Second)))
@@ -77,11 +121,8 @@ func TestSlowRetriesAreNotABurst(t *testing.T) {
 }
 
 func TestChronicChatterIsNotSuggested(t *testing.T) {
-	d := New(func(_ context.Context, _, _ string, since, before time.Time) (int, error) {
-		if before.Sub(since) != 24*time.Hour {
-			t.Errorf("history window %v", before.Sub(since))
-		}
-		return ChronicLimit + 1, nil // It has been nagging all day
+	d := New(func(context.Context, string, string, time.Time) (Evidence, error) {
+		return Evidence{Worked: 50, Blocked: ChronicLimit + 1}, nil // Blocked and retried all day
 	})
 	now := time.Now()
 	feed(d, "tv", "ads.tracker.example", "StevenBlack", now, Threshold)
@@ -96,7 +137,7 @@ func TestChronicChatterIsNotSuggested(t *testing.T) {
 }
 
 func TestDeliberateBlocksAreIgnored(t *testing.T) {
-	d := New(nil)
+	d := New(usedToWork(50))
 	now := time.Now()
 	for _, list := range []string{"denylist", "service:tiktok", "group:Kids", "clients", "rate-limit", "firefox-doh-canary", "dnssec"} {
 		feed(d, "kid", "x.example", list, now, Threshold*2)
@@ -111,7 +152,7 @@ func TestDeliberateBlocksAreIgnored(t *testing.T) {
 }
 
 func TestDismissAndResolve(t *testing.T) {
-	d := New(nil)
+	d := New(usedToWork(50))
 	now := time.Now()
 	feed(d, "a", "one.example", "L", now, Threshold)
 	feed(d, "b", "sub.two.example", "L", now, Threshold)
@@ -129,7 +170,7 @@ func TestDismissAndResolve(t *testing.T) {
 }
 
 func TestSweepEndsOldSuggestions(t *testing.T) {
-	d := New(nil)
+	d := New(usedToWork(50))
 	now := time.Now()
 	feed(d, "a", "one.example", "L", now, Threshold)
 	d.sweep(now.Add(KeepFor + 2*time.Minute))

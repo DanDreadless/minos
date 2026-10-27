@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"minos/internal/breakage"
+	"minos/internal/clients"
 )
 
 // SetBreakage wires the "something broke" detector in (optional).
@@ -13,8 +14,10 @@ func (s *Server) SetBreakage(d *breakage.Detector) { s.breakage = d }
 
 type suggestionView struct {
 	breakage.Suggestion
-	// Device is the device's label or discovered name, when it has one.
-	Device string `json:"device,omitempty"`
+	// Device is the device's label or discovered name, when it has one;
+	// DeviceKey its page (#/device/<key>): the MAC, else the address.
+	Device    string `json:"device,omitempty"`
+	DeviceKey string `json:"device_key"`
 }
 
 // handleSuggestions lists apps that look broken by blocking: a device
@@ -25,12 +28,7 @@ func (s *Server) handleSuggestions(w http.ResponseWriter, _ *http.Request) {
 		devs := s.clients.Devices(s.store.Get())
 		for _, sg := range s.breakage.Suggestions() {
 			v := suggestionView{Suggestion: sg}
-			for _, d := range devs {
-				if d.IP == sg.Client || slices.Contains(d.IPs, sg.Client) {
-					v.Device = firstNonEmpty(d.Name, d.Hostname, d.Model)
-					break
-				}
-			}
+			v.Device, v.DeviceKey = deviceOf(devs, sg.Client)
 			out = append(out, v)
 		}
 	}
@@ -51,6 +49,21 @@ func (s *Server) handleDismissSuggestion(w http.ResponseWriter, r *http.Request)
 		s.breakage.Dismiss(body.Client, body.Domain)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "dismissed"})
+}
+
+// deviceOf names the device using ip, and gives its page key: the MAC
+// when known, else the primary address (the address itself if unknown).
+func deviceOf(devs []clients.Device, ip string) (name, key string) {
+	for _, d := range devs {
+		if d.IP == ip || slices.Contains(d.IPs, ip) {
+			key = d.IP
+			if d.MAC != "" {
+				key = d.MAC
+			}
+			return firstNonEmpty(d.Name, d.Hostname, d.Model), key
+		}
+	}
+	return "", ip
 }
 
 func firstNonEmpty(vals ...string) string {

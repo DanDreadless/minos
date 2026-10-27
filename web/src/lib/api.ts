@@ -59,6 +59,9 @@ export interface LogEntry {
 export interface Suggestion {
   client: string;
   device?: string;
+  device_key: string; // For deviceHref
+  worked: number; // Normal answers in the week before
+  worked_last: string;
   domain: string;
   list: string;
   rule?: string;
@@ -72,6 +75,7 @@ export interface Threat {
   kind: 'dga' | 'tunnel' | 'known_threat';
   client: string;
   device?: string;
+  device_key: string; // For deviceHref
   domain?: string;
   list?: string;
   count: number;

@@ -37,6 +37,15 @@ func (e *Engine) Match(qname string) Result {
 	return e.matcher.Load().Match(qname)
 }
 
+// ListPaused is the list named on a lookup let through only because
+// blocking was paused — so the Query Log, and the breakage detector, can
+// tell it from one that passed on its own.
+const ListPaused = "paused"
+
+// PausedNow reports whether blocking is paused: one atomic load when it
+// is not, for the query path.
+func (e *Engine) PausedNow() bool { return e.pausedNow() }
+
 // Pause disables blocking for d. d <= 0 pauses indefinitely.
 func (e *Engine) Pause(d time.Duration) {
 	if d <= 0 {

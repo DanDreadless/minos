@@ -322,24 +322,34 @@ adds it to `threats.ignore` — never flagged again, on any device.
 
 ### `GET /api/suggestions`
 
-Apps that look broken by blocking: a device that asked for a name a
-blocklist blocks at least 15 times within two minutes, when it had not been
-doing so through the previous 24 hours (chronic tracker chatter is left out).
-Only blocks from subscribed blocklists, CNAME cloaking and rebinding
-protection count — never your own blocked domains, blocked services, group
-rules or a blocked device. A suggestion lasts an hour after its last blocked
-lookup and disappears as soon as the name is allowed.
+Apps that look broken by blocking: a device keeps retrying a name it used
+to reach, which a blocklist has started blocking. Both must hold — at least
+15 blocked lookups of the name within two minutes, **and** at least 3
+ordinary answers for it to that device in the week before (not let through
+by an allow rule, and not while blocking was paused). Names blocked all
+along — page tags such as Google Tag Manager, ad and analytics hosts — never
+qualify, however often they are asked for; nor does a name already blocked
+and retried through the previous 24 hours. Only blocks from subscribed
+blocklists, CNAME cloaking and rebinding protection count — never your own
+blocked domains, blocked services, group rules or a blocked device. A
+suggestion lasts an hour after its last blocked lookup and disappears as
+soon as the name is allowed. Replayed on 30 days of a real home network:
+98 suggestions under the earlier rule (all trackers), 1 under this one.
 
 ```json
-[{"client": "192.168.1.20", "device": "Living room TV", "domain": "api.app.example",
-  "list": "StevenBlack", "rule": "api.app.example", "count": 42,
-  "since": "2026-10-26T14:02:11Z", "last": "2026-10-26T14:03:40Z"}]
+[{"client": "192.168.1.20", "device": "Living room TV", "device_key": "aa:bb:cc:dd:ee:ff",
+  "domain": "api.app.example", "list": "StevenBlack", "rule": "api.app.example", "count": 42,
+  "since": "2026-10-26T14:02:11Z", "last": "2026-10-26T14:03:40Z",
+  "worked": 212, "worked_last": "2026-10-26T09:14:02Z"}]
 ```
+
+`device_key` opens the device page (`#/device/<key>`); `worked` and
+`worked_last` are the evidence that the name used to work.
 
 ### `POST /api/suggestions/dismiss`
 
 `{"client": "192.168.1.20", "domain": "api.app.example"}` hides that
-suggestion and keeps the pair quiet for 24 hours. A new suggestion is also
+suggestion and keeps the pair quiet for a week. A new suggestion is also
 sent as a notification of type `breakage_suspected` (mutable like the rest).
 
 ### Temporary allows

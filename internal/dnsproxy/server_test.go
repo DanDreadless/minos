@@ -338,3 +338,33 @@ func TestBindRetriesEphemeralTCPCollision(t *testing.T) {
 		t.Errorf("fixed port: err=%v after %d attempts, want an error after exactly 1", err, calls)
 	}
 }
+
+// TestPausedLookupsAreMarked: while blocking is paused, a name a list would
+// block is answered and logged as allowed by "paused", naming the rule — so
+// it is never mistaken for a name that works on its own. Names no list
+// blocks stay unmarked.
+func TestPausedLookupsAreMarked(t *testing.T) {
+	srv, qlog := startProxy(t, "zero_ip", "ads.example.com")
+	srv.engine.Pause(time.Minute)
+	defer srv.engine.Resume()
+
+	for _, name := range []string{"ads.example.com", "plain.example.org"} {
+		if resp := query(t, srv.UDPAddr().String(), name, dns.TypeA); resp.Rcode != dns.RcodeSuccess || len(resp.Answer) != 1 {
+			t.Fatalf("%s while paused: rcode=%s answers=%d", name, dns.RcodeToString[resp.Rcode], len(resp.Answer))
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for len(qlog.Recent(0)) < 2 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	got := map[string]querylog.Entry{}
+	for _, e := range qlog.Recent(0) {
+		got[e.QName] = e
+	}
+	if e := got["ads.example.com"]; e.Verdict != querylog.VerdictAllowed || e.List != filter.ListPaused || e.Rule != "testlist: ads.example.com" {
+		t.Errorf("paused block logged as %+v", e)
+	}
+	if e := got["plain.example.org"]; e.Verdict != querylog.VerdictAllowed || e.List != "" {
+		t.Errorf("unblocked name logged as %+v", e)
+	}
+}

@@ -1,6 +1,7 @@
 package querylog
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -558,4 +559,71 @@ func TestClientsSummaryScanIsCovering(t *testing.T) {
 	if !covering {
 		t.Error("hydration scan is not covering — it will read the table for every row")
 	}
+}
+
+// seedWorked: three ordinary answers for the device, plus answers that
+// must not count as "it worked" — let through while paused, by an allow
+// rule, for another device, outside the window — and a block.
+func seedWorked(t *testing.T, l *Log) {
+	t.Helper()
+	now := time.Now()
+	// Outside the window (recorded first: the ring is in time order).
+	l.Record(Entry{Time: now.Add(-9 * 24 * time.Hour), Client: "10.0.0.1", QName: "api.app.example", Verdict: VerdictAllowed})
+	for i, e := range []Entry{
+		{Client: "10.0.0.1", Verdict: VerdictAllowed},
+		{Client: "10.0.0.1", Verdict: VerdictAllowed},
+		{Client: "10.0.0.1", Verdict: VerdictAllowed},
+		{Client: "10.0.0.1", Verdict: VerdictAllowed, List: "paused"},
+		{Client: "10.0.0.1", Verdict: VerdictAllowed, List: "allowlist"},
+		{Client: "10.0.0.2", Verdict: VerdictAllowed},
+		{Client: "10.0.0.1", Verdict: VerdictBlocked, List: "hagezi"},
+	} {
+		e.QName = "api.app.example"
+		e.Time = now.Add(-time.Duration(60-i) * time.Minute)
+		l.Record(e)
+	}
+	drain(t, l, 8)
+}
+
+func assertWorked(t *testing.T, l *Log) {
+	t.Helper()
+	now := time.Now()
+	n, last, err := l.AllowedBefore(context.Background(), "10.0.0.1", "api.app.example", now.Add(-7*24*time.Hour), now, 100)
+	if err != nil || n != 3 || now.Sub(last) < 57*time.Minute || now.Sub(last) > 59*time.Minute {
+		t.Errorf("AllowedBefore = %d, %v ago, %v; want 3, 58m ago", n, now.Sub(last), err)
+	}
+	if n, _, _ := l.AllowedBefore(context.Background(), "10.0.0.1", "api.app.example", now.Add(-7*24*time.Hour), now, 2); n != 2 {
+		t.Errorf("limit not applied: %d", n)
+	}
+	if n, last, _ := l.AllowedBefore(context.Background(), "10.0.0.1", "never.example", now.Add(-time.Hour), now, 100); n != 0 || !last.IsZero() {
+		t.Errorf("unknown name: %d %v", n, last)
+	}
+}
+
+func TestAllowedBeforeFromRing(t *testing.T) {
+	l, err := Open(Options{RingSize: 100, Ephemeral: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	seedWorked(t, l)
+	assertWorked(t, l)
+}
+
+func TestAllowedBeforeFromSQLite(t *testing.T) {
+	path := t.TempDir() + "/q.db"
+	l, err := Open(Options{RingSize: 100, DBPath: path, RetentionDays: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedWorked(t, l)
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(Options{RingSize: 100, DBPath: path, RetentionDays: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	assertWorked(t, reopened)
 }

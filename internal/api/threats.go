@@ -16,8 +16,10 @@ func (s *Server) SetThreats(d *threats.Detector) { s.threats = d }
 
 type threatView struct {
 	threats.Finding
-	// Device is the device's label or discovered name, when it has one.
-	Device string `json:"device,omitempty"`
+	// Device is the device's label or discovered name, when it has one;
+	// DeviceKey its page (#/device/<key>): the MAC, else the address.
+	Device    string `json:"device,omitempty"`
+	DeviceKey string `json:"device_key"`
 }
 
 // handleThreats lists devices behaving like malware. Empty when none (or no
@@ -28,12 +30,7 @@ func (s *Server) handleThreats(w http.ResponseWriter, _ *http.Request) {
 		devs := s.clients.Devices(s.store.Get())
 		for _, f := range s.threats.Findings() {
 			v := threatView{Finding: f}
-			for _, d := range devs {
-				if d.IP == f.Client || slices.Contains(d.IPs, f.Client) {
-					v.Device = firstNonEmpty(d.Name, d.Hostname, d.Model)
-					break
-				}
-			}
+			v.Device, v.DeviceKey = deviceOf(devs, f.Client)
 			out = append(out, v)
 		}
 	}

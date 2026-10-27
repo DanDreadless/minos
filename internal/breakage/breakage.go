@@ -1,9 +1,15 @@
-// Package breakage spots apps that blocking has probably broken. When a
-// lookup is blocked and the app needs it, the app retries — the same device
-// asks for the same blocked name dozens of times a minute. Ad and tracker
-// SDKs retry too, but they do it all day; a breakage starts suddenly. So a
-// burst counts only when the device was not already hammering that name in
-// the previous 24 hours.
+// Package breakage spots apps that blocking has probably broken: a device
+// retrying a name it used to reach, which a blocklist has started blocking.
+//
+// Two things must both be true. The device is retrying — the same blocked
+// name dozens of times in a couple of minutes. And the name used to work
+// for it: answered normally (no allow rule, blocking not paused) at least
+// MinWorked times in the week before. The second test is what separates a
+// broken app from page tags and trackers: Google Tag Manager is asked for
+// on every page load and so arrives in bursts too, but it was blocked all
+// along — it never "worked" — so it is never suggested. (The first version
+// asked only that the device hadn't been hammering the name the day
+// before, and alerted on exactly that kind of tag after a quiet day.)
 //
 // It reads the query-log stream in its own goroutine: nothing here runs on
 // the query path. Blocks the user chose on purpose (their own blocked
@@ -29,13 +35,20 @@ var (
 	Window    = 2 * time.Minute
 	Threshold = 15
 	// ChronicLimit: more blocked lookups than this of the same name by the
-	// same device in the 24 hours before the burst means chatter, not
-	// breakage.
+	// same device in the 24 hours before the burst means it has been blocked
+	// and retried for a day already — chatter, not a fresh breakage.
 	ChronicLimit = 3 * Threshold
+	// MinWorked and WorkedWindow: the name must have been answered normally
+	// for the device at least MinWorked times in the WorkedWindow before the
+	// burst.
+	MinWorked    = 3
+	WorkedWindow = 7 * 24 * time.Hour
 	// KeepFor is how long a suggestion stays after its last blocked lookup.
 	KeepFor = time.Hour
-	// QuietFor is how long a dismissed or chronic pair is not suggested.
-	QuietFor = 24 * time.Hour
+	// QuietFor is how long a pair that failed the evidence test is left
+	// alone; DismissFor how long one the user said is not broken is.
+	QuietFor   = 24 * time.Hour
+	DismissFor = 7 * 24 * time.Hour
 )
 
 // maxTracked bounds the burst table; past it, the oldest pairs are dropped.
@@ -50,11 +63,27 @@ type Suggestion struct {
 	Count  int       `json:"count"` // Blocked lookups since the burst began
 	Since  time.Time `json:"since"`
 	Last   time.Time `json:"last"`
+	// Worked is how often the name was answered normally for the device in
+	// the week before (capped at WorkedCap), and WorkedLast the latest time.
+	Worked     int       `json:"worked"`
+	WorkedLast time.Time `json:"worked_last"`
 }
 
-// History counts a device's blocked lookups of domain in [since, before).
-// The query log answers it; nil (ephemeral mode) skips the chronic check.
-type History func(ctx context.Context, client, domain string, since, before time.Time) (int, error)
+// WorkedCap bounds the "used to work" count the history is asked for.
+const WorkedCap = 1000
+
+// Evidence is what the query log says about a device and a name before a
+// burst.
+type Evidence struct {
+	// Blocked: blocked lookups in the 24 hours before (up to ChronicLimit+1).
+	Blocked int
+	// Worked and WorkedLast: normal answers in the WorkedWindow before.
+	Worked     int
+	WorkedLast time.Time
+}
+
+// History gathers the Evidence for a burst that began at start.
+type History func(ctx context.Context, client, domain string, start time.Time) (Evidence, error)
 
 type key struct{ client, domain string }
 
@@ -76,7 +105,8 @@ type Detector struct {
 	pending map[key]bool      // Chronic check in flight
 }
 
-// New returns a detector; history may be nil.
+// New returns a detector. Without a history nothing is ever suggested:
+// a burst alone is not evidence of breakage.
 func New(history History) *Detector {
 	return &Detector{
 		history: history,
@@ -165,28 +195,35 @@ func (d *Detector) observe(ctx context.Context, e querylog.Entry) {
 	s := Suggestion{Client: e.Client, Domain: e.QName, List: b.list, Rule: b.rule,
 		Count: len(b.hits), Since: b.hits[0], Last: e.Time}
 	if d.history == nil {
-		d.raise(k, s)
+		d.quiet[k] = e.Time.Add(QuietFor)
+		delete(d.bursts, k)
 		return
 	}
-	// The chronic check reads the query log: off the lock, in its own
+	// The evidence comes from the query log: off the lock, in its own
 	// goroutine, so the stream keeps flowing.
 	d.pending[k] = true
-	go d.checkChronic(ctx, k, s)
+	go d.check(ctx, k, s)
 }
 
-func (d *Detector) checkChronic(ctx context.Context, k key, s Suggestion) {
-	n, err := d.history(ctx, k.client, k.domain, s.Since.Add(-24*time.Hour), s.Since)
+// check asks the query log whether the name used to work for the device
+// and isn't long-standing chatter, and suggests it only if both hold.
+func (d *Detector) check(ctx context.Context, k key, s Suggestion) {
+	ev, err := d.history(ctx, k.client, k.domain, s.Since)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	delete(d.pending, k)
 	switch {
 	case err != nil:
-		slog.Debug("breakage: history check failed; suggesting anyway", "err", err)
-		d.raise(k, s)
-	case n > ChronicLimit:
-		d.quiet[k] = s.Last.Add(QuietFor) // Chatter: leave it be for a day
+		// No evidence, no alert; the next burst asks again.
+		slog.Debug("breakage: history check failed", "err", err)
+		delete(d.bursts, k)
+	case ev.Worked < MinWorked || ev.Blocked > ChronicLimit:
+		// Never worked (a tag or tracker blocked all along), or blocked and
+		// retried for a day already: leave the pair be for a day.
+		d.quiet[k] = s.Last.Add(QuietFor)
 		delete(d.bursts, k)
 	default:
+		s.Worked, s.WorkedLast = ev.Worked, ev.WorkedLast
 		d.raise(k, s)
 	}
 }
@@ -248,7 +285,7 @@ func (d *Detector) Suggestions() []Suggestion {
 	return out
 }
 
-// Dismiss hides a suggestion and stops it returning for QuietFor.
+// Dismiss hides a suggestion and stops it returning for DismissFor.
 func (d *Detector) Dismiss(client, domain string) bool {
 	k := key{client, domain}
 	d.mu.Lock()
@@ -256,7 +293,7 @@ func (d *Detector) Dismiss(client, domain string) bool {
 	_, ok := d.active[k]
 	delete(d.active, k)
 	delete(d.bursts, k)
-	d.quiet[k] = time.Now().Add(QuietFor)
+	d.quiet[k] = time.Now().Add(DismissFor)
 	return ok
 }
 

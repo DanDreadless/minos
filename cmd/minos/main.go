@@ -261,17 +261,27 @@ func serve(args []string) error {
 	})
 	apiSrv.SetNotifier(notifier)
 	// "Something broke" suggestions: read off the query-log stream, so the
-	// query path never pays; the chronic check asks the log's history.
-	broken := breakage.New(func(ctx context.Context, client, domain string, since, before time.Time) (int, error) {
+	// query path never pays. The evidence — did the name use to work for
+	// the device, and has it been blocked and retried all day already —
+	// comes from the log's history, asked only when a burst is seen.
+	broken := breakage.New(func(ctx context.Context, client, domain string, start time.Time) (breakage.Evidence, error) {
+		var ev breakage.Evidence
+		var err error
+		ev.Worked, ev.WorkedLast, err = qlog.AllowedBefore(ctx, client, domain,
+			start.Add(-breakage.WorkedWindow), start, breakage.WorkedCap)
+		if err != nil || ev.Worked < breakage.MinWorked {
+			return ev, err
+		}
 		rows, err := qlog.QueryHistory(ctx, querylog.HistoryFilter{
-			Domain: domain, Clients: []string{client}, Verdict: querylog.VerdictBlocked, Since: since,
-		}, breakage.ChronicLimit+1, before)
-		return len(rows), err
+			Domain: domain, Clients: []string{client}, Verdict: querylog.VerdictBlocked, Since: start.Add(-24 * time.Hour),
+		}, breakage.ChronicLimit+1, start)
+		ev.Blocked = len(rows)
+		return ev, err
 	})
 	broken.OnNew(func(s breakage.Suggestion) {
 		devs := deviceInfos(reg.Devices(store.Get()), []string{s.Client})
 		if len(devs) == 1 {
-			notifier.Publish(notify.BreakageEvent(devs[0], s.Domain, s.List, s.Count))
+			notifier.Publish(notify.BreakageEvent(devs[0], s.Domain, s.List, s.Count, s.Worked, s.WorkedLast))
 		}
 	})
 	entries, stopEntries := qlog.Subscribe()

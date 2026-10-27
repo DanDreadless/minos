@@ -2,8 +2,8 @@
   import { onDestroy, onMount } from 'svelte';
   import { api, type ConfigView, type ListStatus, type Status, type Suggestion, type Threat, type UpstreamHealth } from '../api';
   import { copy } from '../copy';
-  import { fmtClock } from '../format';
-  import { docketHref } from '../router';
+  import { fmtClock, fmtLogTime } from '../format';
+  import { deviceHref, docketHref } from '../router';
   import { notify, notifyError } from '../toast';
   import { bootOf, hasUnseen, logSeen } from '../logseen';
 
@@ -150,6 +150,7 @@
             <a href={docketHref({ client: t.client, domain: t.kind === 'known_threat' ? undefined : t.domain, verdict: t.kind === 'known_threat' ? 'blocked' : undefined })}
               >{copy.attention.brokenLookups}</a
             >
+            <a href={deviceHref(t.device_key)}>{copy.attention.openDevice}</a>
           </span>
           <span class="fix">
             <button title={copy.attention.threatFineHint} on:click={() => threatFine(t)}>{copy.attention.threatFine}</button>
@@ -165,8 +166,9 @@
         <li class="warn broken">
           <span class="mark" aria-hidden="true"></span>
           <span class="text">
-            {copy.attention.broken(s.device || s.client, s.domain, s.count, s.list)}
-            <a href={docketHref({ client: s.client, domain: s.domain })}>{copy.attention.brokenLookups}</a>
+            {copy.attention.brokenOn} <a href={deviceHref(s.device_key)}>{s.device || s.client}</a>:
+            {copy.attention.broken(s.domain, s.count, s.list, s.worked, fmtLogTime(s.worked_last))}
+            <a href={docketHref({ client: s.client, qname: s.domain })}>{copy.attention.brokenLookups}</a>
           </span>
           <span class="fix">
             <button class="primary" title={copy.attention.brokenAllowHint} on:click={() => allow(s, 0)}
