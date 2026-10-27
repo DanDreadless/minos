@@ -49,6 +49,7 @@ for (const s of docs) {
   lines.push(`<a id="${s.id}"></a>`, '', `## ${s.title}`, '', s.summary, '');
   for (const h of s.howto ?? []) lines.push(`- ${h}`);
   if (s.howto?.length) lines.push('');
+  for (const ex of s.examples ?? []) lines.push(`**${ex.title}**`, '', '```yaml', ex.code, '```', '');
   for (const t of s.tasks ?? []) lines.push(`**${t.q}** ${t.a}`, '');
   if (s.settings?.length) {
     lines.push('| Setting | Config key | Default | What it does | Applies |', '|---|---|---|---|---|');
