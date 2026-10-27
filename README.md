@@ -129,6 +129,11 @@ is protected, with a clear answer to "why was this blocked?" one click away.
   [Home Assistant](docs/home-assistant.md) over MQTT discovery or REST
 - Built for SD cards: query-log writes are batched, memory use is capped,
   and nothing slow ever stands between a reboot and working DNS
+- Light on a Raspberry Pi 4: about 10,000–16,000 lookups a second flat out,
+  sub-millisecond median answers, 26 MB of memory with a 200,000-rule
+  blocklist and 88 MB with 2 million — [measured, with the method](docs/benchmarks.md)
+- The installer frees port 53 for you when systemd-resolved holds it, and
+  keeps the machine's own lookups working
 - Works on a phone: every page reflows to a phone screen
 
 <p align="center">
@@ -232,6 +237,7 @@ systemd helper does the installing. Docker installs update with
 - [REST API reference](docs/api.md) — every endpoint, with examples
 - [Home Assistant](docs/home-assistant.md) — MQTT discovery (no YAML),
   REST recipes, bedtime automations, events on your phone
+- [Benchmarks](docs/benchmarks.md) — throughput, latency, memory and search times on a Pi 4, and how to reproduce them
 - [Roadmap](docs/roadmap.md) — what has shipped and what is being considered
 - [Releasing](docs/releasing.md) — for maintainers: the release flow and
   signing key

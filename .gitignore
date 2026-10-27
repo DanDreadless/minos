@@ -23,3 +23,6 @@ Thumbs.db
 
 # Claude
 .claude/
+# Local builds (go build ./cmd/minos in the repo root)
+/minos
+/minos.exe

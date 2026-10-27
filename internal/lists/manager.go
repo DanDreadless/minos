@@ -5,7 +5,9 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"minos/internal/config"
@@ -89,12 +91,22 @@ type Manager struct {
 	client      *http.Client
 	ua          string
 
-	mu      sync.Mutex
-	cached  map[string][]byte    // source name → last good raw body
-	meta    map[string]cacheMeta // source name → validators for conditional GET
-	status  map[string]*SourceStatus
-	rejects map[string]rejection // source name → body vetting refused
-	disk    *diskCache           // nil = memory only (ephemeral mode, or not configured)
+	mu sync.Mutex
+	// cached maps a source name to its last good raw body. A nil body
+	// means it is held in the disk cache instead (spilled): read back by
+	// body() at rebuild. Kept in memory it doubled a large list's cost —
+	// with 2M rules, 64 MB of text beside the 64 MB matcher (heap profile on
+	// a Pi 4). Ephemeral mode, and a body the disk cache failed to store,
+	// stay in memory.
+	cached map[string][]byte
+	lost   bool // A spilled body could not be read back this rebuild
+	// refetchingLost guards the refetch of lost bodies against recursion
+	// (EnsureFetched rebuilds) and against a second rebuild doing it too.
+	refetchingLost atomic.Bool
+	meta           map[string]cacheMeta // source name → validators for conditional GET
+	status         map[string]*SourceStatus
+	rejects        map[string]rejection // source name → body vetting refused
+	disk           *diskCache           // nil = memory only (ephemeral mode, or not configured)
 
 	refreshNow chan struct{}
 
@@ -209,12 +221,12 @@ func (m *Manager) loadFromDisk() bool {
 		if have {
 			continue
 		}
-		body, meta, ok := m.disk.load(src.URL)
+		_, meta, ok := m.disk.load(src.URL) // Read in full: the checksum is checked
 		if !ok {
 			continue
 		}
 		m.mu.Lock()
-		m.cached[src.Name] = body
+		m.cached[src.Name] = nil // On disk: read back at rebuild
 		m.meta[src.Name] = meta
 		st := m.ensureStatus(src)
 		st.LastRefresh = meta.FetchedAt
@@ -433,7 +445,7 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 		if !src.Enabled {
 			continue
 		}
-		body, ok := m.cached[src.Name]
+		body, ok := m.body(src)
 		if !ok {
 			continue
 		}
@@ -461,11 +473,26 @@ func (m *Manager) rebuild(ctx context.Context, refetch bool) {
 	audit := ab.Build()
 	m.engine.Swap(matcher)
 	m.auditEngine.Swap(audit)
+	m.mu.Lock()
+	lost := m.lost
+	m.lost = false
+	m.mu.Unlock()
+	// A rebuild briefly holds the builder's maps beside the old matcher
+	// (~2x the final size); hand that back now rather than over the next
+	// minutes, so memory falls straight back after a list change.
+	debug.FreeOSMemory()
 	slog.Info("matcher rebuilt",
 		"rules", matcher.Rules(), "allow_rules", matcher.AllowRules(),
 		"audit_rules", audit.Rules(),
 		"skipped", matcher.Skipped(), "took", time.Since(start).Round(time.Millisecond),
 		"refetched", refetch)
+	// A list whose cached copy could not be read back is fetched again now,
+	// not at the next scheduled refresh — until then it is not blocking.
+	// Once only: a disk that fails again leaves it to the schedule.
+	if lost && !refetch && m.refetchingLost.CompareAndSwap(false, true) {
+		m.EnsureFetched(ctx)
+		m.refetchingLost.Store(false)
+	}
 }
 
 // fetchConcurrency bounds parallel downloads: enough that one slow
@@ -585,4 +612,23 @@ func (s *SourceStatus) state(interval time.Duration, now time.Time) ListState {
 		return ListPending
 	}
 	return ListOK
+}
+
+// body returns a source's last good raw body: from memory, or read back
+// from the disk cache when it was spilled there. The caller holds mu. A
+// spilled body that can no longer be read (deleted, or failing its
+// checksum) is forgotten, so the next refresh fetches it again.
+func (m *Manager) body(src annotated) ([]byte, bool) {
+	b, ok := m.cached[src.Name]
+	if !ok || b != nil || m.disk == nil {
+		return b, ok
+	}
+	b, _, ok = m.disk.load(src.URL)
+	if !ok {
+		slog.Warn("cached list could not be read back; downloading it again", "list", src.Name)
+		delete(m.cached, src.Name)
+		m.lost = true
+		return nil, false
+	}
+	return b, true
 }

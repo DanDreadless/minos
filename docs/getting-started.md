@@ -71,7 +71,15 @@ it must never change. Either set a DHCP reservation on your router (easiest)
 or configure a static address on the Pi.
 
 **2. Free port 53.** Most distros run a local stub resolver that already
-occupies it:
+occupies it. The installer handles the common case itself: when
+systemd-resolved's stub listener holds port 53 it asks (or, with no
+terminal, just does it) and turns the stub off with a drop-in file, points
+`/etc/resolv.conf` at resolved's real upstream servers so the machine keeps
+resolving names, checks that it does, puts everything back if it doesn't,
+and prints the one-line undo. Anything else on port 53 — dnsmasq, Pi-hole,
+unbound — is named with what to do but never stopped for you (dnsmasq is
+often the network's DHCP server too). `MINOS_KEEP_PORT53=1` skips the step.
+By hand:
 
 ```sh
 sudo ss -lunp 'sport = :53'      # who owns port 53 right now?

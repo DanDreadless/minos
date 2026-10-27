@@ -239,3 +239,53 @@ func TestSameContentDoesNotRewriteBody(t *testing.T) {
 		t.Error("changed content did not rewrite the body file")
 	}
 }
+
+// TestBodiesLiveOnDisk: with a disk cache, list text is not kept in memory
+// (it doubled a large list's memory) — rebuilds read it back. A body that
+// can no longer be read is forgotten and downloaded again.
+func TestBodiesLiveOnDisk(t *testing.T) {
+	srv := newListServer(t, "ads.example\n")
+	dir := t.TempDir()
+	m, engine := testManager(t, srv.URL, dir)
+	startup(m)
+	m.mu.Lock()
+	b, held := m.cached["test"]
+	m.mu.Unlock()
+	if !held || b != nil {
+		t.Fatalf("held=%v, %d bytes in memory; want held on disk only", held, len(b))
+	}
+	// A rebuild (any config change) compiles from the disk copy.
+	m.rebuild(context.Background(), false)
+	if res := engine.Match("ads.example"); !res.Blocked {
+		t.Fatal("rebuild from the disk copy lost the list")
+	}
+
+	// The copy goes missing: the next rebuild downloads it again at once,
+	// rather than leaving the list out until the scheduled refresh.
+	c, _ := newDiskCache(filepath.Join(dir))
+	bp, _ := c.paths(srv.URL)
+	if err := os.Remove(bp); err != nil {
+		t.Fatal(err)
+	}
+	before := srv.bodies.Load()
+	m.rebuild(context.Background(), false)
+	if srv.bodies.Load() != before+1 {
+		t.Error("the lost list was not downloaded again")
+	}
+	if res := engine.Match("ads.example"); !res.Blocked {
+		t.Error("the list is not blocking after the re-download")
+	}
+}
+
+// Without a disk cache (ephemeral mode) bodies stay in memory.
+func TestBodiesStayInMemoryWithoutDisk(t *testing.T) {
+	srv := newListServer(t, "ads.example\n")
+	m, _ := testManager(t, srv.URL, "")
+	startup(m)
+	m.mu.Lock()
+	b := m.cached["test"]
+	m.mu.Unlock()
+	if string(b) != "ads.example\n" {
+		t.Errorf("in-memory body %q", b)
+	}
+}

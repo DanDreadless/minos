@@ -36,7 +36,9 @@ import (
 	"github.com/miekg/dns"
 )
 
-const listSize = 200_000
+// listSize is how many names the served list holds (-size); the load
+// draws its blocked names from them.
+var listSize = 200_000
 
 func blockedName(i int) string { return fmt.Sprintf("ad%d.tracker%d.test", i, i%997) }
 
@@ -44,6 +46,7 @@ func main() {
 	serve := flag.Bool("serve", false, "run the stand-in upstream and list server")
 	upstream := flag.String("upstream", "127.0.0.1:25300", "stand-in upstream address (-serve)")
 	lists := flag.String("lists", "127.0.0.1:25380", "list server address (-serve)")
+	flag.IntVar(&listSize, "size", listSize, "names in the served list (-serve), and the range blocked names are drawn from")
 	target := flag.String("target", "127.0.0.1:25353", "Minos DNS address to load")
 	workers := flag.Int("workers", 32, "concurrent clients")
 	duration := flag.Duration("duration", 30*time.Second, "how long to load")
