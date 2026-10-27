@@ -139,8 +139,6 @@
 
 <AttentionPanel {status} {diskLow} dnssecBlind={dnssecUpstreamBlind} />
 
-<WeeklySummary />
-
 <div class="window" role="group" aria-label={copy.dashboard.windowLabel}>
   <span>{copy.dashboard.windowLabel}</span>
   {#each windows as w (w.hours)}
@@ -269,6 +267,9 @@
     {/if}
   </section>
 
+  <!-- DNSSEC (when validation is on) and the weekly summary share a row;
+       without DNSSEC the summary takes it alone. -->
+  <div class="columns pair">
   {#if dnssec}
     <section class="card dnssec">
       <h2>
@@ -354,6 +355,8 @@
       </dl>
     </section>
   {/if}
+  <WeeklySummary />
+  </div>
 
   <section class="columns">
     <div class="card">
@@ -474,8 +477,13 @@
     font-style: italic;
   }
 
-  .dnssec {
-    margin-top: 1.25rem;
+  /* The row's grid spaces it; cards keep their natural height. */
+  .pair {
+    align-items: start;
+  }
+
+  .pair > :global(section.card) {
+    margin: 0;
   }
 
   /* Amber, matching the would-block badge in the Query Log: the same idea
