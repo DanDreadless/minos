@@ -66,6 +66,7 @@ func TestCNAMECloakingIsBlocked(t *testing.T) {
 			t.Fatalf("answer %d: the cloaked tracker was not blocked: %v", i, resp.Answer)
 		}
 	}
+	waitEntries(t, srv.qlog, 2) // Recorded asynchronously: a slow CI runner found it empty
 	e := srv.qlog.Recent(1)[0]
 	if e.List != "testlist" || !strings.Contains(e.Rule, "via CNAME shop.tracker.example") {
 		t.Errorf("logged as list %q rule %q", e.List, e.Rule)
