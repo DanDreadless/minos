@@ -477,11 +477,8 @@
     font-style: italic;
   }
 
-  /* The row's grid spaces it; cards keep their natural height. */
-  .pair {
-    align-items: start;
-  }
-
+  /* The row's grid spaces it and stretches both cards to the taller one's
+     height, so DNSSEC and the weekly summary line up as a pair. */
   .pair > :global(section.card) {
     margin: 0;
   }

@@ -101,6 +101,12 @@
 </section>
 
 <style>
+  /* Matches the dashboard's card subtitles (the DNSSEC card beside it). */
+  h2 small {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+
   ul {
     margin: 0;
     padding-left: 1.1rem;
