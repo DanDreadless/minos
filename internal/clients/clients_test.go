@@ -606,3 +606,55 @@ func BenchmarkPolicyFor(b *testing.B) {
 		_ = r.PolicyFor("10.0.0.10")
 	}
 }
+
+func TestDeviceRulesFollowMACAndStandAlone(t *testing.T) {
+	cfg := config.Default()
+	cfg.Groups = []config.Group{{Name: "kids", Mode: "filter", Denylist: []string{"games.example"},
+		Schedule: &config.Schedule{Start: "21:00", End: "07:00"}}}
+	cfg.Clients = []config.Client{
+		// Rules with no group: the device still needs a policy entry.
+		{IP: "192.168.1.10", MAC: "aa:bb:cc:00:11:22", Allowlist: []string{"shop.example"},
+			Denylist: []string{"news.example"}, Services: []string{"youtube"}},
+		// Rules on a group member: the device's own come first.
+		{IP: "192.168.1.20", Group: "kids", Allowlist: []string{"games.example"}},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRegistry()
+	r.ApplyConfig(cfg)
+
+	p := r.PolicyFor("192.168.1.10")
+	if p == nil || p.Device == nil {
+		t.Fatalf("policy = %+v, want the device's own rules", p)
+	}
+	if res := p.Device.Match("www.shop.example"); res.Blocked || res.List != "device:aa:bb:cc:00:11:22" {
+		t.Errorf("shop = %+v, want allowed by device:aa:bb:cc:00:11:22", res)
+	}
+	if res := p.Device.Match("news.example"); !res.Blocked {
+		t.Errorf("news = %+v, want blocked", res)
+	}
+	if res := p.Device.Match("www.youtube.com"); !res.Blocked || res.List != "service:youtube" {
+		t.Errorf("youtube = %+v, want blocked by service:youtube", res)
+	}
+
+	// A new lease: once the MAC is learned the rules follow the device.
+	r.Touch("192.168.1.77", false, time.Now())
+	r.setMAC("192.168.1.77", "aa:bb:cc:00:11:22")
+	if p := r.PolicyFor("192.168.1.77"); p == nil || p.Device == nil {
+		t.Errorf("new lease policy = %+v, want the device's rules", p)
+	}
+
+	// Outside the group's schedule the group's rules lapse, the device's own
+	// do not.
+	r.rebuildPolicies(time.Date(2026, 11, 3, 12, 0, 0, 0, time.Local))
+	q := r.PolicyFor("192.168.1.20")
+	if q == nil || q.Device == nil || q.Overlay != nil {
+		t.Fatalf("midday policy = %+v, want device rules only", q)
+	}
+	r.rebuildPolicies(time.Date(2026, 11, 3, 22, 0, 0, 0, time.Local))
+	q = r.PolicyFor("192.168.1.20")
+	if q == nil || q.Device == nil || q.Overlay == nil {
+		t.Fatalf("evening policy = %+v, want device and group rules", q)
+	}
+}

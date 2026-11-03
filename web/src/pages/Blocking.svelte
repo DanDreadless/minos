@@ -2,43 +2,42 @@
   import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
   import { route } from '../lib/router';
-  import AllowBlock from './AllowBlock.svelte';
   import Blocklists from './Blocklists.svelte';
   import Privacy from './Privacy.svelte';
+  import Rules from './Rules.svelte';
+  import Services from './Services.svelte';
 
-  // Everything that decides what is blocked, in one place: the subscribed
-  // lists, what you always allow, what you always block, and the tracking
-  // companies your devices talk to (with a block by company). Each tab has
-  // its own address (#/lists, #/allowed, #/blocked, #/privacy; the old
-  // #/domains opens Allowed), so links and notification taps land on the
-  // right one.
+  // DNS Filter: everything that decides what is blocked, in one place — the
+  // subscribed lists, your own rules (for everyone, a group or a device),
+  // whole services, and the tracking companies your devices talk to. Each
+  // tab has its own address (#/lists, #/rules, #/services, #/privacy; the
+  // old #/allowed, #/blocked and #/domains open Rules), so links and
+  // notification taps land on the right one.
+
+  const tabs: { route: string; href: string; label: string }[] = [
+    { route: 'lists', href: '#/lists', label: copy.blocking.tabLists },
+    { route: 'rules', href: '#/rules', label: copy.blocking.tabRules },
+    { route: 'services', href: '#/services', label: copy.blocking.tabServices },
+    { route: 'privacy', href: '#/privacy', label: copy.blocking.tabPrivacy },
+  ];
 </script>
 
 <h1>
   {copy.nav.lists.label} <small>{copy.nav.lists.hint}</small><HelpLink
-    section={$route === 'lists' ? 'blocklists' : $route === 'privacy' ? 'privacy' : 'allowblock'}
+    section={$route === 'lists' ? 'blocklists' : $route === 'privacy' ? 'privacy' : $route === 'services' ? 'services' : 'rules'}
   />
 </h1>
 
 <div class="tabs" role="tablist">
-  <a role="tab" href="#/lists" class:active={$route === 'lists'} aria-selected={$route === 'lists'}
-    >{copy.blocking.tabLists}</a
-  >
-  <a role="tab" href="#/allowed" class:active={$route === 'allowed'} aria-selected={$route === 'allowed'}
-    >{copy.blocking.tabAllowed}</a
-  >
-  <a role="tab" href="#/blocked" class:active={$route === 'blocked'} aria-selected={$route === 'blocked'}
-    >{copy.blocking.tabBlocked}</a
-  >
-  <a role="tab" href="#/privacy" class:active={$route === 'privacy'} aria-selected={$route === 'privacy'}
-    >{copy.blocking.tabPrivacy}</a
-  >
+  {#each tabs as t (t.route)}
+    <a role="tab" href={t.href} class:active={$route === t.route} aria-selected={$route === t.route}>{t.label}</a>
+  {/each}
 </div>
 
-{#if $route === 'allowed'}
-  <AllowBlock mode="allow" />
-{:else if $route === 'blocked'}
-  <AllowBlock mode="block" />
+{#if $route === 'rules'}
+  <Rules />
+{:else if $route === 'services'}
+  <Services />
 {:else if $route === 'privacy'}
   <Privacy />
 {:else}

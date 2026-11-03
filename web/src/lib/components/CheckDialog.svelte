@@ -5,6 +5,7 @@
   import { copy } from '../copy';
   import { fmtClock } from '../format';
   import { docketHref } from '../router';
+  import { pendingRule, ruleDialog } from '../ruledialog';
   import { notify, notifyError } from '../toast';
 
   // Check a domain, from any page: paste a name or URL, see whether it is
@@ -85,14 +86,10 @@
     }
   }
 
-  async function block(d: string): Promise<void> {
-    try {
-      await api.sentence(d);
-      notify(copy.block.done(d));
-      await judge(d);
-    } catch (e) {
-      notifyError(e);
-    }
+  // Allow and Block here ask who the rule is for — everyone, a group or a
+  // device — like the buttons in the Query Log.
+  async function ruleFor(action: 'allow' | 'block', d: string): Promise<void> {
+    if (await ruleDialog({ action, domains: [d], decidedBy: checked?.list })) await judge(d);
   }
 
   function close(): void {
@@ -110,7 +107,7 @@
       ev.preventDefault();
       checkOpen.set(true);
       void focusInput();
-    } else if (ev.key === 'Escape' && $checkOpen) {
+    } else if (ev.key === 'Escape' && $checkOpen && !$pendingRule) {
       close();
     }
   }
@@ -144,17 +141,22 @@
             <button class="primary" on:click={() => checked && allow(checked.rule)}>{copy.domains.checkAllowForGood}</button>
             <button on:click={() => checked && endTemporary(checked.rule)}>{copy.domains.checkEndNow}</button>
           {:else if checked.verdict === 'blocked'}
-            <button class="primary" on:click={() => checked && allow(checked.domain)}>{copy.allow.action}</button>
+            <button class="primary" title={copy.allow.actionHint} on:click={() => checked && ruleFor('allow', checked.domain)}
+              >{copy.allow.action}…</button
+            >
             <button title={copy.allow.hourHint} on:click={() => checked && allowHour(checked.domain)}
               >{copy.allow.hourActionLong}</button
             >
           {:else}
-            <button on:click={() => checked && block(checked.domain)}>{copy.block.action}</button>
+            <button title={copy.block.actionHint} on:click={() => checked && ruleFor('block', checked.domain)}
+              >{copy.block.action}…</button
+            >
           {/if}
           <a href={docketHref({ domain: checked.domain })} on:click={close}>{copy.header.openInLog}</a>
         </div>
       </div>
     {/if}
+    <p class="hint">{copy.check.forEveryone}</p>
     <p class="hint">{copy.check.keys}</p>
   </div>
 {/if}

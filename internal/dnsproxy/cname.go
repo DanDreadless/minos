@@ -14,15 +14,23 @@ import (
 // itself, and refuses the answer when one is blocked
 // (blocking.cname_inspection, on by default).
 
-// judge is the verdict for name under the device's policy: the group's own
-// rules first (its allowed domains beat global blocks, its blocked domains
-// add to them; pausing silences both), then the global rules. The caller
+// judge is the verdict for name under the device's policy, most specific
+// rule first: the device's own rules, then its group's, then the global
+// rules. A device or group allow beats any block below it, and a device or
+// group block beats any allow below it; pausing silences both. The caller
 // handles bypass devices, which are never judged.
 func (s *Server) judge(name string, pol *clients.Policy) filter.Result {
-	if pol != nil && pol.Overlay != nil {
+	if pol != nil && (pol.Device != nil || pol.Overlay != nil) {
 		if paused, _ := s.engine.Paused(); !paused {
-			if res := pol.Overlay.Match(name); res.Rule != "" {
-				return res
+			if pol.Device != nil {
+				if res := pol.Device.Match(name); res.Rule != "" {
+					return res
+				}
+			}
+			if pol.Overlay != nil {
+				if res := pol.Overlay.Match(name); res.Rule != "" {
+					return res
+				}
 			}
 		}
 	}

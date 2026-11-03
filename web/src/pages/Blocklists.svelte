@@ -5,6 +5,7 @@
   import { confirmDialog } from '../lib/confirm';
   import ListValueReport from '../lib/components/ListValueReport.svelte';
   import { copy } from '../lib/copy';
+  import { deviceKeyNames } from '../lib/devicenames';
   import { fmtAgo, tidyDuration } from '../lib/format';
   import { docketHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
@@ -29,13 +30,17 @@
   // asynchronously, and Svelte only re-runs a template expression when a
   // variable named in it changes — read from closure, a label rendered
   // before the catalog arrived stayed the raw "service:<id>" for good.
-  function builtinLabel(name: string, services: Service[]): string {
+  function builtinLabel(name: string, services: Service[], names: Record<string, string>): string {
     if (name.startsWith('service:')) {
       const raw = name.slice('service:'.length);
       const svc = services.find((c) => c.name === raw);
       return copy.lists.statService(svc ? svc.label : raw);
     }
     if (name.startsWith('group:')) return copy.lists.statGroup(name.slice('group:'.length));
+    if (name.startsWith('device:')) {
+      const key = name.slice('device:'.length);
+      return copy.lists.statDevice(names[key.toLowerCase()] ?? key);
+    }
     if (name === 'denylist') return copy.lists.statDenylist;
     if (name === 'clients') return copy.lists.statClients;
     return name;
@@ -377,7 +382,7 @@
 {#if builtinStats.length > 0}
   <p class="builtin">
     {copy.lists.builtinStatsTitle}
-    {#each builtinStats as s, i (s.list)}{i > 0 ? ' · ' : ' '}{builtinLabel(s.list, catalog)}:
+    {#each builtinStats as s, i (s.list)}{i > 0 ? ' · ' : ' '}{builtinLabel(s.list, catalog, $deviceKeyNames)}:
       <a class="count-link" href={docketHref({ list: s.list })} title={copy.lists.blocksLinkTitle}
         >{s.count.toLocaleString()}</a
       >{/each}

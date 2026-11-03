@@ -347,6 +347,26 @@ type Client struct {
 	// model — whatever is worth remembering). Persisted in config; shown
 	// on the device page. An older binary's tolerant loader drops it.
 	Notes string `yaml:"notes,omitempty" json:"notes,omitempty"`
+	// Rules for this device alone, layered over its group's and the global
+	// rules: the most specific rule wins, so a device allow beats a group or
+	// global block and a device block beats a group or global allow. Same
+	// shapes as a group's fields (domains or /regex/ rules; catalog and
+	// custom service names in separate keys). They follow the device across
+	// address changes exactly as its group does — by MAC when it has one.
+	// An older binary drops these keys: its device-only allows end (blocked
+	// again, the safe direction) and its device-only blocks lapse.
+	Allowlist             []string `yaml:"allowlist,omitempty" json:"allowlist,omitempty"`
+	Denylist              []string `yaml:"denylist,omitempty" json:"denylist,omitempty"`
+	Services              []string `yaml:"services,omitempty" json:"services,omitempty"`
+	AllowedServices       []string `yaml:"allowed_services,omitempty" json:"allowed_services,omitempty"`
+	CustomServices        []string `yaml:"custom_services,omitempty" json:"custom_services,omitempty"`
+	AllowedCustomServices []string `yaml:"allowed_custom_services,omitempty" json:"allowed_custom_services,omitempty"`
+}
+
+// HasRules reports whether the device carries any rules of its own.
+func (cl Client) HasRules() bool {
+	return len(cl.Allowlist) > 0 || len(cl.Denylist) > 0 || len(cl.Services) > 0 ||
+		len(cl.AllowedServices) > 0 || len(cl.CustomServices) > 0 || len(cl.AllowedCustomServices) > 0
 }
 
 // ListSource is one remote list subscription. Whether its entries block or
@@ -669,7 +689,16 @@ func (c *Config) Clone() *Config {
 			out.Groups[i].Schedule = &sch
 		}
 	}
-	out.Clients = append([]Client(nil), c.Clients...)
+	out.Clients = make([]Client, len(c.Clients))
+	for i, cl := range c.Clients {
+		out.Clients[i] = cl
+		out.Clients[i].Allowlist = append([]string(nil), cl.Allowlist...)
+		out.Clients[i].Denylist = append([]string(nil), cl.Denylist...)
+		out.Clients[i].Services = append([]string(nil), cl.Services...)
+		out.Clients[i].AllowedServices = append([]string(nil), cl.AllowedServices...)
+		out.Clients[i].CustomServices = append([]string(nil), cl.CustomServices...)
+		out.Clients[i].AllowedCustomServices = append([]string(nil), cl.AllowedCustomServices...)
+	}
 	out.DNS.AllowedNetworks = append([]string(nil), c.DNS.AllowedNetworks...)
 	out.Notifications.Mute = append([]string(nil), c.Notifications.Mute...)
 	out.DNS.LocalRecords = make([]LocalRecord, len(c.DNS.LocalRecords))
@@ -1046,6 +1075,26 @@ func (c *Config) Validate() error {
 		if len(cl.Notes) > 4096 {
 			return fmt.Errorf("clients[%d].notes: must be at most 4096 characters", i)
 		}
+		for j, s := range cl.Services {
+			if !services.Exists(s) {
+				return fmt.Errorf("clients[%d].services[%d]: unknown service %q", i, j, s)
+			}
+		}
+		for j, s := range cl.AllowedServices {
+			if !services.Exists(s) {
+				return fmt.Errorf("clients[%d].allowed_services[%d]: unknown service %q", i, j, s)
+			}
+		}
+		for j, s := range cl.CustomServices {
+			if !customNames[s] {
+				return fmt.Errorf("clients[%d].custom_services[%d]: no custom service named %q", i, j, s)
+			}
+		}
+		for j, s := range cl.AllowedCustomServices {
+			if !customNames[s] {
+				return fmt.Errorf("clients[%d].allowed_custom_services[%d]: no custom service named %q", i, j, s)
+			}
+		}
 	}
 	listNames := make(map[string]bool, len(c.Lists.Sources)+len(c.Lists.AllowSources))
 	for key, sources := range map[string][]ListSource{
@@ -1220,6 +1269,9 @@ func (c *Config) encryptedDNSUpstreamWarnings() []string {
 	enabled := slices.Contains(c.Blocking.Services, "encrypted-dns")
 	for _, g := range c.Groups {
 		enabled = enabled || slices.Contains(g.Services, "encrypted-dns")
+	}
+	for _, cl := range c.Clients {
+		enabled = enabled || slices.Contains(cl.Services, "encrypted-dns")
 	}
 	if !enabled {
 		return nil

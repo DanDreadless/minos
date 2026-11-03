@@ -3,9 +3,11 @@
   import { api, openStream, type LogEntry } from '../lib/api';
   import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
-  import { deviceNames, deviceSearch } from '../lib/devicenames';
+  import { deviceKeyNames, deviceNames, deviceSearch } from '../lib/devicenames';
   import { fmtClock, fmtLogTime, fmtLogTimeFull } from '../lib/format';
   import { currentParams } from '../lib/router';
+  import { ruleDialog } from '../lib/ruledialog';
+  import { domainChoices, listText } from '../lib/rules';
   import { notify, notifyError } from '../lib/toast';
   import {
     RANGES,
@@ -291,22 +293,14 @@
     }
   }
 
-  async function pardon(domain: string): Promise<void> {
-    try {
-      await api.pardon(domain);
-      notify(copy.allow.done(domain));
-    } catch (e) {
-      notifyError(e);
-    }
+  // Allow and Block ask where the rule should apply: the device the lookup
+  // came from, its group, or everyone.
+  function pardon(e: LogEntry): void {
+    void ruleDialog({ action: 'allow', domains: domainChoices(e.qname, e.rule), client: e.client, decidedBy: e.list });
   }
 
-  async function sentence(domain: string): Promise<void> {
-    try {
-      await api.sentence(domain);
-      notify(copy.block.done(domain));
-    } catch (e) {
-      notifyError(e);
-    }
+  function sentence(e: LogEntry): void {
+    void ruleDialog({ action: 'block', domains: [e.qname], client: e.client, decidedBy: e.list });
   }
 
   async function copyDomain(domain: string): Promise<void> {
@@ -542,7 +536,7 @@
               <td><span class="badge blocked">{copy.querylog.verdictBlocked}</span></td>
               <td title="rule: {e.rule}">
                 {#if e.list}
-                  <button class="cell" on:click={() => narrow({ list: e.list })}>{e.list}</button>
+                  <button class="cell" on:click={() => narrow({ list: e.list })}>{listText(e.list, $deviceKeyNames)}</button>
                 {/if}
               </td>
             {:else}
@@ -562,7 +556,7 @@
                   <button
                     class="cell"
                     title={e.list === 'paused' ? copy.querylog.pausedTitle(e.rule ?? '') : `rule: ${e.rule}`}
-                    on:click={() => narrow({ list: e.list })}>{e.list}</button
+                    on:click={() => narrow({ list: e.list })}>{listText(e.list, $deviceKeyNames)}</button
                   >
                 {:else if e.upstream}
                   <button class="cell" title={copy.querylog.filterHint} on:click={() => narrow({ upstream: e.upstream })}
@@ -573,14 +567,14 @@
             {/if}
             <td class="actions end">
               {#if e.verdict === 'blocked'}
-                <button class="row-action" title={copy.allow.actionHint} on:click={() => pardon(e.rule ?? e.qname)}
+                <button class="row-action" title={copy.allow.actionHint} on:click={() => pardon(e)}
                   >{copy.allow.action}</button
                 >
                 <button class="row-action subtle" title={copy.allow.hourHint} on:click={() => allowHour(e.qname)}
                   >{copy.allow.hourAction}</button
                 >
               {:else}
-                <button class="row-action subtle" title={copy.block.actionHint} on:click={() => sentence(e.qname)}
+                <button class="row-action subtle" title={copy.block.actionHint} on:click={() => sentence(e)}
                   >{copy.block.action}</button
                 >
               {/if}

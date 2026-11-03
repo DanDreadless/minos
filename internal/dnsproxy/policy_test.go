@@ -95,3 +95,46 @@ func waitEntries(t *testing.T, qlog *querylog.Log, n int) {
 	}
 	t.Fatalf("query log did not receive %d entries in time", n)
 }
+
+// The most specific rule wins: a device's own allow beats its group's block
+// and a global block; its own block beats a group or global allow.
+func TestDeviceRulesBeatGroupAndGlobal(t *testing.T) {
+	srv, qlog := startProxyCfg(t, "zero_ip", func(c *config.Config) {
+		c.Blocking.Allowlist = []string{"shared.example.com"}
+		c.Groups = []config.Group{{
+			Name: "kids", Mode: "filter",
+			Denylist:  []string{"games.example.com"},
+			Allowlist: []string{"homework.example.com"},
+		}}
+		c.Clients = []config.Client{{
+			IP: "127.0.0.1", Group: "kids",
+			Allowlist: []string{"ads.example.com", "games.example.com"},
+			Denylist:  []string{"shared.example.com", "homework.example.com"},
+		}}
+	}, "ads.example.com")
+	addr := srv.UDPAddr().String()
+	sinkholed := func(name string) bool {
+		t.Helper()
+		resp := query(t, addr, name, dns.TypeA)
+		if len(resp.Answer) != 1 {
+			t.Fatalf("%s: answers = %d, want 1", name, len(resp.Answer))
+		}
+		return resp.Answer[0].(*dns.A).A.String() == "0.0.0.0"
+	}
+	for name, want := range map[string]bool{
+		"ads.example.com":      false, // device allow beats a global block
+		"games.example.com":    false, // device allow beats a group block
+		"shared.example.com":   true,  // device block beats a global allow
+		"homework.example.com": true,  // device block beats a group allow
+	} {
+		if got := sinkholed(name); got != want {
+			t.Errorf("%s blocked = %v, want %v", name, got, want)
+		}
+	}
+	waitEntries(t, qlog, 4)
+	for _, e := range qlog.Recent(4) {
+		if e.List != "device:127.0.0.1" {
+			t.Errorf("%s decided by %q, want device:127.0.0.1", e.QName, e.List)
+		}
+	}
+}

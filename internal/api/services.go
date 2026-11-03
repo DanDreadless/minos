@@ -209,6 +209,10 @@ func (s *Server) handleDeleteCustomService(w http.ResponseWriter, r *http.Reques
 			c.Groups[i].CustomServices = removeString(c.Groups[i].CustomServices, name)
 			c.Groups[i].AllowedCustomServices = removeString(c.Groups[i].AllowedCustomServices, name)
 		}
+		for i := range c.Clients {
+			c.Clients[i].CustomServices = removeString(c.Clients[i].CustomServices, name)
+			c.Clients[i].AllowedCustomServices = removeString(c.Clients[i].AllowedCustomServices, name)
+		}
 		return nil
 	})
 	if errors.Is(err, errNotFound) {

@@ -6,6 +6,8 @@ import { writable, type Readable } from 'svelte/store';
 import { api } from './api';
 
 const names = writable<Record<string, string>>({});
+// Names by device key (MAC, else IP), for the "device:<key>" rule lists.
+const keyNames = writable<Record<string, string>>({});
 // Search text per address: label and hostname, lowercased — what the
 // server's device-name search matches.
 const search = writable<Record<string, string>>({});
@@ -16,9 +18,11 @@ async function load(): Promise<void> {
   try {
     const shown: Record<string, string> = {};
     const text: Record<string, string> = {};
+    const byKey: Record<string, string> = {};
     for (const d of await api.clients()) {
       const label = (d.name ?? '').trim();
       const host = (d.hostname ?? '').trim();
+      byKey[(d.mac || d.ip).toLowerCase()] = label || host || d.ip;
       if (!label && !host) continue;
       for (const ip of d.ips?.length ? d.ips : [d.ip]) {
         shown[ip] = label || host;
@@ -27,6 +31,7 @@ async function load(): Promise<void> {
     }
     names.set(shown);
     search.set(text);
+    keyNames.set(byKey);
   } catch {
     // Names are a nicety; addresses still show.
   }
@@ -54,6 +59,9 @@ function shared<T>(store: Readable<T>): Readable<T> {
 
 // DeviceNames is the address → name map.
 export const deviceNames = shared(names);
+
+// DeviceKeyNames is the device key (lowercase MAC, else IP) → name map.
+export const deviceKeyNames = shared(keyNames);
 
 // DeviceSearch is the address → searchable text map, for matching the
 // search box against device names the way the server does.

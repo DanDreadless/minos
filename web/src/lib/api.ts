@@ -488,6 +488,17 @@ export interface Device {
   last_seen?: string;
 }
 
+// Rule is one allow or block, for everyone, one group or one device. When
+// rules disagree the most specific wins: device, then group, then everyone.
+export type RuleScope = 'everyone' | 'group' | 'device';
+export interface Rule {
+  action: 'allow' | 'block';
+  kind: 'domain' | 'service';
+  value: string; // the domain or /regex/ rule, or the service name
+  scope: RuleScope;
+  target?: string; // the group name, or the device key (MAC, else IP)
+}
+
 export interface Schedule {
   days?: string[]; // mon..sun; empty = every day
   start: string; // "HH:MM"
@@ -788,6 +799,11 @@ export const api = {
     request<ListStatus[]>('DELETE', `/api/lists/${encodeURIComponent(name)}`),
   refreshLists: () => request<ListStatus[]>('POST', '/api/lists/refresh'),
 
+  rules: () => request<Rule[]>('GET', '/api/rules'),
+  // AddRule replaces the opposite decision for the same value at the same
+  // scope. `ip` is a last-known-address hint for a device Minos cannot see.
+  addRule: (rule: Rule, ip?: string) => request<Rule[]>('POST', '/api/rules', ip ? { ...rule, ip } : rule),
+  removeRule: (rule: Rule) => request<Rule[]>('DELETE', '/api/rules', rule),
   allowlist: () => request<string[]>('GET', '/api/allowlist'),
   denylist: () => request<string[]>('GET', '/api/denylist'),
   pardon: (domain: string) => request<unknown>('POST', '/api/allowlist', { domain }),

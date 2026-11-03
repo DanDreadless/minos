@@ -42,7 +42,7 @@ export const copy = {
     dashboard: { label: 'Dashboard', hint: 'What your network is doing' },
     querylog: { label: 'Query Log', hint: 'Every lookup, live and searchable' },
     devices: { label: 'Devices', hint: 'Devices, groups & schedules' },
-    lists: { label: 'Blocking', hint: 'Blocklists, your own rules & privacy' },
+    lists: { label: 'DNS Filter', hint: 'Blocklists, rules, services & privacy' },
     settings: { label: 'Settings', hint: 'Resolvers, filtering, notifications…' },
     logs: { label: 'Logs', hint: "Minos's own activity" },
     help: { label: 'Help', hint: 'How everything works, every setting' },
@@ -298,13 +298,13 @@ export const copy = {
 
   allow: {
     action: 'Allow',
-    actionHint: 'Always allow this domain and its subdomains',
-    done: (domain: string) => `${domain} is now always allowed.`,
+    actionHint: 'Allow this domain and its subdomains — for this device, its group or everyone',
+    done: (domain: string) => `${domain} is now allowed for everyone.`,
     hourAction: '1 h',
     hourActionLong: 'Allow for 1 hour',
-    hourHint: 'Allow this domain and its subdomains for one hour, then block it again',
-    doneFor: (domain: string, until: string) => `${domain} is allowed until ${until}, then blocked again.`,
-    alreadyAlways: (domain: string) => `${domain} is already always allowed.`,
+    hourHint: 'Allow this domain and its subdomains for everyone for one hour, then block it again',
+    doneFor: (domain: string, until: string) => `${domain} is allowed for everyone until ${until}, then blocked again.`,
+    alreadyAlways: (domain: string) => `${domain} is already allowed for everyone.`,
     temporaryTitle: 'Allowed for a limited time',
     temporaryHint: 'Blocked again by themselves when the time is up',
     until: (time: string, left: string) => `Until ${time} · ${left} left`,
@@ -313,8 +313,8 @@ export const copy = {
 
   block: {
     action: 'Block',
-    actionHint: 'Always block this domain and its subdomains',
-    done: (domain: string) => `${domain} is now always blocked.`,
+    actionHint: 'Block this domain and its subdomains — for this device, its group or everyone',
+    done: (domain: string) => `${domain} is now blocked for everyone.`,
   },
 
   history: {
@@ -352,9 +352,9 @@ export const copy = {
     broken: (domain: string, count: number, list: string, worked: number, last: string) =>
       `it keeps asking for ${domain} (${count} times in a couple of minutes), which worked ${worked} times in the past week, last at ${last}, until ${list} started blocking it.`,
     brokenAllow: 'Allow',
-    brokenAllowHint: 'Always allow this domain and its subdomains',
+    brokenAllowHint: 'Allow this domain and its subdomains — for this device, its group or everyone',
     brokenHour: 'Allow 1 h',
-    brokenHourHint: 'Allow it for one hour, then block it again',
+    brokenHourHint: 'Allow it for everyone for one hour, then block it again',
     brokenDismiss: 'Dismiss',
     brokenDismissHint: 'Not broken: do not suggest this for this device for a week',
     brokenLookups: 'See lookups',
@@ -392,13 +392,89 @@ export const copy = {
     leaveMessage: 'You have unsaved changes in Settings. Leave without saving them?',
   },
 
+  rules: {
+    intro:
+      'Your own allow and block rules. Each one applies to everyone, to one group, or to one device — and when rules disagree, the most specific wins: a device rule beats its group\'s, a group rule beats one for everyone, and every rule beats the blocklists.',
+    addTitle: 'Add a rule',
+    addAction: 'Action',
+    addDomain: 'Domain',
+    addWhere: 'Applies to',
+    listTitle: 'Rules',
+    listHint: 'Domains include their subdomains. Write /pattern/ for a regex rule.',
+    empty: 'No rules yet. Add one above, or press Allow or Block on any lookup in the Query Log.',
+    emptyFiltered: 'No rules match these filters.',
+    filterAll: 'All',
+    filterAction: 'Show',
+    filterAllActions: 'Allows and blocks',
+    filterAllows: 'Allows only',
+    filterBlocks: 'Blocks only',
+    filterWho: 'For',
+    filterAnyone: 'Anyone',
+    search: 'Find a domain…',
+    colAction: 'Action',
+    colDomain: 'Domain',
+    colWho: 'Applies to',
+    allowBadge: 'Allow',
+    blockBadge: 'Block',
+    remove: (d: string) => `Remove the rule for ${d}`,
+    removed: (d: string) => `Rule for ${d} removed.`,
+    temporaryRow: (until: string) => `Allow until ${until}`,
+    everyone: 'Everyone',
+    groupsHeading: 'Groups',
+    devicesHeading: 'Devices',
+    groupBypassNote: (g: string) => `Group ${g} skips filtering, so rules for it and its devices do nothing.`,
+    loading: 'Loading devices…',
+    forEveryone: 'everyone',
+    forGroup: (g: string) => `the ${g} group`,
+    forDevice: (d: string) => d,
+    allowedDone: (domain: string, who: string) => `${domain} is now allowed for ${who}.`,
+    blockedDone: (domain: string, who: string) => `${domain} is now blocked for ${who}.`,
+    dialogAllowTitle: 'Allow a domain',
+    dialogBlockTitle: 'Block a domain',
+    dialogWhichName: 'Which name',
+    dialogMatchedRule: 'The rule that matched — covers more names',
+    dialogSubdomains: 'Subdomains are included.',
+    dialogWhere: 'For whom',
+    onlyDevice: (d: string) => `Only ${d}`,
+    everyoneInGroup: (g: string) => `Every device in the ${g} group`,
+    everyoneOnNetwork: 'Everyone on the network',
+    somewhereElse: 'A different device or group',
+    pickOne: 'Choose…',
+    dialogDeviceWins:
+      'A rule for this device decided this lookup. A device rule wins over group and network-wide rules, so choose "Only" this device to change it.',
+    dialogGroupWins:
+      "A rule for this device's group decided this lookup. A group rule wins over a network-wide one, so choose the group (or the device) to change it.",
+    dialogNoMAC: (ip: string) =>
+      `Minos cannot see this device's hardware (MAC) address, so the rule follows its address, ${ip}. If the router gives it a different address, the rule stays with the old one.`,
+    dialogGroupMode: (g: string, mode: string) =>
+      mode === 'bypass'
+        ? `The ${g} group skips filtering, so this rule does nothing while the device stays in it.`
+        : `The ${g} group refuses all lookups, so this rule does nothing while the device stays in it.`,
+    dialogGroupSchedule: (g: string) => `The ${g} group has a schedule: its rules apply only while it is active.`,
+    deviceTitle: 'Rules for this device',
+    deviceHint: 'Allow or block a domain for this device alone',
+    deviceFollows: 'These rules follow the device when its address changes, because Minos knows its hardware address.',
+    deviceNoMAC: (ip: string) =>
+      `Minos cannot see this device's hardware address, so its rules are tied to ${ip}. If its address changes, they stay with the old one.`,
+    deviceEmpty: 'No rules for this device alone.',
+    deviceInherited: (g: string) => `From the ${g} group`,
+    deviceGroupLink: (g: string) => `Rules for the ${g} group`,
+    deviceServicesLink: 'Services for this device',
+    serviceTag: 'Service',
+    deviceAllRules: 'All rules',
+    groupSummary: (domains: number, services: number) =>
+      `${domains} domain rule${domains === 1 ? '' : 's'} · ${services} service${services === 1 ? '' : 's'}`,
+    groupDomainsLink: 'Domain rules',
+    groupServicesLink: 'Services',
+  },
+
   blocking: {
     tabLists: 'Blocklists',
-    tabAllowed: 'Allowed',
-    tabBlocked: 'Blocked',
+    tabRules: 'Rules',
+    tabServices: 'Services',
     tabPrivacy: 'Privacy',
-    allowIntro: 'Domains and services you always allow, whatever the blocklists say.',
-    blockIntro: 'Domains and services you always block, on top of the blocklists.',
+    servicesIntro:
+      'Block or allow a whole service — every domain it uses — for everyone, a group or one device. As with rules, the most specific choice wins.',
     allowServicesHint:
       'Always allow every domain a service uses — the quick fix when a blocklist breaks an app (streaming playback and sign-in hosts included)',
     blockServicesHint: 'Block every domain a service uses, in one move',
@@ -411,6 +487,8 @@ export const copy = {
   check: {
     placeholder: 'example.com, or paste a link',
     keys: 'Ctrl+K (⌘K on a Mac) opens this from any page. Esc closes it.',
+    forEveryone:
+      'This shows the answer for a device with no rules of its own. Devices and groups with their own rules may get a different one — the Query Log shows what each device really got.',
   },
 
   header: {
@@ -468,9 +546,9 @@ export const copy = {
     addTitle: 'Add a list',
     allowBadge: 'Allowlist',
     allowBadgeTitle:
-      'Every entry on this list is always allowed, even if a blocklist has it.',
+      'Every entry on this list is allowed for everyone, even if a blocklist has it. A block rule for a device or group still wins.',
     actionBlock: 'Blocklist — entries are blocked',
-    actionAllow: 'Allowlist — entries are always allowed',
+    actionAllow: 'Allowlist — entries are allowed for everyone',
     confirmDelete: (name: string) =>
       `Remove the list "${name}"? Its rules stop applying immediately.`,
     auditHeader: 'Audit',
@@ -485,10 +563,11 @@ export const copy = {
       'No queries matched this list in the last 7 days. It may still be a quiet safety net — security lists often are.',
     allowStatTitle: 'An allowlist only allows; it never blocks.',
     builtinStatsTitle: 'Blocked by your own rules this week:',
-    statDenylist: 'Your blocked domains',
+    statDenylist: 'Your blocks for everyone',
     statClients: 'Device blocks',
     statService: (label: string) => `Service ${label}`,
     statGroup: (name: string) => `Group ${name}`,
+    statDevice: (name: string) => `Rules for ${name}`,
     statusHeader: 'Status',
     // One plain label per server-side list state. `age` is how old the copy
     // in force is ("3 hours ago"). Every label says whether the list is
@@ -595,9 +674,9 @@ export const copy = {
     customEdit: 'Edit',
     customEditing: (label: string) => `Editing "${label}"`,
     customSharedNote:
-      'Custom services are shared: the same bundle can be blocked or allowed above, and used by any group.',
+      'Custom services are shared: the same bundle can be blocked or allowed for everyone, any group or any device.',
     customConfirmDelete: (label: string) =>
-      `Remove the custom service "${label}"? Anything blocking or allowing it — above or in any group — stops applying immediately.`,
+      `Remove the custom service "${label}"? Anything blocking or allowing it — for everyone, a group or a device — stops applying immediately.`,
   },
 
   domains: {
@@ -618,9 +697,9 @@ export const copy = {
     servicesTitle: 'Services',
     servicesHint: 'Block or allow a whole service — every domain it uses — in one move',
     servicesScopeLabel: 'Services for',
-    servicesScopeGlobal: 'Everyone (global)',
+    servicesScopeGlobal: 'Everyone',
     servicesScopeNote:
-      'Choose a group to set services for just those devices — a group can also carry a schedule, on the',
+      'Choose a group or a device to set services for just those devices. Groups, and their schedules, are on the',
     servicesScopeNoteLink: 'Devices page.',
     sentencedServicesTitle: 'Blocked services',
     sentencedServicesHint: 'Blocked for the devices selected above',
@@ -679,15 +758,10 @@ export const copy = {
     groupsTitle: 'Groups',
     groupsHint: 'Device policies — assign devices above',
     groupsEmpty: 'No groups. Devices follow the default rules until you create one.',
-    modeFilter: 'Filter — default rules plus this group’s lists',
+    modeFilter: 'Filter — the normal rules plus this group’s own',
     modeBypass: 'Bypass — no filtering at all',
     modeBlock: 'Block — refuse all DNS',
     addTitle: 'Create a group',
-    extraAllow: 'Extra allowed domains',
-    extraDeny: 'Extra blocked domains',
-    groupServicesSummary: (blocked: number, allowed: number) =>
-      `Services — ${blocked} blocked, ${allowed} allowed.`,
-    groupServicesManage: 'Manage on Blocking',
     groupSafeSearch: 'Enforce Safe Search for this group',
     scheduleSummary: 'Schedule',
     scheduleOn: (start: string, end: string) => `Active ${start}–${end}`,
@@ -695,11 +769,12 @@ export const copy = {
       'The group applies only during these hours (server time); outside them its devices follow the default rules. An end before the start runs past midnight.',
     scheduleSet: 'Set schedule',
     scheduleClear: 'Remove schedule',
-    listPlaceholder: 'Comma-separated domains',
     confirmDelete: (name: string) =>
       `Delete the group "${name}"? Its devices fall back to the default rules.`,
     forget: 'Forget',
-    forgetHint: 'Remove the saved label/group for this device',
+    forgetHint: 'Remove the label, group, notes and rules saved for this device',
+    forgetConfirm: (name: string) =>
+      `Forget ${name}? Its label, group, notes and any rules for it alone are removed. The device itself keeps working with the normal rules.`,
     viewInDocket: 'See this device’s queries in the Query Log',
     activityHint: 'Show what this device queried',
     activityTotals: (total: number, blocked: number) =>

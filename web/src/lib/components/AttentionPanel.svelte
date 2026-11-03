@@ -4,6 +4,7 @@
   import { copy } from '../copy';
   import { fmtClock, fmtLogTime } from '../format';
   import { deviceHref, docketHref } from '../router';
+  import { ruleDialog } from '../ruledialog';
   import { notify, notifyError } from '../toast';
   import { bootOf, hasUnseen, logSeen } from '../logseen';
 
@@ -50,9 +51,8 @@
       if (minutes) {
         const r = await api.allowFor(s.domain, minutes);
         notify(r.until ? copy.allow.doneFor(r.domain, fmtClock(r.until)) : copy.allow.alreadyAlways(r.domain));
-      } else {
-        await api.pardon(s.domain);
-        notify(copy.allow.done(s.domain));
+      } else if (!(await ruleDialog({ action: 'allow', domains: [s.domain], client: s.client, decidedBy: s.list }))) {
+        return; // the dialog was closed without allowing
       }
       suggestions = suggestions.filter((x) => x.domain !== s.domain);
     } catch (e) {
@@ -172,7 +172,7 @@
           </span>
           <span class="fix">
             <button class="primary" title={copy.attention.brokenAllowHint} on:click={() => allow(s, 0)}
-              >{copy.attention.brokenAllow}</button
+              >{copy.attention.brokenAllow}…</button
             >
             <button title={copy.attention.brokenHourHint} on:click={() => allow(s, 60)}>{copy.attention.brokenHour}</button>
             <button class="link" title={copy.attention.brokenDismissHint} on:click={() => dismiss(s)}
