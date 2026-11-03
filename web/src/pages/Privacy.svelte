@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Blocking → Privacy: the tracking companies the whole network talks to.
+  // DNS Filter → Privacy: the tracking companies the whole network talks to.
   import PrivacyReport from '../lib/components/PrivacyReport.svelte';
   import { copy } from '../lib/copy';
 </script>

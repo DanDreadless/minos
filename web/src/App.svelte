@@ -3,6 +3,7 @@
   import { api, ApiError, setToken, type Status, type UpdateInfo } from './lib/api';
   import ConfirmHost from './lib/components/ConfirmHost.svelte';
   import CheckDialog from './lib/components/CheckDialog.svelte';
+  import RuleDialog from './lib/components/RuleDialog.svelte';
   import Nav from './lib/components/Nav.svelte';
   import UpdateBanner from './lib/components/UpdateBanner.svelte';
   import { copy } from './lib/copy';
@@ -190,7 +191,7 @@
         <Devices />
       {:else if $route === 'device'}
         <DevicePage />
-      {:else if $route === 'lists' || $route === 'allowed' || $route === 'blocked' || $route === 'privacy'}
+      {:else if $route === 'lists' || $route === 'rules' || $route === 'services' || $route === 'privacy'}
         <Blocking />
       {:else if $route === 'logs'}
         <Logs />
@@ -205,6 +206,7 @@
 
 <ConfirmHost />
 <CheckDialog />
+<RuleDialog />
 
 <div class="toasts" aria-live="polite">
   {#each $toasts as t (t.id)}

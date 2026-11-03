@@ -86,7 +86,7 @@ The dashboard shows a short setup checklist until the first queries arrive
 6. **Check it works.** The dashboard starts counting lookups and the
    Devices page fills up with your phones, laptops and TVs. Each lookup
    appears in the Query Log as it happens.
-7. **Choose blocklists** on Blocking → Blocklists (Balanced is a good
+7. **Choose blocklists** on DNS Filter → Blocklists (Balanced is a good
    start) and **set a password** under Settings → Access & security.
 
 **If the internet stops working**, put the router's DNS setting back to
@@ -510,7 +510,7 @@ not-blocking state also shows in the top bar.
   results are enforced by the provider itself and can't be switched off
   in the page settings. Only exact search hostnames are rewritten —
   Gmail, Maps, and other subdomains are untouched.
-- **Blocking → Blocklists** — add, enable/disable, or remove list
+- **DNS Filter → Blocklists** — add, enable/disable, or remove list
   subscriptions, refresh them on demand or set how often they update
   ("Check for updates every", default 24h), with per-list rule counts and
   fetch errors. The **Choose your blocklists** catalog offers curated,
@@ -523,29 +523,38 @@ not-blocking state also shows in the top bar.
   in **audit mode**: its rules are logged as amber "would block" entries
   in the Query Log but never enforced — subscribe to a strict list, watch a
   week of would-be blocks break nothing, then untick Audit to enforce it.
-  The one dry-run mode Pi-hole users have asked for for years. The
-  **Blocked services** card blocks a whole service
-  (TikTok, YouTube, Discord…) with one checkbox for every device. To block
-  a service only for some devices, or only at certain times, set it on a
-  **group** on the Devices page instead — a group's blocked services apply
-  to its members and obey the group's schedule.
-- **Blocking → Allowed** and **Blocking → Blocked** — your own rules,
-  which beat the blocklists: domains you always allow or always block
-  (with their subdomains), and whole services, for everyone or one group.
+  The one dry-run mode Pi-hole users have asked for for years.
+- **DNS Filter → Rules** — your own rules, firewall style, which beat the
+  blocklists: each is Allow or Block, a domain (with its subdomains), and
+  who it applies to — **everyone**, one **group**, or one **device**. When
+  rules disagree the most specific wins: a device's rule beats its group's,
+  a group's beats everyone's. So a site can be blocked for the whole house
+  and allowed on one phone, or allowed for everyone and blocked on the
+  children's tablet. Device rules follow the device across DHCP address
+  changes whenever Minos can see its MAC address (the device page says
+  whether it can). **Allow** and **Block** on a Query Log row or a device's
+  history open a dialog asking who the rule is for — only that device, its
+  group, everyone, or a different device or group — and offer the wider
+  domain that matched when there is one. Each device's page lists its own
+  rules and the ones its group adds, with a form to add more. A domain has
+  one decision per scope: blocking a domain you had allowed for the same
+  device replaces the allow.
   An entry written `/pattern/` is a **regex rule** — `/^ad[0-9]*\./`
   blocks ad1.example.com, ad22.example.net and so on — matched
   case-insensitively anywhere in the name. Regex rules also work in group
   lists and AdBlock-syntax blocklists, and Pi-hole and AdGuard Home
   imports bring theirs across. They use RE2, so a rule can never slow
   matching down catastrophically; backreferences, lookaround and Pi-hole's
-  `;querytype=` option are not supported and are skipped with a reason. The **Allowed services** card fixes a
-  streaming app a blocklist broke with one checkbox: allowing Netflix,
-  Disney+, Prime Video (or any catalog service) always allows every domain
-  it needs — including the playback and sign-in hosts on shared CDNs that
-  the blocked-services bundles deliberately leave out. An allowed domain beats any
-  blocked domain or blocklist; to allow a service only for certain devices, set
-  it on a group on the Devices page.
-- **Blocking → Privacy** — which tracking companies each device talks
+  `;querytype=` option are not supported and are skipped with a reason.
+- **DNS Filter → Services** — block or allow a whole service (TikTok,
+  YouTube, Discord…, or your own custom bundle) in one move, for everyone,
+  a group or one device, chosen under "Services for". The same
+  most-specific-wins order applies. Allowing Netflix, Disney+, Prime Video
+  (or any catalog service) allows every domain it needs — including the
+  playback and sign-in hosts on shared CDNs that the blocked-services
+  bundles deliberately leave out. A group's services obey the group's
+  schedule.
+- **DNS Filter → Privacy** — which tracking companies each device talks
   to, what got through and what your lists stopped, with a one-click block
   for a company's advertising, analytics and telemetry.
 - **Local DNS** (Settings → DNS) — names on your own network.
@@ -692,9 +701,9 @@ log like any other rule:
 - **Hardcoded DoH/DoT apps (blockable service).** The services catalog
   carries an **Encrypted DNS bypass** entry: the public DoH/DoT provider
   hostnames (Cloudflare, Google, Quad9, AdGuard, NextDNS, …) that apps and
-  smart TVs hardcode. Block it network-wide from Blocking → Blocked, or — the sharp
-  use — only for a kids' group, on that group's schedule, like any other
-  service. Devices that can't resolve `dns.google` fall back to the DNS
+  smart TVs hardcode. Block it network-wide from DNS Filter → Services, or — the sharp
+  use — only for a kids' group (on that group's schedule) or one device,
+  like any other service. Devices that can't resolve `dns.google` fall back to the DNS
   you handed them: Minos.
 
 Minos's own upstream forwarding is unaffected by all three: upstream

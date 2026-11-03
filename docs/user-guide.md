@@ -15,9 +15,10 @@ immediately. "After restart" settings live only in `minos.yaml`; restart Minos a
 - [Dashboard](#dashboard)
 - [Query Log](#querylog)
 - [Devices](#devices)
-- [Blocking → Blocklists](#blocklists)
-- [Blocking → Allowed and Blocked](#allowblock)
-- [Blocking → Privacy](#privacy)
+- [DNS Filter → Blocklists](#blocklists)
+- [DNS Filter → Rules](#rules)
+- [DNS Filter → Services](#services)
+- [DNS Filter → Privacy](#privacy)
 - [Settings → DNS: names on your network](#localdns)
 - [Logs](#logs)
 - [Home Assistant](#home-assistant)
@@ -40,7 +41,7 @@ Every time a phone, laptop, TV or smart speaker goes online, it first has to tur
 
 - A device asks Minos for a name. If the name is on one of your blocklists (lists of advertising, tracking and malware names that other people maintain), Minos answers "no such place" and the advert, tracker or malicious page simply does not load.
 - If the name is fine, Minos asks a public DNS service on the internet (called an upstream resolver — Cloudflare, Quad9 and Google run well-known ones) and passes the answer back. It remembers answers for a while, so repeat visits are faster.
-- Your own rules win over the lists: you can always allow a name a list blocks, or block one no list does.
+- Your own rules win over the lists: you can allow a name a list blocks, or block one no list does — for everyone, for a group of devices, or for one device.
 - Because it works at the network level, Minos also covers devices you cannot install an ad blocker on — smart TVs, games consoles, voice assistants, apps.
 - Minos keeps a log of every lookup (the Query Log), so you can see what each device is doing, and why anything was blocked.
 - Minos cannot block adverts that come from the same place as the content (YouTube video adverts, for example, come from YouTube itself), and it cannot see what you do on a site — only which names your devices look up.
@@ -56,9 +57,9 @@ From installed to protecting your whole home in a few steps. You only need to ch
 - 2 — Tell your router to hand out Minos as the DNS server. Open your router's settings (its address is usually on a sticker on the router, such as 192.168.1.1, or in its phone app) and look under LAN, DHCP or Network for a setting called DNS server, primary DNS or similar. Enter Minos's address there and save. Leave the second DNS box empty or put Minos's address in it again — a public DNS service there would let devices go around Minos at random. Some mesh systems call this Advanced → DNS.
 - 3 — Let devices pick up the change. Each device learns the new DNS server when it next joins the network: turn Wi-Fi off and on, restart it, or simply wait — most do within a day.
 - 4 — Check it is working. The Dashboard starts counting lookups, and the Devices page fills with your devices. If a device does not appear after reconnecting, see the questions below.
-- 5 — Choose your blocklists on Blocking → Blocklists. Balanced is the recommended start: it blocks most adverts and tracking and rarely breaks anything.
+- 5 — Choose your blocklists on DNS Filter → Blocklists. Balanced is the recommended start: it blocks most adverts and tracking and rarely breaks anything.
 - 6 — Set a password (Settings → Access & security), so only you can change Minos.
-- 7 — Use your devices normally for a day. If something stops working, open the Query Log, find the blocked lookup at that time and press Allow. The dashboard also points out when a device keeps retrying something that blocking has broken.
+- 7 — Use your devices normally for a day. If something stops working, open the Query Log, find the blocked lookup at that time and press Allow — you choose whether to allow it for just that device or for everyone. The dashboard also points out when a device keeps retrying something that blocking has broken.
 - Prefer not to change the router? You can instead set the DNS server on individual devices (in their Wi-Fi or network settings) to Minos's address. Only those devices are protected.
 
 **The internet stopped working after I changed the router. How do I undo it?** Go back into your router's DNS setting and set it back to automatic (or to what it was before), then reconnect your devices. Everything works as it did, without Minos. The usual cause is that the machine running Minos was off, or its address changed — check it is on and has the address you entered.
@@ -69,7 +70,7 @@ From installed to protecting your whole home in a few steps. You only need to ch
 
 **What is at the bottom of the side menu?** Whether Minos is blocking right now ("Blocking · 73k rules", "Blocking paused until 14:20", or in red "Not blocking — no blocklist rules loaded"), Pause blocking, and Check a domain (also Ctrl+K / ⌘K on any page): paste a name or URL to see whether it is blocked and why, then allow or block it. On a phone, a paused or not-blocking state also shows in the top bar.
 
-**Something broke and I think Minos blocked it.** Open the Query Log, filter by the device or type the site's name, and look for Blocked rows around the time it broke. Press Allow on the row (or use Check a domain, Ctrl+K). Allowed domains include their subdomains.
+**Something broke and I think Minos blocked it.** Open the Query Log, filter by the device or type the site's name, and look for Blocked rows around the time it broke. Press Allow on the row and choose who it is for — only that device, its group, or everyone (or use Check a domain, Ctrl+K). Allowed domains include their subdomains.
 
 **How do I turn blocking off for a moment?** Pause blocking at the bottom of the side menu: 5 or 30 minutes, an hour, until you resume, or any duration such as 2h. Device-level blocks (Devices → Block DNS) still apply while paused.
 
@@ -139,7 +140,8 @@ Every DNS lookup your devices make — streaming live, and searchable across the
 - Any filter switches to Results: matches from the full history, newest first, with Load older.
 - Filter with the result buttons (All, Blocked, Allowed, Would block), the list menu and the time range — or click any device, domain, type, list or resolver in a row.
 - The search box takes filters as you type: blocked, allowed, would-block, client:192.168.1.5, domain:example.com (that exact name), type:AAAA, list:StevenBlack (quote names with spaces), upstream:1.1.1.1:853, dnssec:bogus, and -cdn to leave out names containing "cdn". Anything else matches domains, device addresses and device names — kitchen finds every query from the Kitchen iPad. Press / to search, Enter to apply, Esc to clear, Backspace to remove the last filter.
-- Row actions: Allow (on blocked rows) or Block (on allowed rows), 1 h (allow for an hour, then block again), Check (how the domain would be judged now) and Copy.
+- Row actions: Allow (on blocked rows) or Block (on allowed rows) — each asks whether the rule is for only that device, its group, everyone, or another device or group — 1 h (allow for everyone for an hour, then block again), Check (how the domain would be judged now) and Copy.
+- The List column names what decided a lookup: a blocklist, denylist / allowlist (your rules for everyone), group:<name> (a group's rules), device: <name> (a device's own rules), service:<name>, and so on. Click it to see every lookup it decided.
 - Export CSV or JSON downloads every match of the current filter, up to 100,000 rows.
 - The address bar keeps the filter, so a search can be bookmarked or shared.
 
@@ -158,18 +160,20 @@ Every DNS lookup your devices make — streaming live, and searchable across the
 Every device that has used Minos — phones, laptops, TVs, speakers — named where Minos could find out (it listens for the names devices give themselves, and asks your router). Groups give some devices different rules, for example stricter blocking and a bedtime for the children's tablets.
 
 - Give a device a label, put it in a group, or Block DNS to refuse all of its lookups (this applies even while blocking is paused).
-- Open a device for its page: every address it has used, what it looked up most, its full query history and notes.
-- A device is followed by its MAC address when Minos can see one, so its rules survive a new IP address from DHCP.
-- Groups: filter (your normal rules plus the group's own allowed/blocked domains and services), bypass (no filtering) or block (no DNS). A group can have a schedule — it applies only during those hours, and devices follow the normal rules outside them.
+- Open a device for its page: every address it has used, what it looked up most, its own rules (and the ones its group adds), its query history and the tracking companies it talked to — the last two scroll in their own boxes.
+- Rules for one device: add them on its page, or press Allow or Block on one of its lookups and choose "Only" this device. They beat its group's rules and everyone's.
+- A device is followed by its MAC address when Minos can see one, so its group and rules survive a new IP address from DHCP.
+- Groups: filter (your normal rules plus the group's own rules and services), bypass (no filtering) or block (no DNS). A group can have a schedule — it applies only during those hours, and devices follow the normal rules outside them; a device's own rules apply all the time. A group's rules and services are edited on DNS Filter → Rules and Services; its card links there.
+- Forget removes a device's label, group, notes and own rules; the device keeps working with the normal rules.
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
-| Devices<br><small>Devices</small> | `clients` | — | Saved labels, groups, blocks and notes for devices.<br>`ip`: The device's address (its last known one when a MAC is set).<br>`mac`: When set, the device is recognised by MAC on any address.<br>`name`: Your label for it.<br>`group`: The group it belongs to (empty: the normal rules).<br>`blocked`: Refuse all of its DNS lookups.<br>`notes`: Free text, up to 4096 characters. | at once |
-| Groups<br><small>Devices → Groups</small> | `groups` | — | Named policies for sets of devices.<br>`name`: The group's name.<br>`mode`: filter, bypass or block.<br>`allowlist`: Extra allowed domains for members.<br>`denylist`: Extra blocked domains for members.<br>`services`: Services blocked for members.<br>`allowed_services`: Services allowed for members.<br>`custom_services`: Your custom services blocked for members.<br>`allowed_custom_services`: Your custom services allowed for members.<br>`safe_search`: Enforce Safe Search for members.<br>`schedule`: When the group applies; outside it, members follow the normal rules.<br>`schedule.days`: Days as mon, tue … sun (empty: every day).<br>`schedule.start`: Start time, HH:MM server time.<br>`schedule.end`: End time; before the start means it runs past midnight. | at once |
+| Devices<br><small>Devices</small> | `clients` | — | Saved labels, groups, blocks, notes and rules for devices.<br>`ip`: The device's address (its last known one when a MAC is set).<br>`mac`: When set, the device is recognised by MAC on any address.<br>`name`: Your label for it.<br>`group`: The group it belongs to (empty: the normal rules).<br>`blocked`: Refuse all of its DNS lookups.<br>`notes`: Free text, up to 4096 characters.<br>`allowlist`: Domains (or /regex/ rules) allowed for this device alone; they beat its group's and everyone's blocks.<br>`denylist`: Domains (or /regex/ rules) blocked for this device alone; they beat its group's and everyone's allows.<br>`services`: Services blocked for this device alone.<br>`allowed_services`: Services allowed for this device alone.<br>`custom_services`: Your custom services blocked for this device alone.<br>`allowed_custom_services`: Your custom services allowed for this device alone. | at once |
+| Groups<br><small>Devices → Groups</small> | `groups` | — | Named policies for sets of devices.<br>`name`: The group's name.<br>`mode`: filter, bypass or block.<br>`allowlist`: Domains allowed for members; they beat everyone's blocks, and a member's own block beats them.<br>`denylist`: Domains blocked for members; they beat everyone's allows, and a member's own allow beats them.<br>`services`: Services blocked for members.<br>`allowed_services`: Services allowed for members.<br>`custom_services`: Your custom services blocked for members.<br>`allowed_custom_services`: Your custom services allowed for members.<br>`safe_search`: Enforce Safe Search for members.<br>`schedule`: When the group applies; outside it, members follow the normal rules.<br>`schedule.days`: Days as mon, tue … sun (empty: every day).<br>`schedule.start`: Start time, HH:MM server time.<br>`schedule.end`: End time; before the start means it runs past midnight. | at once |
 
 <a id="blocklists"></a>
 
-## Blocking → Blocklists
+## DNS Filter → Blocklists
 
 The lists Minos blocks from, downloaded and kept up to date automatically. If a list's server is down, Minos keeps blocking with the last good copy (also after a restart).
 
@@ -184,33 +188,55 @@ The lists Minos blocks from, downloaded and kept up to date automatically. If a 
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
-| Check for updates every<br><small>Blocking → Blocklists</small> | `lists.refresh_interval` | 24h | How often every list is downloaded again (minimum 5m). A list that fails is retried sooner, backing off from a minute to an hour. | at once |
-| Blocklists<br><small>Blocking → Blocklists</small> | `lists.sources` | — | Subscribed blocklists.<br>`name`: A unique name, shown in the Query Log.<br>`url`: Where it is downloaded from.<br>`format`: hosts, adblock or plain (one domain per line).<br>`enabled`: Off keeps the subscription but stops using it.<br>`audit`: Record matches as "would block" without blocking.<br>`mirrors`: Up to 5 fallback addresses, used only when the main one is gone or the copy is getting old.<br>`headers`: Extra request headers, e.g. an access key for a keyed feed. Config file only; never shown by the API and never sent to a mirror. | at once |
-| Allowlists<br><small>Blocking → Blocklists</small> | `lists.allow_sources` | — | Subscribed lists of always-allowed domains; same fields as blocklists.<br>`name`: A unique name.<br>`url`: Where it is downloaded from.<br>`format`: hosts, adblock or plain.<br>`enabled`: Off stops using it.<br>`audit`: Not allowed on allowlists (a validation error).<br>`mirrors`: Fallback addresses.<br>`headers`: Extra request headers (config file only). | at once |
+| Check for updates every<br><small>DNS Filter → Blocklists</small> | `lists.refresh_interval` | 24h | How often every list is downloaded again (minimum 5m). A list that fails is retried sooner, backing off from a minute to an hour. | at once |
+| Blocklists<br><small>DNS Filter → Blocklists</small> | `lists.sources` | — | Subscribed blocklists.<br>`name`: A unique name, shown in the Query Log.<br>`url`: Where it is downloaded from.<br>`format`: hosts, adblock or plain (one domain per line).<br>`enabled`: Off keeps the subscription but stops using it.<br>`audit`: Record matches as "would block" without blocking.<br>`mirrors`: Up to 5 fallback addresses, used only when the main one is gone or the copy is getting old.<br>`headers`: Extra request headers, e.g. an access key for a keyed feed. Config file only; never shown by the API and never sent to a mirror. | at once |
+| Allowlists<br><small>DNS Filter → Blocklists</small> | `lists.allow_sources` | — | Subscribed lists of always-allowed domains; same fields as blocklists.<br>`name`: A unique name.<br>`url`: Where it is downloaded from.<br>`format`: hosts, adblock or plain.<br>`enabled`: Off stops using it.<br>`audit`: Not allowed on allowlists (a validation error).<br>`mirrors`: Fallback addresses.<br>`headers`: Extra request headers (config file only). | at once |
 
-<a id="allowblock"></a>
+<a id="rules"></a>
 
-## Blocking → Allowed and Blocked
+## DNS Filter → Rules
 
-Your own rules, which beat the blocklists: domains you always allow or always block, and whole services (every domain an app uses) in one move.
+Your own allow and block rules, like a firewall's: each one says allow or block, which domain, and who it applies to — everyone, one group of devices, or one device. Your rules beat the blocklists, so this is where you fix something a list broke, or block something no list covers.
 
-- Allowed and Blocked are separate tabs; each has your domains (as chips — × removes one) and the services for everyone or for one group.
-- Allowed and blocked domains include their subdomains. An allowed domain beats any blocked domain or blocklist.
-- Services: block or allow a whole service — for everyone, or for one group (choose it under "Services for"). Allowing a streaming service also allows the playback and sign-in hosts it needs.
-- Your custom services: define your own bundle of domains, then block or allow it like any service.
+- Add a rule at the top: Allow or Block, the domain, and who it applies to. A domain includes its subdomains, so blocking example.com also blocks www.example.com. Write /pattern/ for a regex rule.
+- When rules disagree, the most specific one wins. A rule for a device beats a rule for its group, a group rule beats one for everyone, and any rule beats the blocklists. So you can block a site for everyone and allow it on one phone, or allow it for everyone and block it on the children's tablet.
+- Device rules follow the device when the router gives it a new address, as long as Minos can see its hardware (MAC) address — the device page says whether it can. Without one, the rule stays with the address.
+- Group rules apply to every device in the group, and only while the group is active if it has a schedule. A group set to bypass skips filtering altogether, and one set to block refuses every lookup, so rules for them (and their devices) do nothing.
+- Allow and Block on any lookup in the Query Log or a device's history ask who the rule is for: only that device, its group, everyone, or a different device or group. Check a domain does the same.
+- A domain has one decision per scope: adding Block for a domain you had allowed for the same device (or group, or everyone) replaces the allow.
+- Allow 1 h allows a domain for everyone for an hour, then blocks it again; those show in this list until they end.
+- Filter the list by allows or blocks, by who they apply to, or by domain. × removes a rule. Each device's own rules are also on its page.
+
+**I want to allow a site on one phone only.** Find a lookup of the site from that phone in the Query Log (or on the phone's page), press Allow and choose "Only" the phone. Or add the rule here with Applies to set to the phone.
+
+**I allowed a site for everyone but one device is still blocked.** Something more specific is blocking it for that device: a rule for the device, a rule for its group, or a service blocked for either. Open the device's page — its rules and its group's are listed there — or filter this list by the device.
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
-| Allowed domains<br><small>Blocking → Allowed</small> | `blocking.allowlist` | — | Always allowed, with subdomains. An entry written /pattern/ is a regex rule (case-insensitive, matched anywhere in the name): an allow regex beats any block. | at once |
-| Allowed for a limited time<br><small>Blocking → Allowed</small> | `blocking.temporary_allows` | — | Domains allowed until a time, then blocked again by themselves — "Allow for 1 hour" on a Query Log row or in Check a domain. Shown in the Query Log as allowed by temporary-allow. Up to a week; allowing a domain for good replaces its temporary allow.<br>`domain`: The domain, with subdomains.<br>`until`: When the allow ends (a timestamp, e.g. 2026-10-26T15:00:00Z). | at once |
-| Blocked domains<br><small>Blocking → Blocked</small> | `blocking.denylist` | — | Always blocked, with subdomains. An entry written /pattern/ is a regex rule, e.g. /^ad[0-9]*\./ — checked after the exact rules, so an allowed domain still wins. Regexes use RE2 (no backreferences or lookaround); up to 1000 per list. | at once |
-| Blocked services<br><small>Blocking → Allowed / Blocked → Services</small> | `blocking.services` | — | Services blocked for everyone. | at once |
-| Allowed services<br><small>Blocking → Allowed / Blocked → Services</small> | `blocking.allowed_services` | — | Services allowed for everyone; allowing beats blocking. | at once |
-| Your custom services<br><small>Blocking → Allowed / Blocked → Your custom services</small> | `blocking.custom_services` | — | Your own service bundles.<br>`name`: Its ID (derived from the label if not given).<br>`label`: Its display name.<br>`domains`: The domains it covers.<br>`allow_extra`: Extra hosts allowed only while the service is allowed.<br>`blocked`: Blocked for everyone.<br>`allowed`: Allowed for everyone. | at once |
+| Allowed domains (everyone)<br><small>DNS Filter → Rules (Applies to: Everyone)</small> | `blocking.allowlist` | — | Allowed for everyone, with subdomains. An entry written /pattern/ is a regex rule (case-insensitive, matched anywhere in the name): an allow regex beats any block of the same scope. A block rule for a group or a device still wins for that group or device. | at once |
+| Allowed for a limited time<br><small>DNS Filter → Rules</small> | `blocking.temporary_allows` | — | Domains allowed for everyone until a time, then blocked again by themselves — Allow 1 h on a Query Log row or in Check a domain. Shown in the Query Log as allowed by temporary-allow. Up to a week; allowing a domain for good replaces its temporary allow.<br>`domain`: The domain, with subdomains.<br>`until`: When the allow ends (a timestamp, e.g. 2026-10-26T15:00:00Z). | at once |
+| Blocked domains (everyone)<br><small>DNS Filter → Rules (Applies to: Everyone)</small> | `blocking.denylist` | — | Blocked for everyone, with subdomains. An entry written /pattern/ is a regex rule, e.g. /^ad[0-9]*\./ — checked after the exact rules, so an allowed domain still wins. Regexes use RE2 (no backreferences or lookaround); up to 1000 per list. | at once |
+
+<a id="services"></a>
+
+## DNS Filter → Services
+
+Block or allow a whole service — every domain an app or site uses — in one move, for everyone, one group or one device. Blocking TikTok for the children's devices, or allowing a streaming service a blocklist broke, takes one click.
+
+- Choose who under "Services for": everyone, a group or a device. Then move a service into Blocked or Allowed; move it back to undo.
+- As with rules, the most specific choice wins: a service allowed for a device beats the same service blocked for its group or for everyone. A service is either blocked or allowed for one scope, never both.
+- Allowing a streaming service also allows the playback and sign-in hosts it needs, which blocklists often catch.
+- Your custom services: define your own bundle of domains, then block or allow it like any service, for anyone.
+
+| Setting | Config key | Default | What it does | Applies |
+|---|---|---|---|---|
+| Blocked services (everyone)<br><small>DNS Filter → Services</small> | `blocking.services` | — | Services blocked for everyone. | at once |
+| Allowed services (everyone)<br><small>DNS Filter → Services</small> | `blocking.allowed_services` | — | Services allowed for everyone. | at once |
+| Your custom services<br><small>DNS Filter → Services → Your custom services</small> | `blocking.custom_services` | — | Your own service bundles.<br>`name`: Its ID (derived from the label if not given).<br>`label`: Its display name.<br>`domains`: The domains it covers.<br>`allow_extra`: Extra hosts allowed only while the service is allowed.<br>`blocked`: Blocked for everyone.<br>`allowed`: Allowed for everyone. | at once |
 
 <a id="privacy"></a>
 
-## Blocking → Privacy
+## DNS Filter → Privacy
 
 Which tracking companies your devices talked to — advertising, analytics and telemetry — what got through and what your blocklists stopped, for the whole network or one device (on its page).
 
@@ -222,7 +248,7 @@ Which tracking companies your devices talked to — advertising, analytics and t
 
 | Setting | Config key | Default | What it does | Applies |
 |---|---|---|---|---|
-| Companies whose tracking is blocked<br><small>Blocking → Privacy</small> | `blocking.companies` | none | Company IDs (from Blocking → Privacy) whose advertising, analytics and telemetry names are blocked for everyone. | at once |
+| Companies whose tracking is blocked<br><small>DNS Filter → Privacy</small> | `blocking.companies` | none | Company IDs (from DNS Filter → Privacy) whose advertising, analytics and telemetry names are blocked for everyone. | at once |
 
 <a id="localdns"></a>
 

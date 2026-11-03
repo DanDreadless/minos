@@ -41,6 +41,9 @@ type Policy struct {
 	// Overlay holds a filter-mode group's extra allow/deny domains,
 	// layered over the global matcher. Nil when the group adds none.
 	Overlay *filter.Matcher
+	// Device holds the device's own rules, consulted before the group's:
+	// the most specific rule wins. Nil when the device has none.
+	Device *filter.Matcher
 }
 
 // Refuses reports whether this device gets no DNS service at all.
@@ -259,50 +262,12 @@ func (r *Registry) rebuildPolicies(now time.Time) {
 		if g.Mode == ModeFilter {
 			p.SafeSearch = g.SafeSearch
 		}
-		if g.Mode == ModeFilter && (len(g.Allowlist) > 0 || len(g.Denylist) > 0 ||
-			len(g.Services) > 0 || len(g.AllowedServices) > 0 ||
-			len(g.CustomServices) > 0 || len(g.AllowedCustomServices) > 0) {
-			b := filter.NewBuilder()
-			list := "group:" + g.Name
-			for _, d := range g.Allowlist {
-				b.AddAllow(list, d)
-			}
-			for _, d := range g.Denylist {
-				b.AddDeny(list, d)
-			}
-			// Group-blocked services join the overlay; group pardons
-			// still beat them (allow wins at every label depth).
-			for _, name := range g.Services {
-				for _, d := range services.Domains(name) {
-					b.AddDeny("service:"+name, d)
-				}
-			}
-			// Group-pardoned services: like group allowlist entries, an
-			// overlay allow verdict short-circuits the global rules.
-			for _, name := range g.AllowedServices {
-				for _, d := range services.AllowDomains(name) {
-					b.AddAllow("service:"+name, d)
-				}
-			}
-			// Group-selected custom services resolve against the config
-			// definitions. A nil lookup is skipped defensively: validation
-			// forbids dangling names, but a hand-edited config that the
-			// tolerant loader healed must not panic a rebuild.
-			for _, name := range g.CustomServices {
-				if cs := services.FindCustom(cfg.Blocking.CustomServices, name); cs != nil {
-					for _, d := range cs.Domains {
-						b.AddDeny("service:"+name, d)
-					}
-				}
-			}
-			for _, name := range g.AllowedCustomServices {
-				if cs := services.FindCustom(cfg.Blocking.CustomServices, name); cs != nil {
-					for _, d := range services.CustomAllowDomains(cs) {
-						b.AddAllow("service:"+name, d)
-					}
-				}
-			}
-			p.Overlay = b.Build()
+		if g.Mode == ModeFilter {
+			p.Overlay = buildOverlay(cfg, "group:"+g.Name, ruleSet{
+				allow: g.Allowlist, deny: g.Denylist,
+				services: g.Services, allowedServices: g.AllowedServices,
+				custom: g.CustomServices, allowedCustom: g.AllowedCustomServices,
+			})
 		}
 		groups[g.Name] = p
 	}
@@ -315,7 +280,14 @@ func (r *Registry) rebuildPolicies(now time.Time) {
 			pol = Policy{Group: "default", Mode: ModeFilter}
 		}
 		pol.Blocked = cl.Blocked
-		if !pol.Blocked && pol.Group == "default" {
+		// The device's own rules apply whatever its group, and whether or not
+		// the group's schedule is active — they belong to the device.
+		pol.Device = buildOverlay(cfg, DeviceList(cl), ruleSet{
+			allow: cl.Allowlist, deny: cl.Denylist,
+			services: cl.Services, allowedServices: cl.AllowedServices,
+			custom: cl.CustomServices, allowedCustom: cl.AllowedCustomServices,
+		})
+		if !pol.Blocked && pol.Group == "default" && pol.Device == nil {
 			continue
 		}
 		p := pol
@@ -327,6 +299,74 @@ func (r *Registry) rebuildPolicies(now time.Time) {
 		}
 	}
 	r.policies.Store(&table)
+}
+
+// DeviceList is the pseudo-list name a device's own rules are attributed to
+// in the query log: "device:" plus the device's key (its MAC when it has
+// one, else its IP), so it stays the same when the device is renamed and the
+// interface can show the current name.
+func DeviceList(cl config.Client) string {
+	if cl.MAC != "" {
+		return "device:" + NormalizeMAC(cl.MAC)
+	}
+	return "device:" + cl.IP
+}
+
+// ruleSet is one scope's allow/block domains and services.
+type ruleSet struct {
+	allow, deny               []string
+	services, allowedServices []string
+	custom, allowedCustom     []string
+}
+
+// buildOverlay compiles a group's or a device's own rules into a matcher
+// consulted before the global one, or nil when there are none. Inside the
+// overlay allow beats block at every label depth, as everywhere else.
+func buildOverlay(cfg *config.Config, list string, rs ruleSet) *filter.Matcher {
+	if len(rs.allow)+len(rs.deny)+len(rs.services)+len(rs.allowedServices)+
+		len(rs.custom)+len(rs.allowedCustom) == 0 {
+		return nil
+	}
+	b := filter.NewBuilder()
+	for _, d := range rs.allow {
+		b.AddAllow(list, d)
+	}
+	for _, d := range rs.deny {
+		b.AddDeny(list, d)
+	}
+	// Blocked services join the overlay; allowed ones still beat them
+	// (allow wins at every label depth).
+	for _, name := range rs.services {
+		for _, d := range services.Domains(name) {
+			b.AddDeny("service:"+name, d)
+		}
+	}
+	// Allowed services: like allowed domains, an overlay allow verdict
+	// short-circuits the rules below it.
+	for _, name := range rs.allowedServices {
+		for _, d := range services.AllowDomains(name) {
+			b.AddAllow("service:"+name, d)
+		}
+	}
+	// Custom services resolve against the config definitions. A nil lookup
+	// is skipped defensively: validation forbids dangling names, but a
+	// hand-edited config that the tolerant loader healed must not panic a
+	// rebuild.
+	for _, name := range rs.custom {
+		if cs := services.FindCustom(cfg.Blocking.CustomServices, name); cs != nil {
+			for _, d := range cs.Domains {
+				b.AddDeny("service:"+name, d)
+			}
+		}
+	}
+	for _, name := range rs.allowedCustom {
+		if cs := services.FindCustom(cfg.Blocking.CustomServices, name); cs != nil {
+			for _, d := range services.CustomAllowDomains(cs) {
+				b.AddAllow("service:"+name, d)
+			}
+		}
+	}
+	return b.Build()
 }
 
 // ipsForClient lists the IPs a configured client resolves to: a MAC-less client

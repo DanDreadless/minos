@@ -49,8 +49,9 @@ state or two, where it can't be misread.
 | Always-allow entry | Allow (allowed domain)| `allowlist`              |
 | Always-block entry | Block (blocked domain)| `denylist`               |
 | Query log          | Query Log             | `querylog`               |
-| Blocklists         | Blocking → Blocklists | `lists`                  |
-| Your own rules     | Blocking → Allowed / Blocked | `allowed` / `blocked` (routes) |
+| Blocklists         | DNS Filter → Blocklists | `lists`                |
+| Your own rules     | DNS Filter → Rules (everyone / group / device) | `/api/rules`; `allowlist`/`denylist` keys |
+| Whole services     | DNS Filter → Services | `services` / `allowed_services` |
 | Pause blocking     | Pause blocking        | `pause`                  |
 | Dashboard          | Dashboard             | `dashboard`              |
 | Upstream resolvers | Upstream resolvers    | `upstreams`              |
@@ -355,6 +356,28 @@ This is security software; hold it to that standard.
   pardons beat global denies. Hot-path cost is unchanged: one sync.Map
   touch (~15ns) plus one atomic map read (~5ns), zero allocations — keep
   it that way.
+- **Rules by scope — everyone, group, device** (fixed decisions, November
+  2026, `internal/api/rules.go`): a device carries its own allow/block
+  domains and services (`clients[].allowlist/denylist/services/
+  allowed_services/custom_services/allowed_custom_services` — additive keys;
+  an older binary drops them, so device allows end and device blocks lapse).
+  They compile into `Policy.Device`, a matcher consulted **before** the
+  group overlay, which is consulted before the global engine: the most
+  specific rule wins in both directions (a device block beats a global
+  allow, a device allow beats a group block). Device rules apply whatever
+  the group's schedule; a bypass group still skips all judging and a block
+  group still refuses. Attribution is `device:<key>` (MAC else IP — stable
+  across renames; the UI shows the name), and breakage's `considered`
+  treats it as deliberate. The hot path pays one nil check when a device
+  has no rules. `/api/rules` is a **view over the existing keys**, not a
+  new store; adding a rule removes the opposite decision for the same value
+  at the same scope (one decision per scope), and a device rule creates the
+  device's config entry MAC-keyed exactly as `PUT /api/clients` does. The
+  old per-list endpoints stay for scripts and Home Assistant. Temporary
+  allows remain everyone-wide. In the UI, Blocking is **DNS Filter**
+  (Blocklists / Rules / Services / Privacy); every Allow/Block that knows
+  the device goes through `ruleDialog` (only this device / its group /
+  everyone / another), defaulting to the narrowest choice.
 - **Devices merge per physical device** (`Registry.Devices`): a device is
   keyed by MAC when known (else IP), and every IP it has used folds into
   one row — query counts summed, first/last-seen spanning them, the most

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Blocking → Blocklists: what each blocklist adds that the others don't —
+  // DNS Filter → Blocklists: what each blocklist adds that the others don't —
   // overlap, memory, and lookups only it would have blocked. Loaded on
   // request, since it reads a month of blocked lookups.
   import { api, type ListValue, type ListValueReport } from '../api';

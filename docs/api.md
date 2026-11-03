@@ -236,7 +236,8 @@ mode), so entries not yet flushed (up to 30 s) are missing.
 Blocks attributed to each list, busiest first — which lists earn their
 keep. `hours` is 1–2160 (default 168, a 7-day week). Names are whatever the
 query log's `list` field carries: subscribed list names plus the built-in
-pseudo-lists (`denylist`, `service:<name>`, `group:<name>`, `clients`).
+pseudo-lists (`denylist`, `service:<name>`, `group:<name>`,
+`device:<key>` for a device's own rules, `clients`).
 
 ```json
 {"window_hours": 168, "lists": [
@@ -484,12 +485,45 @@ blocks — those are access control.
 
 Resumes blocking. Response: `{"paused": false}`.
 
-## Allow & deny domains
+## Rules
+
+Every allow and block, for everyone, one group or one device, in one
+place. When rules disagree the most specific wins: a device's rule, then
+its group's, then everyone's, then the blocklists. Within one scope an
+allow beats a block at every depth.
+
+A rule is `{"action": "allow|block", "kind": "domain|service", "value",
+"scope": "everyone|group|device", "target"}` — `value` is a domain (or
+`/regex/` rule) or a service name (catalog or custom); `target` is the
+group name, or the device key (its MAC when Minos has seen one, else its
+IP). A device rule creates the device's saved entry if it has none, keyed
+by MAC so the rule follows it across address changes; pass `"ip"` as a
+last-known address for a device Minos cannot currently see.
+
+- `GET /api/rules` — every rule: everyone's, then each group's, then each
+  device's.
+- `POST /api/rules` — add one. Adding a rule replaces the opposite
+  decision for the same value at the same scope (allow ↔ block). 201 when
+  something changed, 200 when it was already there; 404 for an unknown
+  group or a MAC Minos has never seen; 400 otherwise. Returns every rule.
+- `DELETE /api/rules` — remove one; the rule goes in the JSON body
+  (a `/regex/` cannot travel in a path). 404 when there was no such rule.
+
+```sh
+curl -X POST -H "X-Api-Token: $T" http://minos:8080/api/rules \
+  -d '{"action":"allow","kind":"domain","value":"shop.example.com","scope":"device","target":"a4:83:e7:12:9b:01"}'
+```
+
+The endpoints below edit the same settings for one scope at a time and
+keep working.
+
+## Allow & deny domains (everyone)
 
 `GET /api/allowlist` and `GET /api/denylist` return plain string arrays.
 Add with `POST` (`{"domain": "example.com"}`); remove with
 `DELETE /api/allowlist/{domain}`. Entries cover subdomains, and allow
-always beats deny.
+always beats deny at this scope (a group's or device's own block still
+wins for it).
 
 ## Weekly summary
 
@@ -666,7 +700,7 @@ unknown `custom_services` keys whole).
   `domains`, `allow_extra`, `blocked`, `allowed`. The name is the stable
   key; renaming is not supported.
 - `DELETE /api/services/custom/{name}` — removes the definition and
-  clears it from every group's custom selections.
+  clears it from every group's and device's custom selections.
 
 Matches attribute to `service:<name>` in the query log, same as catalog
 services.
@@ -698,8 +732,9 @@ services.
   when it has one (so the assignment follows it across DHCP leases) or its
   **IP** otherwise; a MAC key resolves the device's current IP automatically,
   or accepts an `"ip"` field as a last-known-address hint when it's offline.
-- `DELETE /api/clients/{key}` — forget the saved assignment (`{key}` is the
-  MAC or IP, as above)
+- `DELETE /api/clients/{key}` — forget the saved assignment, including the
+  device's own rules (`{key}` is the MAC or IP, as above). A device's rules
+  are edited through `/api/rules` with `"scope": "device"`.
 - `GET /api/groups` / `POST /api/groups` — groups are `{name, mode:
   "filter|bypass|block", allowlist, denylist, services, allowed_services,
   custom_services, allowed_custom_services, safe_search, schedule}`;

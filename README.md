@@ -46,7 +46,7 @@ page and every word in plain terms.
   the way an app does when it has stopped working, Minos says which device,
   what changed and since when — with Allow, Allow 1 h and Dismiss. Trackers
   that were blocked all along never trigger it.
-- **See who is tracking you, and stop them by company.** Blocking → Privacy
+- **See who is tracking you, and stop them by company.** DNS Filter → Privacy
   shows which tracking companies each device talks to — what got through
   and what your lists stopped — and blocks a company's advertising,
   analytics and telemetry in one click, without breaking its own sites
@@ -78,18 +78,21 @@ page and every word in plain terms.
 
 ## Features
 
-**Blocking**
+**DNS Filter**
 
 - Hosts, plain-domain and AdBlock-syntax blocklists, with a curated catalog
   (balanced, strict, security, family) verified to compile; lists keep
   working from a local copy when their host is down, retry sensibly, refuse
   a suspiciously shrunken update, and fall back to publisher mirrors
-- Your own allowed and blocked domains, including `/regex/` rules, and
-  subscribed allowlists
+- **Firewall-style rules**: allow or block a domain (or a `/regex/` rule)
+  for everyone, a group of devices or one device; the most specific rule
+  wins, so a site can be blocked for the house and allowed on one phone.
+  Device rules follow the device to a new address. Allow and Block in the
+  Query Log ask who the rule is for. Subscribed allowlists too
 - **CNAME-cloak inspection**: a tracker hiding behind a first-party name
   (`metrics.shop.com → tracker.net`) is still blocked
-- One-click blocked services (TikTok, YouTube, Discord…) and your own
-  custom services, globally or per group
+- One-click blocked or allowed services (TikTok, YouTube, Discord…) and
+  your own custom services, for everyone, a group or one device
 - Blocked answers as `0.0.0.0`/`::` or NXDOMAIN, with Extended DNS Errors
   (RFC 8914) naming the list for clients that ask
 - Pause blocking for 5 minutes, an hour, or until you resume — from the

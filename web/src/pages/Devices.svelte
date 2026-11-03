@@ -4,7 +4,7 @@
   import { confirmDialog } from '../lib/confirm';
   import HelpLink from '../lib/components/HelpLink.svelte';
   import { copy } from '../lib/copy';
-  import { deviceHref } from '../lib/router';
+  import { deviceHref, rulesHref, servicesHref } from '../lib/router';
   import { notify, notifyError } from '../lib/toast';
 
   let devices: Device[] = [];
@@ -73,6 +73,14 @@
   }
 
   async function forget(d: Device): Promise<void> {
+    if (
+      !(await confirmDialog({
+        message: copy.devices.forgetConfirm(d.name || d.hostname || d.ip),
+        confirm: copy.devices.forget,
+        danger: true,
+      }))
+    )
+      return;
     try {
       devices = await api.deleteClient(deviceKey(d));
     } catch (e) {
@@ -82,16 +90,6 @@
 
   // --- groups ---
 
-  function domainsToText(list: string[] | null): string {
-    return (list ?? []).join(', ');
-  }
-
-  function textToDomains(text: string): string[] {
-    return text
-      .split(/[\s,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
 
   async function addGroup(): Promise<void> {
     try {
@@ -134,15 +132,19 @@
     }
   }
 
-  // Per-group service policy is edited on the Pardons & Sentences page (scoped
-  // shuttles); here we only surface the counts. These two helpers total the
-  // catalog + custom selections on each side.
-  function groupBlockedCount(g: Group): number {
-    return (g.services?.length ?? 0) + (g.custom_services?.length ?? 0);
+  // A group's rules are edited on DNS Filter → Rules and Services (each set
+  // to the group); here we only count them.
+  function groupDomainCount(g: Group): number {
+    return (g.allowlist?.length ?? 0) + (g.denylist?.length ?? 0);
   }
 
-  function groupAllowedCount(g: Group): number {
-    return (g.allowed_services?.length ?? 0) + (g.allowed_custom_services?.length ?? 0);
+  function groupServiceCount(g: Group): number {
+    return (
+      (g.services?.length ?? 0) +
+      (g.custom_services?.length ?? 0) +
+      (g.allowed_services?.length ?? 0) +
+      (g.allowed_custom_services?.length ?? 0)
+    );
   }
 
   async function setGroupMode(g: Group, ev: Event): Promise<void> {
@@ -156,26 +158,6 @@
     }
   }
 
-  function submitGroupLists(g: Group, e: Event): void {
-    const f = e.currentTarget as HTMLFormElement;
-    void saveGroupLists(
-      g,
-      (f.elements.namedItem('allow') as HTMLInputElement).value,
-      (f.elements.namedItem('deny') as HTMLInputElement).value,
-    );
-  }
-
-  async function saveGroupLists(g: Group, allowText: string, denyText: string): Promise<void> {
-    try {
-      groups = await api.updateGroup(g.name, {
-        allowlist: textToDomains(allowText),
-        denylist: textToDomains(denyText),
-      });
-      notify(`Group "${g.name}" updated.`);
-    } catch (e) {
-      notifyError(e);
-    }
-  }
 
   async function removeGroup(g: Group): Promise<void> {
     if (!(await confirmDialog({ message: copy.devices.confirmDelete(g.name), confirm: copy.confirm.deleteGroup, danger: true })))
@@ -332,19 +314,11 @@
         <button class="row-action danger" on:click={() => removeGroup(g)}>Delete</button>
       </div>
       {#if g.mode === 'filter'}
-        {@const allowText = domainsToText(g.allowlist)}
-        {@const denyText = domainsToText(g.denylist)}
-        <form class="group-lists" on:submit|preventDefault={(e) => submitGroupLists(g, e)}>
-          <label>
-            <span>{copy.devices.extraAllow}</span>
-            <input name="allow" value={allowText} placeholder={copy.devices.listPlaceholder} />
-          </label>
-          <label>
-            <span>{copy.devices.extraDeny}</span>
-            <input name="deny" value={denyText} placeholder={copy.devices.listPlaceholder} />
-          </label>
-          <button type="submit" class="primary">{copy.settings.save}</button>
-        </form>
+        <p class="group-service-summary">
+          {copy.rules.groupSummary(groupDomainCount(g), groupServiceCount(g))}
+          <a href={rulesHref(`group:${g.name}`)}>{copy.rules.groupDomainsLink}</a>
+          <a href={servicesHref(`group:${g.name}`)}>{copy.rules.groupServicesLink}</a>
+        </p>
         <label class="group-safesearch">
           <input
             type="checkbox"
@@ -353,10 +327,6 @@
           />
           {copy.devices.groupSafeSearch}
         </label>
-        <p class="group-service-summary">
-          {copy.devices.groupServicesSummary(groupBlockedCount(g), groupAllowedCount(g))}
-          <a href="#/blocked">{copy.devices.groupServicesManage}</a>
-        </p>
       {/if}
       <details class="group-schedule">
         <summary>
@@ -536,24 +506,6 @@
     max-width: 24rem;
   }
 
-  .group-lists {
-    display: flex;
-    gap: 0.8rem;
-    align-items: end;
-    flex-wrap: wrap;
-    margin-top: 0.8rem;
-  }
-
-  .group-lists label {
-    flex: 1;
-    min-width: 14rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    font-size: 0.78rem;
-    color: var(--text-dim);
-  }
-
   .add form {
     display: flex;
     gap: 0.6rem;
@@ -629,6 +581,7 @@
   }
 
   .group-service-summary a {
+    margin-left: 0.6rem;
     color: var(--accent);
     text-decoration: none;
   }

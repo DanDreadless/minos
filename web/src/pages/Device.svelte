@@ -1,11 +1,14 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { api, type ClientOverview, type Device, type Group, type LogEntry } from '../lib/api';
+  import { api, type ClientOverview, type Device, type Group, type LogEntry, type Rule, type Service } from '../lib/api';
   import BarList from '../lib/components/BarList.svelte';
   import { copy } from '../lib/copy';
   import { fmtLogTime, fmtLogTimeFull } from '../lib/format';
-  import { currentDeviceKey, docketHref, hrefFor } from '../lib/router';
+  import { currentDeviceKey, docketHref, hrefFor, rulesHref, servicesHref } from '../lib/router';
   import PrivacyReport from '../lib/components/PrivacyReport.svelte';
+  import { ruleDialog } from '../lib/ruledialog';
+  import { deviceKeyNames } from '../lib/devicenames';
+  import { deviceKey, domainChoices, listText } from '../lib/rules';
   import { notify, notifyError } from '../lib/toast';
 
   const HISTORY_PAGE = 200;
@@ -161,19 +164,68 @@
   }
 
 
-  async function pardon(domain: string): Promise<void> {
+  // Allow and Block ask where the rule should apply — this device, its
+  // group or everyone — and refresh this device's rules afterwards.
+  async function pardon(e: LogEntry): Promise<void> {
+    if (await ruleDialog({ action: 'allow', domains: domainChoices(e.qname, e.rule), client: e.client, decidedBy: e.list }))
+      await loadRules();
+  }
+
+  async function sentence(e: LogEntry): Promise<void> {
+    if (await ruleDialog({ action: 'block', domains: [e.qname], client: e.client, decidedBy: e.list })) await loadRules();
+  }
+
+  // --- this device's own rules, and the ones its group adds ---
+
+  let rules: Rule[] = [];
+  let catalog: Service[] = [];
+  let newAction: 'allow' | 'block' = 'block';
+  let newDomain = '';
+
+  async function loadRules(): Promise<void> {
     try {
-      await api.pardon(domain);
-      notify(copy.allow.done(domain));
+      rules = await api.rules();
     } catch (e) {
       notifyError(e);
     }
   }
 
-  async function sentence(domain: string): Promise<void> {
+  function ownRules(all: Rule[], d: Device): Rule[] {
+    const k = deviceKey(d).toLowerCase();
+    return all.filter((r) => r.scope === 'device' && (r.target ?? '').toLowerCase() === k);
+  }
+
+  function groupRules(all: Rule[], d: Device): Rule[] {
+    return all.filter((r) => r.scope === 'group' && r.target === d.group);
+  }
+
+  function ruleText(r: Rule, cat: Service[]): string {
+    return r.kind === 'service' ? (cat.find((s) => s.name === r.value)?.label ?? r.value) : r.value;
+  }
+
+  async function addRule(): Promise<void> {
+    const value = newDomain.trim();
+    if (!device || !value) return;
     try {
-      await api.sentence(domain);
-      notify(copy.block.done(domain));
+      rules = await api.addRule(
+        { action: newAction, kind: 'domain', value, scope: 'device', target: deviceKey(device) },
+        device.ip,
+      );
+      notify(
+        newAction === 'allow'
+          ? copy.rules.allowedDone(value, deviceLabel(device))
+          : copy.rules.blockedDone(value, deviceLabel(device)),
+      );
+      newDomain = '';
+    } catch (e) {
+      notifyError(e);
+    }
+  }
+
+  async function removeRule(r: Rule): Promise<void> {
+    try {
+      rules = await api.removeRule(r);
+      notify(copy.rules.removed(ruleText(r, catalog)));
     } catch (e) {
       notifyError(e);
     }
@@ -184,6 +236,11 @@
     if (device) {
       void loadStats();
       void fetchHistory(true);
+      void loadRules();
+      api
+        .services()
+        .then((v) => (catalog = v.catalog))
+        .catch(() => {});
     }
     timer = setInterval(load, 30000);
   });
@@ -299,6 +356,67 @@
     </section>
   </div>
 
+  {@const own = ownRules(rules, device)}
+  {@const inherited = groupRules(rules, device)}
+  {@const deviceGroup = groups.find((g) => g.name === device?.group)}
+  <section class="card rules">
+    <h2>{copy.rules.deviceTitle} <small>{copy.rules.deviceHint}</small></h2>
+    <form class="rule-add" on:submit|preventDefault={addRule}>
+      <select bind:value={newAction} aria-label={copy.rules.addAction}>
+        <option value="block">{copy.rules.blockBadge}</option>
+        <option value="allow">{copy.rules.allowBadge}</option>
+      </select>
+      <input placeholder={copy.domains.addPlaceholder} bind:value={newDomain} required />
+      <button type="submit" class="primary" disabled={!newDomain.trim()}>{copy.blocking.add}</button>
+    </form>
+    {#if deviceGroup && deviceGroup.mode !== 'filter'}
+      <p class="inert">{copy.rules.groupBypassNote(deviceGroup.name)}</p>
+    {/if}
+    {#if own.length === 0}
+      <p class="empty">{copy.rules.deviceEmpty}</p>
+    {:else}
+      <ul class="rule-list">
+        {#each own as r, i (i)}
+          <li>
+            <span class="badge" class:allow={r.action === 'allow'} class:block={r.action === 'block'}
+              >{r.action === 'allow' ? copy.rules.allowBadge : copy.rules.blockBadge}</span
+            >
+            <span class="rule-value" class:mono={r.kind === 'domain'}>{ruleText(r, catalog)}</span>
+            {#if r.kind === 'service'}<span class="dim">{copy.rules.serviceTag}</span>{/if}
+            <button
+              class="chip-x"
+              title={copy.rules.remove(ruleText(r, catalog))}
+              aria-label={copy.rules.remove(ruleText(r, catalog))}
+              on:click={() => removeRule(r)}>×</button
+            >
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    {#if inherited.length && deviceGroup?.mode === 'filter'}
+      <h3>{copy.rules.deviceInherited(device.group)}</h3>
+      <ul class="rule-list inherited">
+        {#each inherited as r, i (i)}
+          <li>
+            <span class="badge" class:allow={r.action === 'allow'} class:block={r.action === 'block'}
+              >{r.action === 'allow' ? copy.rules.allowBadge : copy.rules.blockBadge}</span
+            >
+            <span class="rule-value" class:mono={r.kind === 'domain'}>{ruleText(r, catalog)}</span>
+            {#if r.kind === 'service'}<span class="dim">{copy.rules.serviceTag}</span>{/if}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <p class="note">{device.mac ? copy.rules.deviceFollows : copy.rules.deviceNoMAC(device.ip)}</p>
+    <p class="rule-links">
+      <a href={servicesHref(`device:${deviceKey(device)}`)}>{copy.rules.deviceServicesLink}</a>
+      {#if deviceGroup}
+        <a href={rulesHref(`group:${deviceGroup.name}`)}>{copy.rules.deviceGroupLink(deviceGroup.name)}</a>
+      {/if}
+      <a href="#/rules">{copy.rules.deviceAllRules}</a>
+    </p>
+  </section>
+
   <section class="card activity">
     <div class="activity-head">
       <h2>{copy.device.activityWindow(statsHours)}</h2>
@@ -361,15 +479,6 @@
     {/if}
   </section>
 
-  {#if device}
-    <section class="card">
-      <h2>{copy.privacy.deviceTitle} <small>{copy.privacy.deviceHint}</small></h2>
-      {#key device.ips?.join(',') ?? device.ip}
-        <PrivacyReport clients={device.ips ?? [device.ip]} />
-      {/key}
-    </section>
-  {/if}
-
   <section class="history">
     <div class="history-head">
       <h2>{copy.device.historyTitle} <small>{copy.device.historyHint}</small></h2>
@@ -383,7 +492,7 @@
     {#if history.length === 0}
       <p class="empty">{historyLoading ? copy.device.loading : copy.device.historyEmpty}</p>
     {:else}
-      <div class="table-wrap">
+      <div class="table-wrap scrollbox">
         <table class="stack">
           <thead>
             <tr>
@@ -407,12 +516,12 @@
                 <td>{e.qtype}</td>
                 {#if e.verdict === 'blocked'}
                   <td><span class="badge blocked">{copy.querylog.verdictBlocked}</span></td>
-                  <td title="rule: {e.rule}">{e.list}</td>
+                  <td title="rule: {e.rule}">{listText(e.list ?? '', $deviceKeyNames)}</td>
                   <td class="end">
                     <button
                       class="row-action"
                       title={copy.allow.actionHint}
-                      on:click={() => pardon(e.rule ?? e.qname)}
+                      on:click={() => pardon(e)}
                     >
                       {copy.allow.action}
                     </button>
@@ -434,7 +543,7 @@
                     <button
                       class="row-action subtle"
                       title={copy.block.actionHint}
-                      on:click={() => sentence(e.qname)}
+                      on:click={() => sentence(e)}
                     >
                       {copy.block.action}
                     </button>
@@ -444,15 +553,26 @@
             {/each}
           </tbody>
         </table>
+        {#if !historyDone}
+          <div class="load-older">
+            <button on:click={() => fetchHistory(false)} disabled={historyLoading}>
+              {historyLoading ? copy.device.loading : copy.device.loadOlder}
+            </button>
+          </div>
+        {/if}
       </div>
-      {#if !historyDone}
-        <div class="load-older">
-          <button on:click={() => fetchHistory(false)} disabled={historyLoading}>
-            {historyLoading ? copy.device.loading : copy.device.loadOlder}
-          </button>
-        </div>
-      {/if}
     {/if}
+  </section>
+
+  <!-- Below the history, in its own scrolling box like the history, so the
+       page does not run on for ever. -->
+  <section class="card privacy">
+    <h2>{copy.privacy.deviceTitle} <small>{copy.privacy.deviceHint}</small></h2>
+    <div class="scrollbox">
+      {#key device.ips?.join(',') ?? device.ip}
+        <PrivacyReport clients={device.ips ?? [device.ip]} />
+      {/key}
+    </div>
   </section>
 {/if}
 
@@ -638,6 +758,133 @@
   .load-older {
     text-align: center;
     padding: 0.6rem 0;
+  }
+
+  /* The query history and tracking companies scroll inside their own boxes,
+     so the page stays a manageable length. */
+  .scrollbox {
+    max-height: 32rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .history .scrollbox thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-raised);
+    z-index: 1;
+  }
+
+  .privacy,
+  .rules {
+    margin-top: 1.25rem;
+  }
+
+  .rules h3 {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    margin: 0.9rem 0 0.4rem;
+    font-weight: 600;
+  }
+
+  .rule-add {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0 0 0.8rem;
+    max-width: 34rem;
+  }
+
+  .rule-add input {
+    flex: 1 1 12rem;
+    min-width: 0;
+  }
+
+  .rule-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .rule-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.88rem;
+  }
+
+  .rule-list li:last-child {
+    border-bottom: none;
+  }
+
+  .rule-list.inherited {
+    opacity: 0.8;
+  }
+
+  .rule-value {
+    flex: 1;
+    overflow-wrap: anywhere;
+  }
+
+  .mono {
+    font-family: var(--font-mono);
+  }
+
+  .rules .badge {
+    font-size: 0.72rem;
+    padding: 0.05rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .rules .badge.allow {
+    color: var(--allowed);
+    border-color: color-mix(in srgb, var(--allowed) 55%, var(--border));
+  }
+
+  .rules .badge.block {
+    color: var(--blocked);
+    border-color: color-mix(in srgb, var(--blocked) 55%, var(--border));
+  }
+
+  .chip-x {
+    all: unset;
+    cursor: pointer;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 1.5rem;
+    color: var(--text-dim);
+  }
+
+  .chip-x:hover,
+  .chip-x:focus-visible {
+    color: var(--blocked);
+    background: var(--bg-hover);
+  }
+
+  .inert {
+    color: var(--accent);
+    font-size: 0.82rem;
+    margin: 0 0 0.6rem;
+  }
+
+  .rules .note {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    margin: 0.8rem 0 0.3rem;
+  }
+
+  .rule-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.1rem;
+    margin: 0;
+    font-size: 0.82rem;
   }
 
   .load-older button {

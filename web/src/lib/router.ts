@@ -8,8 +8,8 @@ export type Route =
   | 'devices'
   | 'device'
   | 'lists'
-  | 'allowed'
-  | 'blocked'
+  | 'rules'
+  | 'services'
   | 'privacy'
   | 'logs'
   | 'help'
@@ -32,11 +32,13 @@ function parse(): Route {
       return 'devices';
     case '#/lists':
       return 'lists';
-    case '#/allowed':
-    case '#/domains': // the old Allow & Block address
-      return 'allowed';
+    case '#/rules':
+    case '#/allowed': // the old Allowed and Blocked tabs, and Allow & Block
     case '#/blocked':
-      return 'blocked';
+    case '#/domains':
+      return 'rules';
+    case '#/services':
+      return 'services';
     case '#/settings':
       return 'settings';
     case '#/logs':
@@ -103,13 +105,24 @@ export const hrefFor: Record<Route, string> = {
   devices: '#/devices',
   device: '#/devices', // detail pages aren't nav destinations; fall back to the list
   lists: '#/lists',
-  allowed: '#/allowed',
-  blocked: '#/blocked',
+  rules: '#/rules',
+  services: '#/services',
   settings: '#/settings',
   logs: '#/logs',
   privacy: '#/privacy',
   help: '#/help',
 };
+
+// rulesHref links to the Rules tab showing one scope's rules: "everyone",
+// "group:<name>" or "device:<key>".
+export function rulesHref(scope: string): string {
+  return `#/rules?for=${encodeURIComponent(scope)}`;
+}
+
+// servicesHref links to the Services tab set to one scope.
+export function servicesHref(scope: string): string {
+  return `#/services?for=${encodeURIComponent(scope)}`;
+}
 
 // deviceHref links to a device's detail page. key is the device's MAC when
 // it has one (stable across DHCP leases), else its IP.
