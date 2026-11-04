@@ -494,7 +494,9 @@ allow beats a block at every depth.
 
 A rule is `{"action": "allow|block", "kind": "domain|service", "value",
 "scope": "everyone|group|device", "target"}` — `value` is a domain (or
-`/regex/` rule) or a service name (catalog or custom); `target` is the
+`*.wildcard` or `/regex/` rule) or a service name (catalog or custom);
+a domain or wildcard is saved lowercased, and `*.example.com` matches
+names under example.com but not example.com itself; `target` is the
 group name, or the device key (its MAC when Minos has seen one, else its
 IP). A device rule creates the device's saved entry if it has none, keyed
 by MAC so the rule follows it across address changes; pass `"ip"` as a

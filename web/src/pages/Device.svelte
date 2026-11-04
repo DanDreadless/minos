@@ -6,6 +6,7 @@
   import { fmtLogTime, fmtLogTimeFull } from '../lib/format';
   import { currentDeviceKey, docketHref, hrefFor, rulesHref, servicesHref } from '../lib/router';
   import PrivacyReport from '../lib/components/PrivacyReport.svelte';
+  import RuleSyntax from '../lib/components/RuleSyntax.svelte';
   import { ruleDialog } from '../lib/ruledialog';
   import { deviceKeyNames } from '../lib/devicenames';
   import { deviceKey, domainChoices, listText } from '../lib/rules';
@@ -369,6 +370,7 @@
       <input placeholder={copy.domains.addPlaceholder} bind:value={newDomain} required />
       <button type="submit" class="primary" disabled={!newDomain.trim()}>{copy.blocking.add}</button>
     </form>
+    <RuleSyntax on:pick={(e) => (newDomain = e.detail)} />
     {#if deviceGroup && deviceGroup.mode !== 'filter'}
       <p class="inert">{copy.rules.groupBypassNote(deviceGroup.name)}</p>
     {/if}

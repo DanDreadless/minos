@@ -653,8 +653,9 @@ func (s *Server) handleDeleteTemporaryAllow(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]string{"domain": norm, "status": "removed"})
 }
 
-// domainOrRegex accepts a domain (normalized) or a /pattern/ regex rule
-// (kept as written, after checking it compiles as RE2).
+// domainOrRegex accepts a domain (normalized), a wildcard rule such as
+// *.example.com (normalized), or a /pattern/ regex rule (kept as written,
+// after checking it compiles as RE2).
 func domainOrRegex(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if filter.IsRegexRule(s) {
@@ -663,9 +664,16 @@ func domainOrRegex(s string) (string, error) {
 		}
 		return s, nil
 	}
+	if filter.IsWildcardRule(s) {
+		norm := filter.NormalizeWildcard(s)
+		if norm == "" {
+			return "", fmt.Errorf(`%q is not a valid wildcard rule: write it like *.example.com or ads*.example.com`, s)
+		}
+		return norm, nil
+	}
 	norm := filter.NormalizeDomain(s)
 	if norm == "" {
-		return "", fmt.Errorf("%q is not a valid domain (or a /regex/ rule)", s)
+		return "", fmt.Errorf("%q is not a valid domain (or a *.wildcard or /regex/ rule)", s)
 	}
 	return norm, nil
 }

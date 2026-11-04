@@ -84,7 +84,8 @@ page and every word in plain terms.
   (balanced, strict, security, family) verified to compile; lists keep
   working from a local copy when their host is down, retry sensibly, refuse
   a suspiciously shrunken update, and fall back to publisher mirrors
-- **Firewall-style rules**: allow or block a domain (or a `/regex/` rule)
+- **Firewall-style rules**: allow or block a domain (or a `*.wildcard` or
+  `/regex/` rule)
   for everyone, a group of devices or one device; the most specific rule
   wins, so a site can be blocked for the house and allowed on one phone.
   Device rules follow the device to a new address. Allow and Block in the

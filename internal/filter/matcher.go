@@ -6,6 +6,7 @@
 package filter
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -107,13 +108,14 @@ func (b *Builder) listIndex(list string) int32 {
 // Invalid domains are counted as skipped. First list to claim a domain wins,
 // so list order is priority order.
 //
-// A /pattern/ entry is a regex rule (regex.go). It never normalizes as a
-// domain, so it is recognised in that branch, keeping the per-entry path
-// of a million-line list exactly as it was.
+// A /pattern/ entry is a regex rule (regex.go), and one with a "*" a
+// wildcard rule (wildcard.go). Neither normalizes as a domain, so they are
+// recognised in that branch, keeping the per-entry path of a million-line
+// list exactly as it was.
 func (b *Builder) AddDeny(list, domain string) {
 	norm := NormalizeDomain(domain)
 	if norm == "" {
-		if IsRegexRule(domain) {
+		if IsRegexRule(domain) || IsWildcardRule(domain) {
 			b.addRegex(&b.denyRe, list, domain)
 			return
 		}
@@ -138,7 +140,7 @@ func (b *Builder) AddDeny(list, domain string) {
 func (b *Builder) AddAllow(list, domain string) {
 	norm := NormalizeDomain(domain)
 	if norm == "" {
-		if IsRegexRule(domain) {
+		if IsRegexRule(domain) || IsWildcardRule(domain) {
 			b.addRegex(&b.allowRe, list, domain)
 			return
 		}
@@ -155,10 +157,19 @@ func (b *Builder) AddAllow(list, domain string) {
 	}
 }
 
-// addRegex records a /pattern/ rule; one that does not compile, or beyond
-// MaxRegexRules, is skipped like any other unsupported rule.
+// addRegex records a /pattern/ or wildcard rule; one that does not
+// compile, or beyond MaxRegexRules, is skipped like any other unsupported
+// rule. A wildcard is kept in its normal form, so "*.Example.com" and
+// "*.example.com" are one rule.
 func (b *Builder) addRegex(set *[]regexRule, list, entry string) {
-	re, err := CompileRegexRule(entry)
+	var re *regexp.Regexp
+	var err error
+	if IsRegexRule(entry) {
+		re, err = CompileRegexRule(entry)
+	} else {
+		entry = NormalizeWildcard(entry)
+		re, err = CompileWildcardRule(entry)
+	}
 	if err != nil || len(*set) >= MaxRegexRules {
 		b.skipped++
 		return

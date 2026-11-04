@@ -539,6 +539,13 @@ not-blocking state also shows in the top bar.
   rules and the ones its group adds, with a form to add more. A domain has
   one decision per scope: blocking a domain you had allowed for the same
   device replaces the allow.
+  A `*` makes a **wildcard rule**: it stands for any run of characters,
+  dots included, and the rule must match the whole name. `*.example.com`
+  matches every name under example.com at any depth but not example.com
+  itself (a plain `example.com` already covers its subdomains), and
+  `ads*.example.com` matches ads.example.com, ads2.example.com and
+  ads-eu.example.com. "How to write a rule", under the add form, lists
+  every form with examples.
   An entry written `/pattern/` is a **regex rule** — `/^ad[0-9]*\./`
   blocks ad1.example.com, ad22.example.net and so on — matched
   case-insensitively anywhere in the name. Regex rules also work in group
@@ -892,8 +899,9 @@ and — from AdGuard Home — blocked services that exist in the Minos
 catalog. Imports only add: nothing already in your Minos config is
 changed, and running an import twice adds nothing new.
 
-What doesn't: regex rules and AdBlock rules with options (Minos matches
-whole domains only), allowlist subscriptions, and upstream/DHCP settings.
+Regex rules come across too, except ones Minos cannot run (backreferences,
+lookaround, Pi-hole's `;querytype=`). What doesn't: AdBlock-style user
+rules with options or paths, and upstream/DHCP settings.
 Every skipped item is printed with a reason so nothing vanishes silently.
 
 Prefer the web UI? **Settings → Import from Pi-hole or AdGuard Home** takes

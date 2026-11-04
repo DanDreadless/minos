@@ -33,7 +33,7 @@ const (
 type Rule struct {
 	Action string `json:"action"` // allow | block
 	Kind   string `json:"kind"`   // domain | service
-	// Value is the domain (or /regex/ rule), or the service name.
+	// Value is the domain (or *.wildcard or /regex/ rule), or the service name.
 	Value string `json:"value"`
 	Scope string `json:"scope"` // everyone | group | device
 	// Target is the group name, or the device key (MAC, else IP).
