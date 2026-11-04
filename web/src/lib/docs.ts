@@ -68,7 +68,7 @@ export const docs: Section[] = [
       '5 — Choose your blocklists on DNS Filter → Blocklists. Balanced is the recommended start: it blocks most adverts and tracking and rarely breaks anything.',
       '6 — Set a password (Settings → Access & security), so only you can change Minos.',
       '7 — Use your devices normally for a day. If something stops working, open the Query Log, find the blocked lookup at that time and press Allow — you choose whether to allow it for just that device or for everyone. The dashboard also points out when a device keeps retrying something that blocking has broken.',
-      'Prefer not to change the router? You can instead set the DNS server on individual devices (in their Wi-Fi or network settings) to Minos\'s address. Only those devices are protected.',
+      "Prefer not to change the router? You can instead set the DNS server on individual devices (in their Wi-Fi or network settings) to Minos's address. Only those devices are protected.",
     ],
     tasks: [
       {
@@ -89,7 +89,7 @@ export const docs: Section[] = [
       },
       {
         q: 'Something broke and I think Minos blocked it.',
-        a: 'Open the Query Log, filter by the device or type the site\'s name, and look for Blocked rows around the time it broke. Press Allow on the row and choose who it is for — only that device, its group, or everyone (or use Check a domain, Ctrl+K). Allowed domains include their subdomains.',
+        a: "Open the Query Log, filter by the device or type the site's name, and look for Blocked rows around the time it broke. Press Allow on the row and choose who it is for — only that device, its group, or everyone (or use Check a domain, Ctrl+K). Allowed domains include their subdomains.",
       },
       {
         q: 'How do I turn blocking off for a moment?',
@@ -105,7 +105,7 @@ export const docs: Section[] = [
     tasks: [
       {
         q: 'DNS, lookup, query',
-        a: 'DNS is the internet\'s phone book: it turns names (www.example.com) into the addresses computers actually connect to. A lookup — also called a query — is one device asking for one name. A busy home makes tens of thousands a day.',
+        a: "DNS is the internet's phone book: it turns names (www.example.com) into the addresses computers actually connect to. A lookup — also called a query — is one device asking for one name. A busy home makes tens of thousands a day.",
       },
       {
         q: 'Domain, subdomain',
@@ -137,7 +137,7 @@ export const docs: Section[] = [
       },
       {
         q: 'Query Log',
-        a: 'Minos\'s record of every lookup: which device asked for which name, when, and whether it was blocked (and by which list and rule) or allowed.',
+        a: "Minos's record of every lookup: which device asked for which name, when, and whether it was blocked (and by which list and rule) or allowed.",
       },
       {
         q: 'Tracker, telemetry',
@@ -145,7 +145,7 @@ export const docs: Section[] = [
       },
       {
         q: 'DNSSEC',
-        a: 'A way for a website\'s owner to sign their DNS answers, so a forged answer can be spotted. Minos can check those signatures. Most sites do not sign their answers yet, so most lookups show as unsigned, which is normal.',
+        a: "A way for a website's owner to sign their DNS answers, so a forged answer can be spotted. Minos can check those signatures. Most sites do not sign their answers yet, so most lookups show as unsigned, which is normal.",
       },
       {
         q: 'Local records, conditional forwarding',
@@ -180,7 +180,7 @@ export const docs: Section[] = [
     summary:
       'What your network did over a window you choose: queries, blocked, block rate, a volume chart, the most-blocked domains and the busiest devices — every number for the same window.',
     howto: [
-      "This week (under Needs attention) always covers the last 7 days, whatever window is chosen: lookups and the share blocked against the week before, devices seen for the first time, what your security blocklists caught and from which devices (or a nudge if none is switched on), how many tracking companies your devices talked to and which got through most, the busiest device, and settings changes with the latest. Every line links to where you can look into it.",
+      'This week (under Needs attention) always covers the last 7 days, whatever window is chosen: lookups and the share blocked against the week before, devices seen for the first time, what your security blocklists caught and from which devices (or a nudge if none is switched on), how many tracking companies your devices talked to and which got through most, the busiest device, and settings changes with the latest. Every line links to where you can look into it.',
       'Pick the window at the top (24 hours, 7, 30 or 90 days). It is remembered in this browser.',
       'Click any number, domain or device to open exactly those queries in the Query Log.',
       'Possible threats (in red): a device behaving like malware — many random-looking domains in a few minutes, long random names under one domain (data leaving through DNS), or lookups of known malicious domains. See lookups shows the evidence; This is fine hides it; Never flag adds a domain to the ignore list (Settings → Filtering).',
@@ -203,7 +203,7 @@ export const docs: Section[] = [
       'Filter with the result buttons (All, Blocked, Allowed, Would block), the list menu and the time range — or click any device, domain, type, list or resolver in a row.',
       'The search box takes filters as you type: blocked, allowed, would-block, client:192.168.1.5, domain:example.com (that exact name), type:AAAA, list:StevenBlack (quote names with spaces), upstream:1.1.1.1:853, dnssec:bogus, and -cdn to leave out names containing "cdn". Anything else matches domains, device addresses and device names — kitchen finds every query from the Kitchen iPad. Press / to search, Enter to apply, Esc to clear, Backspace to remove the last filter.',
       'Row actions: Allow (on blocked rows) or Block (on allowed rows) — each asks whether the rule is for only that device, its group, everyone, or another device or group — 1 h (allow for everyone for an hour, then block again), Check (how the domain would be judged now) and Copy.',
-      'The List column names what decided a lookup: a blocklist, denylist / allowlist (your rules for everyone), group:<name> (a group\'s rules), device: <name> (a device\'s own rules), service:<name>, and so on. Click it to see every lookup it decided.',
+      "The List column names what decided a lookup: a blocklist, denylist / allowlist (your rules for everyone), group:<name> (a group's rules), device: <name> (a device's own rules), service:<name>, and so on. Click it to see every lookup it decided.",
       'Export CSV or JSON downloads every match of the current filter, up to 100,000 rows.',
       'The address bar keeps the filter, so a search can be bookmarked or shared.',
     ],
@@ -263,8 +263,8 @@ export const docs: Section[] = [
       'Open a device for its page: every address it has used, what it looked up most, its own rules (and the ones its group adds), its query history and the tracking companies it talked to — the last two scroll in their own boxes.',
       'Rules for one device: add them on its page, or press Allow or Block on one of its lookups and choose "Only" this device. They beat its group\'s rules and everyone\'s.',
       'A device is followed by its MAC address when Minos can see one, so its group and rules survive a new IP address from DHCP.',
-      'Groups: filter (your normal rules plus the group\'s own rules and services), bypass (no filtering) or block (no DNS). A group can have a schedule — it applies only during those hours, and devices follow the normal rules outside them; a device\'s own rules apply all the time. A group\'s rules and services are edited on DNS Filter → Rules and Services; its card links there.',
-      'Forget removes a device\'s label, group, notes and own rules; the device keeps working with the normal rules.',
+      "Groups: filter (your normal rules plus the group's own rules and services), bypass (no filtering) or block (no DNS). A group can have a schedule — it applies only during those hours, and devices follow the normal rules outside them; a device's own rules apply all the time. A group's rules and services are edited on DNS Filter → Rules and Services; its card links there.",
+      "Forget removes a device's label, group, notes and own rules; the device keeps working with the normal rules.",
     ],
     settings: [
       {
@@ -274,14 +274,22 @@ export const docs: Section[] = [
         applies: 'live',
         where: 'Devices',
         fields: [
-          { key: 'clients.ip', effect: 'The device\'s address (its last known one when a MAC is set).' },
+          { key: 'clients.ip', effect: "The device's address (its last known one when a MAC is set)." },
           { key: 'clients.mac', effect: 'When set, the device is recognised by MAC on any address.' },
           { key: 'clients.name', effect: 'Your label for it.' },
           { key: 'clients.group', effect: 'The group it belongs to (empty: the normal rules).' },
           { key: 'clients.blocked', effect: 'Refuse all of its DNS lookups.' },
           { key: 'clients.notes', effect: 'Free text, up to 4096 characters.' },
-          { key: 'clients.allowlist', effect: 'Domains (or /regex/ rules) allowed for this device alone; they beat its group\'s and everyone\'s blocks.' },
-          { key: 'clients.denylist', effect: 'Domains (or /regex/ rules) blocked for this device alone; they beat its group\'s and everyone\'s allows.' },
+          {
+            key: 'clients.allowlist',
+            effect:
+              "Domains (or /regex/ rules) allowed for this device alone; they beat its group's and everyone's blocks.",
+          },
+          {
+            key: 'clients.denylist',
+            effect:
+              "Domains (or /regex/ rules) blocked for this device alone; they beat its group's and everyone's allows.",
+          },
           { key: 'clients.services', effect: 'Services blocked for this device alone.' },
           { key: 'clients.allowed_services', effect: 'Services allowed for this device alone.' },
           { key: 'clients.custom_services', effect: 'Your custom services blocked for this device alone.' },
@@ -295,10 +303,16 @@ export const docs: Section[] = [
         applies: 'live',
         where: 'Devices → Groups',
         fields: [
-          { key: 'groups.name', effect: 'The group\'s name.' },
+          { key: 'groups.name', effect: "The group's name." },
           { key: 'groups.mode', effect: 'filter, bypass or block.' },
-          { key: 'groups.allowlist', effect: 'Domains allowed for members; they beat everyone\'s blocks, and a member\'s own block beats them.' },
-          { key: 'groups.denylist', effect: 'Domains blocked for members; they beat everyone\'s allows, and a member\'s own allow beats them.' },
+          {
+            key: 'groups.allowlist',
+            effect: "Domains allowed for members; they beat everyone's blocks, and a member's own block beats them.",
+          },
+          {
+            key: 'groups.denylist',
+            effect: "Domains blocked for members; they beat everyone's allows, and a member's own allow beats them.",
+          },
           { key: 'groups.services', effect: 'Services blocked for members.' },
           { key: 'groups.allowed_services', effect: 'Services allowed for members.' },
           { key: 'groups.custom_services', effect: 'Your custom services blocked for members.' },
@@ -317,7 +331,7 @@ export const docs: Section[] = [
     title: 'DNS Filter → Blocklists',
     page: '#/lists',
     summary:
-      'The lists Minos blocks from, downloaded and kept up to date automatically. If a list\'s server is down, Minos keeps blocking with the last good copy (also after a restart).',
+      "The lists Minos blocks from, downloaded and kept up to date automatically. If a list's server is down, Minos keeps blocking with the last good copy (also after a restart).",
     howto: [
       'Choose your blocklists: the catalog offers verified lists in tiers — Balanced (recommended), Strict (more blocking, more to allow), Security (malware and phishing) and Family (content you choose to keep off the network). One click subscribes.',
       'Each list shows a plain status — up to date, failing but still blocking with the copy from a given time, retired, and so on. Hover for the reason.',
@@ -329,7 +343,7 @@ export const docs: Section[] = [
     tasks: [
       {
         q: 'Should I block newly registered domains?',
-        a: "They are not in the catalog, on purpose. Hagezi's lists of domains registered in the last 7 days hold 2.9 million names (the high-entropy \"DGA\" cut, 900,000); on a Raspberry Pi 4 they add 370 MB and 120 MB of memory and make every rule change take 19 and 3.5 seconds. Replayed on a real home network's week — 1.2 million lookups — both matched three lookups, all of a genuine new website, and nothing malicious. Threat detection already flags devices looking up bursts of random new domains. If you want one anyway, add it as an audit-only list first (Add a list, then tick Audit) to see what it would block: https://raw.githubusercontent.com/hagezi/nrd/main/adblock/dga7.txt (AdBlock format).",
+        a: 'They are not in the catalog, on purpose. Hagezi\'s lists of domains registered in the last 7 days hold 2.9 million names (the high-entropy "DGA" cut, 900,000); on a Raspberry Pi 4 they add 370 MB and 120 MB of memory and make every rule change take 19 and 3.5 seconds. Replayed on a real home network\'s week — 1.2 million lookups — both matched three lookups, all of a genuine new website, and nothing malicious. Threat detection already flags devices looking up bursts of random new domains. If you want one anyway, add it as an audit-only list first (Add a list, then tick Audit) to see what it would block: https://raw.githubusercontent.com/hagezi/nrd/main/adblock/dga7.txt (AdBlock format).',
       },
     ],
     settings: [
@@ -337,7 +351,8 @@ export const docs: Section[] = [
         label: 'Check for updates every',
         key: 'lists.refresh_interval',
         default: '24h',
-        effect: 'How often every list is downloaded again (minimum 5m). A list that fails is retried sooner, backing off from a minute to an hour.',
+        effect:
+          'How often every list is downloaded again (minimum 5m). A list that fails is retried sooner, backing off from a minute to an hour.',
         applies: 'live',
         where: 'DNS Filter → Blocklists',
       },
@@ -353,10 +368,14 @@ export const docs: Section[] = [
           { key: 'lists.sources.format', effect: 'hosts, adblock or plain (one domain per line).' },
           { key: 'lists.sources.enabled', effect: 'Off keeps the subscription but stops using it.' },
           { key: 'lists.sources.audit', effect: 'Record matches as "would block" without blocking.' },
-          { key: 'lists.sources.mirrors', effect: 'Up to 5 fallback addresses, used only when the main one is gone or the copy is getting old.' },
+          {
+            key: 'lists.sources.mirrors',
+            effect: 'Up to 5 fallback addresses, used only when the main one is gone or the copy is getting old.',
+          },
           {
             key: 'lists.sources.headers',
-            effect: 'Extra request headers, e.g. an access key for a keyed feed. Config file only; never shown by the API and never sent to a mirror.',
+            effect:
+              'Extra request headers, e.g. an access key for a keyed feed. Config file only; never shown by the API and never sent to a mirror.',
           },
         ],
       },
@@ -383,16 +402,18 @@ export const docs: Section[] = [
     title: 'DNS Filter → Rules',
     page: '#/rules',
     summary:
-      'Your own allow and block rules, like a firewall\'s: each one says allow or block, which domain, and who it applies to — everyone, one group of devices, or one device. Your rules beat the blocklists, so this is where you fix something a list broke, or block something no list covers.',
+      "Your own allow and block rules, like a firewall's: each one says allow or block, which domain, and who it applies to — everyone, one group of devices, or one device. Your rules beat the blocklists, so this is where you fix something a list broke, or block something no list covers.",
     howto: [
-      'Add a rule at the top: Allow or Block, the domain, and who it applies to. A domain includes its subdomains, so blocking example.com also blocks www.example.com. Write /pattern/ for a regex rule.',
-      'When rules disagree, the most specific one wins. A rule for a device beats a rule for its group, a group rule beats one for everyone, and any rule beats the blocklists. So you can block a site for everyone and allow it on one phone, or allow it for everyone and block it on the children\'s tablet.',
+      'Add a rule at the top: Allow or Block, the domain, and who it applies to. A domain includes its subdomains, so blocking example.com also blocks www.example.com. "How to write a rule", under the form, lists the forms a rule can take with examples; press one to put it in the field.',
+      'A * is a wildcard: it stands for any run of characters, dots included, and the rule has to match the whole name. *.example.com matches every name under example.com at any depth but not example.com itself; ads*.example.com matches ads.example.com, ads2.example.com and ads-eu.example.com. Plain example.com already covers its subdomains, so you only need * to leave the domain itself out or to match part of a label.',
+      'A rule between slashes is a regex (regular expression): /^ad[0-9]+\\./ matches names starting with ad and a number. A regex matches anywhere in the name unless you pin it with ^ (start) and $ (end), and a bare . means any character, so write a dot as \\. . Case makes no difference. Plain domains are checked first, wildcards and regexes after them — an allowing wildcard or regex still beats a plain block at the same scope.',
+      "When rules disagree, the most specific one wins. A rule for a device beats a rule for its group, a group rule beats one for everyone, and any rule beats the blocklists. So you can block a site for everyone and allow it on one phone, or allow it for everyone and block it on the children's tablet.",
       'Device rules follow the device when the router gives it a new address, as long as Minos can see its hardware (MAC) address — the device page says whether it can. Without one, the rule stays with the address.',
       'Group rules apply to every device in the group, and only while the group is active if it has a schedule. A group set to bypass skips filtering altogether, and one set to block refuses every lookup, so rules for them (and their devices) do nothing.',
-      'Allow and Block on any lookup in the Query Log or a device\'s history ask who the rule is for: only that device, its group, everyone, or a different device or group. Check a domain does the same.',
+      "Allow and Block on any lookup in the Query Log or a device's history ask who the rule is for: only that device, its group, everyone, or a different device or group. Check a domain does the same.",
       'A domain has one decision per scope: adding Block for a domain you had allowed for the same device (or group, or everyone) replaces the allow.',
       'Allow 1 h allows a domain for everyone for an hour, then blocks it again; those show in this list until they end.',
-      'Filter the list by allows or blocks, by who they apply to, or by domain. × removes a rule. Each device\'s own rules are also on its page.',
+      "Filter the list by allows or blocks, by who they apply to, or by domain. × removes a rule. Each device's own rules are also on its page.",
     ],
     tasks: [
       {
@@ -401,7 +422,7 @@ export const docs: Section[] = [
       },
       {
         q: 'I allowed a site for everyone but one device is still blocked.',
-        a: 'Something more specific is blocking it for that device: a rule for the device, a rule for its group, or a service blocked for either. Open the device\'s page — its rules and its group\'s are listed there — or filter this list by the device.',
+        a: "Something more specific is blocking it for that device: a rule for the device, a rule for its group, or a service blocked for either. Open the device's page — its rules and its group's are listed there — or filter this list by the device.",
       },
     ],
     settings: [
@@ -409,7 +430,7 @@ export const docs: Section[] = [
         label: 'Allowed domains (everyone)',
         key: 'blocking.allowlist',
         effect:
-          'Allowed for everyone, with subdomains. An entry written /pattern/ is a regex rule (case-insensitive, matched anywhere in the name): an allow regex beats any block of the same scope. A block rule for a group or a device still wins for that group or device.',
+          'Allowed for everyone, with subdomains. An entry with a * is a wildcard (*.example.com: every name under example.com, but not example.com itself), and one written /pattern/ is a regex rule (case-insensitive, matched anywhere in the name): an allow wildcard or regex beats any block of the same scope. A block rule for a group or a device still wins for that group or device.',
         applies: 'live',
         where: 'DNS Filter → Rules (Applies to: Everyone)',
       },
@@ -422,10 +443,20 @@ export const docs: Section[] = [
         where: 'DNS Filter → Rules',
         fields: [
           { key: 'blocking.temporary_allows.domain', effect: 'The domain, with subdomains.' },
-          { key: 'blocking.temporary_allows.until', effect: 'When the allow ends (a timestamp, e.g. 2026-10-26T15:00:00Z).' },
+          {
+            key: 'blocking.temporary_allows.until',
+            effect: 'When the allow ends (a timestamp, e.g. 2026-10-26T15:00:00Z).',
+          },
         ],
       },
-      { label: 'Blocked domains (everyone)', key: 'blocking.denylist', effect: 'Blocked for everyone, with subdomains. An entry written /pattern/ is a regex rule, e.g. /^ad[0-9]*\\./ — checked after the exact rules, so an allowed domain still wins. Regexes use RE2 (no backreferences or lookaround); up to 1000 per list.', applies: 'live', where: 'DNS Filter → Rules (Applies to: Everyone)' },
+      {
+        label: 'Blocked domains (everyone)',
+        key: 'blocking.denylist',
+        effect:
+          'Blocked for everyone, with subdomains. An entry with a * is a wildcard (ads*.example.com), and one written /pattern/ is a regex rule, e.g. /^ad[0-9]*\\./ — both checked after the plain domains, so an allowed domain still wins. Regexes use RE2 (no backreferences or lookaround); wildcards and regexes together, up to 1000 per list.',
+        applies: 'live',
+        where: 'DNS Filter → Rules (Applies to: Everyone)',
+      },
     ],
   },
   {
@@ -433,7 +464,7 @@ export const docs: Section[] = [
     title: 'DNS Filter → Services',
     page: '#/services',
     summary:
-      'Block or allow a whole service — every domain an app or site uses — in one move, for everyone, one group or one device. Blocking TikTok for the children\'s devices, or allowing a streaming service a blocklist broke, takes one click.',
+      "Block or allow a whole service — every domain an app or site uses — in one move, for everyone, one group or one device. Blocking TikTok for the children's devices, or allowing a streaming service a blocklist broke, takes one click.",
     howto: [
       'Choose who under "Services for": everyone, a group or a device. Then move a service into Blocked or Allowed; move it back to undo.',
       'As with rules, the most specific choice wins: a service allowed for a device beats the same service blocked for its group or for everyone. A service is either blocked or allowed for one scope, never both.',
@@ -441,8 +472,20 @@ export const docs: Section[] = [
       'Your custom services: define your own bundle of domains, then block or allow it like any service, for anyone.',
     ],
     settings: [
-      { label: 'Blocked services (everyone)', key: 'blocking.services', effect: 'Services blocked for everyone.', applies: 'live', where: 'DNS Filter → Services' },
-      { label: 'Allowed services (everyone)', key: 'blocking.allowed_services', effect: 'Services allowed for everyone.', applies: 'live', where: 'DNS Filter → Services' },
+      {
+        label: 'Blocked services (everyone)',
+        key: 'blocking.services',
+        effect: 'Services blocked for everyone.',
+        applies: 'live',
+        where: 'DNS Filter → Services',
+      },
+      {
+        label: 'Allowed services (everyone)',
+        key: 'blocking.allowed_services',
+        effect: 'Services allowed for everyone.',
+        applies: 'live',
+        where: 'DNS Filter → Services',
+      },
       {
         label: 'Your custom services',
         key: 'blocking.custom_services',
@@ -453,7 +496,10 @@ export const docs: Section[] = [
           { key: 'blocking.custom_services.name', effect: 'Its ID (derived from the label if not given).' },
           { key: 'blocking.custom_services.label', effect: 'Its display name.' },
           { key: 'blocking.custom_services.domains', effect: 'The domains it covers.' },
-          { key: 'blocking.custom_services.allow_extra', effect: 'Extra hosts allowed only while the service is allowed.' },
+          {
+            key: 'blocking.custom_services.allow_extra',
+            effect: 'Extra hosts allowed only while the service is allowed.',
+          },
           { key: 'blocking.custom_services.blocked', effect: 'Blocked for everyone.' },
           { key: 'blocking.custom_services.allowed', effect: 'Allowed for everyone.' },
         ],
@@ -469,7 +515,7 @@ export const docs: Section[] = [
     howto: [
       'Each company shows how many of its tracking lookups got through and how many were blocked; the bar is the blocked share. Open it for its names, what each is for, and (for the whole network) which devices looked it up.',
       "A name counts as tracking only when it is one of the company's advertising, analytics or telemetry names that a curated DNS blocklist (Hagezi Pro) also blocks. A company's own sites and services — Google search, YouTube, Facebook itself, time servers — never count, and are listed separately as other companies.",
-      "Block (company)'s tracking blocks that company's tracking names for every device, as the list \"company:<id>\" in the Query Log. Its own sites, apps and sign-in keep working. Stop blocking undoes it; it is also in Settings → History.",
+      'Block (company)\'s tracking blocks that company\'s tracking names for every device, as the list "company:<id>" in the Query Log. Its own sites, apps and sign-in keep working. Stop blocking undoes it; it is also in Settings → History.',
       'Periods are whole days (UTC): today, the last 7 days or the last 30 days.',
       'Company data: AdGuard companiesdb (built from WhoTracks.me), CC BY-SA 4.0. Tracking names: Hagezi DNS blocklists, GPLv3. Both are built into Minos and updated with releases; nothing is sent anywhere.',
     ],
@@ -478,7 +524,8 @@ export const docs: Section[] = [
         label: 'Companies whose tracking is blocked',
         key: 'blocking.companies',
         default: 'none',
-        effect: 'Company IDs (from DNS Filter → Privacy) whose advertising, analytics and telemetry names are blocked for everyone.',
+        effect:
+          'Company IDs (from DNS Filter → Privacy) whose advertising, analytics and telemetry names are blocked for everyone.',
         applies: 'live',
         where: 'DNS Filter → Privacy',
       },
@@ -558,7 +605,8 @@ export const docs: Section[] = [
         label: 'Application log level',
         key: 'log_level',
         default: 'info (or the -log-level flag)',
-        effect: 'Which messages Minos records, here and in the system journal: debug, info, warn or error. Debug records every query — use it briefly.',
+        effect:
+          'Which messages Minos records, here and in the system journal: debug, info, warn or error. Debug records every query — use it briefly.',
         applies: 'live',
         where: 'Settings → System, or Record on the Logs page',
       },
@@ -571,9 +619,9 @@ export const docs: Section[] = [
     summary:
       'Minos can appear in Home Assistant as a device of its own — a blocking switch, pause buttons, counters, problem sensors and a Block switch for each named device — with no YAML. It talks to Home Assistant through MQTT, the messaging system Home Assistant uses for devices like this.',
     howto: [
-      "In Home Assistant, go to Settings → Add-ons, install the Mosquitto broker add-on and start it. Home Assistant then offers the MQTT integration under Settings → Devices & services; add it.",
-      "Still in Home Assistant, make a user for Minos (Settings → People → Users → Add person, with a login) — for example \"minos\" with its own password. The Mosquitto add-on lets any Home Assistant user log in to the broker.",
-      "In Minos, open Settings → Home Assistant. Enter the broker as mqtt://<Home Assistant's address>:1883 (for example mqtt://192.168.1.10:1883), the username and password you just made, tick Connect to Home Assistant and save. The status line turns green with \"Connected to the broker\".",
+      'In Home Assistant, go to Settings → Add-ons, install the Mosquitto broker add-on and start it. Home Assistant then offers the MQTT integration under Settings → Devices & services; add it.',
+      'Still in Home Assistant, make a user for Minos (Settings → People → Users → Add person, with a login) — for example "minos" with its own password. The Mosquitto add-on lets any Home Assistant user log in to the broker.',
+      'In Minos, open Settings → Home Assistant. Enter the broker as mqtt://<Home Assistant\'s address>:1883 (for example mqtt://192.168.1.10:1883), the username and password you just made, tick Connect to Home Assistant and save. The status line turns green with "Connected to the broker".',
       'In Home Assistant, open Settings → Devices & services → MQTT → Devices: Minos is listed. Add its entities to a dashboard like any other device.',
       'Entities: switch.minos_blocking (off pauses blocking until turned back on); button.minos_pause_blocking_for_5_minutes and …_for_1_hour; sensor.minos_queries, sensor.minos_blocked_queries and sensor.minos_share_blocked (since Minos last started); sensor.minos_blocklist_rules; binary_sensor.minos_upstream_resolver_problem, binary_sensor.minos_threat_suspected and binary_sensor.minos_blocking_may_have_broken_something (on when there is a problem); update.minos_update (when Check for new releases is on); and switch.minos_block_<device> for each device you have named on the Devices page.',
       'State is sent when it changes and every 30 seconds. If Minos stops, its entities show as unavailable; if you untick Connect to Home Assistant, they are removed.',
@@ -582,7 +630,7 @@ export const docs: Section[] = [
     ],
     examples: [
       {
-        title: 'Bedtime: the kids\' tablet goes offline at 21:00 and back at 07:00',
+        title: "Bedtime: the kids' tablet goes offline at 21:00 and back at 07:00",
         code: `automation:
   - alias: Kids tablet off at bedtime
     triggers:
@@ -634,7 +682,7 @@ export const docs: Section[] = [
       },
       {
         q: 'The status says it cannot reach the broker.',
-        a: 'Check the address and port (1883, or 8883 for mqtts://), that the Mosquitto add-on is running, and that Home Assistant\'s machine accepts connections on that port from the machine Minos runs on.',
+        a: "Check the address and port (1883, or 8883 for mqtts://), that the Mosquitto add-on is running, and that Home Assistant's machine accepts connections on that port from the machine Minos runs on.",
       },
       {
         q: 'Minos says connected, but no Minos device appears in Home Assistant.',
@@ -676,8 +724,15 @@ export const docs: Section[] = [
         applies: 'live',
         where: 'Settings → DNS',
         fields: [
-          { key: 'dns.upstreams.address', effect: 'host:port for udp, tcp, dot and doq; an https:// URL for doh and doh3.' },
-          { key: 'dns.upstreams.protocol', effect: 'udp, tcp, dot (DNS over TLS), doh (DNS over HTTPS), doh3 (DNS over HTTPS on HTTP/3) or doq (DNS over QUIC).' },
+          {
+            key: 'dns.upstreams.address',
+            effect: 'host:port for udp, tcp, dot and doq; an https:// URL for doh and doh3.',
+          },
+          {
+            key: 'dns.upstreams.protocol',
+            effect:
+              'udp, tcp, dot (DNS over TLS), doh (DNS over HTTPS), doh3 (DNS over HTTPS on HTTP/3) or doq (DNS over QUIC).',
+          },
         ],
       },
       {
@@ -700,7 +755,11 @@ export const docs: Section[] = [
           { key: 'dns.cache.max_entries', effect: 'How many answers to keep (default 10000).' },
           { key: 'dns.cache.min_ttl', effect: 'Keep short-lived answers at least this long, in seconds (default 10).' },
           { key: 'dns.cache.max_ttl', effect: 'Never serve from cache longer than this, in seconds (default 3600).' },
-          { key: 'dns.cache.serve_stale', effect: 'If upstream is slow or down, answer from an expired entry (up to 6 hours old) while fetching a fresh one (default on).' },
+          {
+            key: 'dns.cache.serve_stale',
+            effect:
+              'If upstream is slow or down, answer from an expired entry (up to 6 hours old) while fetching a fresh one (default on).',
+          },
         ],
       },
       {
@@ -720,20 +779,31 @@ export const docs: Section[] = [
         where: 'minos.yaml',
         fields: [
           { key: 'dns.tls.dot_listen', effect: 'Address for DNS over TLS, usually :853 (empty: off).' },
-          { key: 'dns.tls.doh_listen', effect: 'Address for DNS over HTTPS at /dns-query, usually :443 (empty: off). HTTP/3 is served on the same port over UDP and advertised, so clients that speak it upgrade.' },
-          { key: 'dns.tls.doq_listen', effect: 'Address for DNS over QUIC (RFC 9250), usually :853 — UDP, so it can share the number with DoT (empty: off).' },
+          {
+            key: 'dns.tls.doh_listen',
+            effect:
+              'Address for DNS over HTTPS at /dns-query, usually :443 (empty: off). HTTP/3 is served on the same port over UDP and advertised, so clients that speak it upgrade.',
+          },
+          {
+            key: 'dns.tls.doq_listen',
+            effect:
+              'Address for DNS over QUIC (RFC 9250), usually :853 — UDP, so it can share the number with DoT (empty: off).',
+          },
           { key: 'dns.tls.cert_file', effect: 'Certificate file (instead of acme).' },
           { key: 'dns.tls.key_file', effect: 'Its private key.' },
           { key: 'dns.tls.acme', effect: 'Issue and renew a certificate automatically.' },
           { key: 'dns.tls.acme.email', effect: 'Contact address for the certificate authority.' },
           { key: 'dns.tls.acme.domain', effect: 'The name the certificate is for.' },
-          { key: 'dns.tls.acme.provider', effect: 'cloudflare, desec, duckdns or rfc2136 — who publishes the DNS-01 record.' },
+          {
+            key: 'dns.tls.acme.provider',
+            effect: 'cloudflare, desec, duckdns or rfc2136 — who publishes the DNS-01 record.',
+          },
           { key: 'dns.tls.acme.api_token', effect: 'API token for cloudflare, desec or duckdns.' },
           { key: 'dns.tls.acme.server', effect: 'RFC 2136 server, host:port.' },
           { key: 'dns.tls.acme.tsig_name', effect: 'RFC 2136 TSIG key name.' },
           { key: 'dns.tls.acme.tsig_secret', effect: 'RFC 2136 TSIG secret.' },
           { key: 'dns.tls.acme.tsig_algorithm', effect: 'RFC 2136 TSIG algorithm (default hmac-sha256).' },
-          { key: 'dns.tls.acme.directory_url', effect: 'ACME directory (default Let\'s Encrypt).' },
+          { key: 'dns.tls.acme.directory_url', effect: "ACME directory (default Let's Encrypt)." },
           { key: 'dns.tls.acme.cache_dir', effect: 'Where issued certificates are kept.' },
         ],
       },
@@ -750,7 +820,8 @@ export const docs: Section[] = [
         label: 'Block response',
         key: 'blocking.mode',
         default: 'zero_ip',
-        effect: 'zero_ip answers 0.0.0.0 / :: (fails fast and quietly — recommended); nxdomain says the domain does not exist.',
+        effect:
+          'zero_ip answers 0.0.0.0 / :: (fails fast and quietly — recommended); nxdomain says the domain does not exist.',
         applies: 'live',
         where: 'Settings → Filtering',
       },
@@ -758,7 +829,8 @@ export const docs: Section[] = [
         label: 'Remember blocks for (seconds)',
         key: 'dns.block_ttl',
         default: '60',
-        effect: 'How long a device caches a blocked answer before asking again. Lower makes an Allow take effect sooner.',
+        effect:
+          'How long a device caches a blocked answer before asking again. Lower makes an Allow take effect sooner.',
         applies: 'live',
         where: 'Settings → Filtering',
       },
@@ -766,7 +838,8 @@ export const docs: Section[] = [
         label: 'Enforce Safe Search for everyone',
         key: 'blocking.safe_search',
         default: 'off',
-        effect: 'Google, Bing, DuckDuckGo and YouTube (moderate) answer with their safe versions. Bypass groups are exempt.',
+        effect:
+          'Google, Bing, DuckDuckGo and YouTube (moderate) answer with their safe versions. Bypass groups are exempt.',
         applies: 'live',
         where: 'Settings → Filtering',
       },
@@ -774,7 +847,8 @@ export const docs: Section[] = [
         label: 'Keep Firefox on this resolver',
         key: 'dns.allow_firefox_doh',
         default: 'false (Firefox is kept on Minos)',
-        effect: 'When false, Minos tells Firefox this network filters DNS, so Firefox does not switch itself to its own encrypted DNS. Untick "Keep Firefox on this resolver" to set it true.',
+        effect:
+          'When false, Minos tells Firefox this network filters DNS, so Firefox does not switch itself to its own encrypted DNS. Untick "Keep Firefox on this resolver" to set it true.',
         applies: 'live',
         where: 'Settings → Filtering',
       },
@@ -835,9 +909,27 @@ export const docs: Section[] = [
       '"DNS is down" — every resolver failing — is always sent, at urgent priority, even in quiet hours.',
     ],
     settings: [
-      { label: 'Webhook URL', key: 'notifications.webhook_url', effect: 'Each event is POSTed here as JSON.', applies: 'live', where: 'Settings → Notifications' },
-      { label: 'ntfy topic URL', key: 'notifications.ntfy_url', effect: 'An ntfy topic — ntfy.sh or self-hosted.', applies: 'live', where: 'Settings → Notifications' },
-      { label: 'ntfy access token', key: 'notifications.ntfy_token', effect: 'Only for protected topics. Never shown again once saved.', applies: 'live', where: 'Settings → Notifications' },
+      {
+        label: 'Webhook URL',
+        key: 'notifications.webhook_url',
+        effect: 'Each event is POSTed here as JSON.',
+        applies: 'live',
+        where: 'Settings → Notifications',
+      },
+      {
+        label: 'ntfy topic URL',
+        key: 'notifications.ntfy_url',
+        effect: 'An ntfy topic — ntfy.sh or self-hosted.',
+        applies: 'live',
+        where: 'Settings → Notifications',
+      },
+      {
+        label: 'ntfy access token',
+        key: 'notifications.ntfy_token',
+        effect: 'Only for protected topics. Never shown again once saved.',
+        applies: 'live',
+        where: 'Settings → Notifications',
+      },
       {
         label: 'Link address',
         key: 'notifications.ui_url',
@@ -846,7 +938,13 @@ export const docs: Section[] = [
         applies: 'live',
         where: 'Settings → Notifications',
       },
-      { label: 'What to send', key: 'notifications.mute', effect: 'Event types switched off.', applies: 'live', where: 'Settings → Notifications' },
+      {
+        label: 'What to send',
+        key: 'notifications.mute',
+        effect: 'Event types switched off.',
+        applies: 'live',
+        where: 'Settings → Notifications',
+      },
       {
         label: 'Quiet hours',
         key: 'notifications.quiet_hours',
@@ -855,9 +953,30 @@ export const docs: Section[] = [
         applies: 'live',
         where: 'Settings → Notifications',
       },
-      { label: 'Traffic digest', key: 'notifications.digest', default: 'off', effect: 'A daily or weekly summary of what your network did.', applies: 'live', where: 'Settings → Notifications' },
-      { label: 'Digest time', key: 'notifications.digest_time', default: '09:00', effect: 'When the digest is sent (server time).', applies: 'live', where: 'Settings → Notifications' },
-      { label: 'Digest day', key: 'notifications.digest_day', default: 'monday', effect: 'Which day the weekly digest is sent.', applies: 'live', where: 'Settings → Notifications' },
+      {
+        label: 'Traffic digest',
+        key: 'notifications.digest',
+        default: 'off',
+        effect: 'A daily or weekly summary of what your network did.',
+        applies: 'live',
+        where: 'Settings → Notifications',
+      },
+      {
+        label: 'Digest time',
+        key: 'notifications.digest_time',
+        default: '09:00',
+        effect: 'When the digest is sent (server time).',
+        applies: 'live',
+        where: 'Settings → Notifications',
+      },
+      {
+        label: 'Digest day',
+        key: 'notifications.digest_day',
+        default: 'monday',
+        effect: 'Which day the weekly digest is sent.',
+        applies: 'live',
+        where: 'Settings → Notifications',
+      },
     ],
   },
   {
@@ -879,7 +998,8 @@ export const docs: Section[] = [
         label: 'Listen for DHCP introductions (Linux)',
         key: 'discovery.dhcp_listen',
         default: 'on',
-        effect: 'Devices announce their own name when they join the network. Minos only listens — it never hands out addresses.',
+        effect:
+          'Devices announce their own name when they join the network. Minos only listens — it never hands out addresses.',
         applies: 'live',
         where: 'Settings → Device discovery',
       },
@@ -892,9 +1012,9 @@ export const docs: Section[] = [
     summary:
       'Puts Minos in Home Assistant with no YAML. Minos announces itself over MQTT (Home Assistant\'s "MQTT discovery"), so a Minos device appears with everything below, kept up to date within seconds. The Home Assistant section of Help has the step-by-step setup, the entity names and example automations.',
     howto: [
-      'In Home Assistant, install the Mosquitto broker add-on (Settings → Add-ons) and add the MQTT integration if it isn\'t there already.',
+      "In Home Assistant, install the Mosquitto broker add-on (Settings → Add-ons) and add the MQTT integration if it isn't there already.",
       'Make a Home Assistant user for Minos (Settings → People → Users), for example "minos" — the Mosquitto add-on accepts Home Assistant users.',
-      'Here, enter the broker as mqtt://<Home Assistant\'s address>:1883 with that username and password, tick Connect to Home Assistant and save. The status line says when Minos is connected.',
+      "Here, enter the broker as mqtt://<Home Assistant's address>:1883 with that username and password, tick Connect to Home Assistant and save. The status line says when Minos is connected.",
       'In Home Assistant, open Settings → Devices & services → MQTT: the Minos device is listed with its entities.',
       'What you get: a Blocking switch (off pauses blocking until you turn it back on), Pause blocking for 5 minutes and for 1 hour buttons, Queries, Blocked queries and Share blocked sensors (counted since Minos started), Blocklist rules, problem sensors for an upstream resolver failing, a suspected threat and blocking that may have broken something, an Update entity when Check for new releases is on, and a Block switch for each device you have named.',
       'Changes made from Home Assistant act straight away; blocking a device is recorded in Settings → History as "Home Assistant (MQTT)".',
@@ -918,7 +1038,8 @@ export const docs: Section[] = [
         label: 'Connect to Home Assistant',
         key: 'home_assistant.enabled',
         default: 'off',
-        effect: 'Connects to the MQTT broker and announces Minos to Home Assistant. Turning it off removes the Minos entities from Home Assistant.',
+        effect:
+          'Connects to the MQTT broker and announces Minos to Home Assistant. Turning it off removes the Minos entities from Home Assistant.',
         applies: 'live',
         where: 'Settings → Home Assistant',
       },
@@ -926,7 +1047,8 @@ export const docs: Section[] = [
         label: 'MQTT broker',
         key: 'home_assistant.broker',
         default: 'none',
-        effect: 'The broker Home Assistant uses: mqtt://host:1883, or mqtts://host:8883 for TLS (the certificate must be valid for the host name). If the broker goes away Minos keeps trying, waiting up to a minute between attempts.',
+        effect:
+          'The broker Home Assistant uses: mqtt://host:1883, or mqtts://host:8883 for TLS (the certificate must be valid for the host name). If the broker goes away Minos keeps trying, waiting up to a minute between attempts.',
         applies: 'live',
         where: 'Settings → Home Assistant',
       },
@@ -942,7 +1064,8 @@ export const docs: Section[] = [
         label: 'Password',
         key: 'home_assistant.password',
         default: 'none',
-        effect: 'The broker password. Stored in the config file; never shown again, and hidden in the settings history.',
+        effect:
+          'The broker password. Stored in the config file; never shown again, and hidden in the settings history.',
         applies: 'live',
         where: 'Settings → Home Assistant',
       },
@@ -950,7 +1073,8 @@ export const docs: Section[] = [
         label: 'Add a Block switch for each named device',
         key: 'home_assistant.device_switches',
         default: 'on',
-        effect: 'One switch per device you have named on the Devices page. On blocks all of that device\'s DNS, exactly like Block device in Minos — handy for a bedtime automation.',
+        effect:
+          "One switch per device you have named on the Devices page. On blocks all of that device's DNS, exactly like Block device in Minos — handy for a bedtime automation.",
         applies: 'live',
         where: 'Settings → Home Assistant',
       },
@@ -958,7 +1082,8 @@ export const docs: Section[] = [
         label: 'Discovery prefix',
         key: 'home_assistant.discovery_prefix',
         default: 'homeassistant',
-        effect: 'Where Home Assistant listens for announcements. Change it only if you changed it in Home Assistant\'s MQTT settings.',
+        effect:
+          "Where Home Assistant listens for announcements. Change it only if you changed it in Home Assistant's MQTT settings.",
         applies: 'live',
         where: 'Settings → Home Assistant',
       },
@@ -966,7 +1091,8 @@ export const docs: Section[] = [
         label: 'Topic prefix',
         key: 'home_assistant.topic_prefix',
         default: 'minos',
-        effect: 'Where Minos publishes its state and listens for commands (minos/state, minos/blocking/set…). Give each Minos its own when two share a broker.',
+        effect:
+          'Where Minos publishes its state and listens for commands (minos/state, minos/blocking/set…). Give each Minos its own when two share a broker.',
         applies: 'live',
         where: 'Settings → Home Assistant',
       },
@@ -1006,7 +1132,8 @@ export const docs: Section[] = [
         label: 'Session signing key',
         key: 'api.session_key',
         default: 'Made with the first password',
-        effect: 'Signs sign-ins. "Sign out everywhere" replaces it, which ends every session at once. The minos command on the same machine uses it too, so it keeps working with only a password set.',
+        effect:
+          'Signs sign-ins. "Sign out everywhere" replaces it, which ends every session at once. The minos command on the same machine uses it too, so it keeps working with only a password set.',
         applies: 'live',
         where: 'Settings → Access & security',
       },
@@ -1014,7 +1141,8 @@ export const docs: Section[] = [
         label: 'Two-step sign-in (authenticator app)',
         key: 'api.totp_secret',
         default: 'off',
-        effect: 'After the password, ask for the 6-digit code from an authenticator app (Google Authenticator, 1Password, Aegis …). Turned on by scanning the code shown in Settings and typing one code back.',
+        effect:
+          'After the password, ask for the 6-digit code from an authenticator app (Google Authenticator, 1Password, Aegis …). Turned on by scanning the code shown in Settings and typing one code back.',
         applies: 'live',
         where: 'Settings → Access & security',
       },
@@ -1118,4 +1246,14 @@ export const docs: Section[] = [
 
 // Config keys that are containers of the documented keys above, not
 // settings in their own right. The drift test treats them as covered.
-export const structuralKeys = ['dns', 'blocking', 'lists', 'querylog', 'api', 'notifications', 'discovery', 'threats', 'home_assistant'];
+export const structuralKeys = [
+  'dns',
+  'blocking',
+  'lists',
+  'querylog',
+  'api',
+  'notifications',
+  'discovery',
+  'threats',
+  'home_assistant',
+];

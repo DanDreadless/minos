@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api, type Device, type Group, type Rule, type TemporaryAllow } from '../lib/api';
   import { checkOpen } from '../lib/check';
+  import RuleSyntax from '../lib/components/RuleSyntax.svelte';
   import { copy } from '../lib/copy';
   import { fmtClock } from '../lib/format';
   import { currentParams, deviceHref } from '../lib/router';
@@ -196,6 +197,7 @@
     </label>
     <button type="submit" class="primary" disabled={adding || !newDomain.trim()}>{copy.blocking.add}</button>
   </form>
+  <RuleSyntax on:pick={(e) => (newDomain = e.detail)} />
 </section>
 
 <section class="card">

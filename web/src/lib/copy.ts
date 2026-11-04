@@ -71,7 +71,7 @@ export const copy = {
 
   logs: {
     title: 'Logs',
-    subtitle: "what Minos itself is doing — list updates, resolver trouble, errors",
+    subtitle: 'what Minos itself is doing — list updates, resolver trouble, errors',
     searchPlaceholder: 'Search messages and details…',
     showLabel: 'Show',
     show: [
@@ -83,7 +83,12 @@ export const copy = {
     recordLabel: 'Record',
     recordHint:
       'Which messages Minos keeps — in this page and in the system journal. Applies at once. Debug is very chatty (every query); use it briefly.',
-    recordLevels: { debug: 'Debug (very detailed)', info: 'Info (normal)', warn: 'Warnings and errors', error: 'Errors only' } as Record<string, string>,
+    recordLevels: {
+      debug: 'Debug (very detailed)',
+      info: 'Info (normal)',
+      warn: 'Warnings and errors',
+      error: 'Errors only',
+    } as Record<string, string>,
     live: 'Live',
     paused: (n: number) => (n ? `Paused · ${n} new` : 'Paused'),
     reconnecting: 'Reconnecting…',
@@ -156,7 +161,8 @@ export const copy = {
     seeDocket: 'Review them in the Query Log',
     enforceNote: 'Refused answers show as blocked in the Query Log, under the list "dnssec".',
     countersTitle: 'Since restart',
-    countersHint: 'Click a number to see those queries — the Query Log covers all kept history, so its totals will differ',
+    countersHint:
+      'Click a number to see those queries — the Query Log covers all kept history, so its totals will differ',
     secure: 'Verified',
     secureHint: 'Signed, and the signature checked out',
     insecure: 'Unsigned',
@@ -264,8 +270,7 @@ export const copy = {
     resume: 'Resume',
     clearAll: 'Clear filters',
     exportLabel: 'Export',
-    exportHint: (fmt: string) =>
-      `Download every match (up to 100,000) as ${fmt.toUpperCase()}`,
+    exportHint: (fmt: string) => `Download every match (up to 100,000) as ${fmt.toUpperCase()}`,
     exporting: 'Preparing…',
     loadOlder: 'Load older',
     loadingOlder: 'Loading…',
@@ -338,7 +343,11 @@ export const copy = {
 
   attention: {
     title: 'Needs attention',
-    threat: (kind: string, device: string, t: { domain?: string; count: number; distinct?: number; list?: string; samples: string[] }) =>
+    threat: (
+      kind: string,
+      device: string,
+      t: { domain?: string; count: number; distinct?: number; list?: string; samples: string[] },
+    ) =>
       kind === 'dga'
         ? `Possible infection on ${device}: it looked up ${t.count} random-looking domains in a few minutes (e.g. ${t.samples.slice(0, 2).join(', ')}) — how malware searches for its control server.`
         : kind === 'tunnel'
@@ -394,13 +403,13 @@ export const copy = {
 
   rules: {
     intro:
-      'Your own allow and block rules. Each one applies to everyone, to one group, or to one device — and when rules disagree, the most specific wins: a device rule beats its group\'s, a group rule beats one for everyone, and every rule beats the blocklists.',
+      "Your own allow and block rules. Each one applies to everyone, to one group, or to one device — and when rules disagree, the most specific wins: a device rule beats its group's, a group rule beats one for everyone, and every rule beats the blocklists.",
     addTitle: 'Add a rule',
     addAction: 'Action',
     addDomain: 'Domain',
     addWhere: 'Applies to',
     listTitle: 'Rules',
-    listHint: 'Domains include their subdomains. Write /pattern/ for a regex rule.',
+    listHint: 'A domain includes its subdomains. Use * as a wildcard, or /pattern/ for a regex rule.',
     empty: 'No rules yet. Add one above, or press Allow or Block on any lookup in the Query Log.',
     emptyFiltered: 'No rules match these filters.',
     filterAll: 'All',
@@ -466,6 +475,29 @@ export const copy = {
       `${domains} domain rule${domains === 1 ? '' : 's'} · ${services} service${services === 1 ? '' : 's'}`,
     groupDomainsLink: 'Domain rules',
     groupServicesLink: 'Services',
+    syntaxTitle: 'How to write a rule',
+    syntaxWrite: 'You write',
+    syntaxMatches: 'What it matches',
+    syntaxUse: (rule: string) => `Use ${rule}`,
+    syntaxExamples: [
+      { rule: 'example.com', text: 'example.com and every name under it: www.example.com, a.b.example.com' },
+      { rule: '*.example.com', text: 'Every name under example.com, at any depth — but not example.com itself' },
+      {
+        rule: 'ads*.example.com',
+        text: 'Names under example.com that start with ads: ads.example.com, ads2.example.com, ads-eu.example.com',
+      },
+      {
+        rule: '/^ad[0-9]+\\./',
+        text: 'Regex: names starting with ad and a number, on any domain: ad1.example.com, ad42.news.example',
+      },
+      { rule: '/tracking/', text: 'Regex: any name with tracking anywhere in it' },
+    ],
+    syntaxNotes: [
+      'A plain domain is the simplest rule and almost always the one you want — it already covers every subdomain.',
+      'In a wildcard, * stands for any run of characters, dots included, and the rule has to match the whole name.',
+      'A regex goes between slashes and matches anywhere in the name unless you pin it with ^ (start) and $ (end). Write a dot as \\. — a bare . means any character.',
+      'Upper and lower case make no difference. Plain domains are checked first; an allowing wildcard or regex still beats a plain block.',
+    ],
   },
 
   blocking: {
@@ -549,8 +581,7 @@ export const copy = {
       'Every entry on this list is allowed for everyone, even if a blocklist has it. A block rule for a device or group still wins.',
     actionBlock: 'Blocklist — entries are blocked',
     actionAllow: 'Allowlist — entries are allowed for everyone',
-    confirmDelete: (name: string) =>
-      `Remove the list "${name}"? Its rules stop applying immediately.`,
+    confirmDelete: (name: string) => `Remove the list "${name}"? Its rules stop applying immediately.`,
     auditHeader: 'Audit',
     auditTitle:
       "Audit mode: this list's matches are recorded as 'would block' in the Query Log but not blocked — try a strict list safely, then untick to enforce it.",
@@ -591,8 +622,7 @@ export const copy = {
     addMirrors: 'Add mirrors',
     addMirrorsHint: (mirrors: string[]) =>
       `The catalog has verified fallback copies of this list. They are used only if the main address fails for long or disappears:\n${mirrors.join('\n')}`,
-    mirrorsAdded: (name: string, n: number) =>
-      `Added ${n} ${n === 1 ? 'mirror' : 'mirrors'} to "${name}".`,
+    mirrorsAdded: (name: string, n: number) => `Added ${n} ${n === 1 ? 'mirror' : 'mirrors'} to "${name}".`,
     viaMirror: 'Via mirror',
     viaMirrorHint: (mirror: string, primaryError: string) =>
       `The main address failed (${primaryError}), so this copy came from the mirror ${mirror}. Minos tries the main address first on every refresh.`,
@@ -612,7 +642,7 @@ export const copy = {
       })[state] ?? error,
     value: {
       title: 'Is each list worth it?',
-      hint: 'What every blocklist adds that the others don\'t',
+      hint: "What every blocklist adds that the others don't",
       intro:
         'Compares your blocklists with each other and with what was actually blocked: how much of each list the others already cover, the lookups only it would have blocked, and the memory it takes. Judged against the rules in force now.',
       period: 'Lookups from the last',
@@ -620,7 +650,8 @@ export const copy = {
       run: 'Compare my blocklists',
       refresh: 'Compare again',
       loading: 'Comparing…',
-      needTwo: 'There is nothing to compare: this needs at least two blocklists switched on (audit-only lists are left out).',
+      needTwo:
+        'There is nothing to compare: this needs at least two blocklists switched on (audit-only lists are left out).',
       summary: (n: number, d: number) => `${n.toLocaleString()} lookups were blocked in the last ${d} days.`,
       earns: (n: number, d: number) =>
         `Earns its keep: ${n.toLocaleString()} ${n === 1 ? 'lookup' : 'lookups'} in the last ${d} days that no other list would have blocked.`,
@@ -630,7 +661,8 @@ export const copy = {
         `Blocked nothing in the last ${d} days. For a malware and phishing list that is the good outcome: nothing on your network went near a known threat. Keep it.`,
       consider: (mb: string) => `Removing it would free about ${mb} of memory.`,
       rules: (n: number, unique: string) => `${n.toLocaleString()} rules, ${unique} found in no other list.`,
-      coveredBy: (list: string, share: string) => ` ${share.charAt(0).toUpperCase()}${share.slice(1)} already in ${list}.`,
+      coveredBy: (list: string, share: string) =>
+        ` ${share.charAt(0).toUpperCase()}${share.slice(1)} already in ${list}.`,
       under1: 'under 1%',
       over99: 'over 99%',
       blocks: (n: number) => `Would block ${n.toLocaleString()} of the lookups.`,
@@ -692,7 +724,8 @@ export const copy = {
     checkEndNow: 'End now',
     checkAllowed: 'Allowed — no rule matches; it is looked up upstream as normal.',
     pardonsTitle: 'Allowed domains',
-    pardonsHint: 'Always allowed, with their subdomains, whatever the blocklists say. Write /pattern/ for a regex rule.',
+    pardonsHint:
+      'Always allowed, with their subdomains, whatever the blocklists say. Use * as a wildcard, or /pattern/ for a regex rule.',
     pardonsEmpty: 'No allowed domains yet.',
     servicesTitle: 'Services',
     servicesHint: 'Block or allow a whole service — every domain it uses — in one move',
@@ -710,16 +743,16 @@ export const copy = {
     pardonedServicesActive: 'Allowed',
     pardonedServicesEmpty: 'No services allowed. Add one from the left.',
     sentencesTitle: 'Blocked domains',
-    sentencesHint: 'Always blocked, with their subdomains. Write /pattern/ for a regex rule, e.g. /^ad[0-9]*\\./',
+    sentencesHint:
+      'Always blocked, with their subdomains. Use * as a wildcard (*.example.com), or /pattern/ for a regex rule.',
     sentencesEmpty: 'No blocked domains yet.',
-    addPlaceholder: 'Domain, or /regex/ to add…',
+    addPlaceholder: 'example.com, *.example.com or /regex/…',
     localTitle: 'Local DNS records',
     localSavesAtOnce: 'Adding, editing or removing a record saves it at once.',
     localHint: 'Names answered here — never blocked, never sent upstream',
     localEmpty: 'No local records. Add one to name a device or service on your network.',
     localNamePlaceholder: 'nas.home.lab or *.home.lab',
-    localValuePlaceholder: (t: string) =>
-      t === 'CNAME' ? 'target.home.lab' : 'Address (comma-separate several)',
+    localValuePlaceholder: (t: string) => (t === 'CNAME' ? 'target.home.lab' : 'Address (comma-separate several)'),
     localAdd: 'Add record',
     localEdit: 'Edit',
     localEditTitle: 'Change this record’s address',
@@ -769,8 +802,7 @@ export const copy = {
       'The group applies only during these hours (server time); outside them its devices follow the default rules. An end before the start runs past midnight.',
     scheduleSet: 'Set schedule',
     scheduleClear: 'Remove schedule',
-    confirmDelete: (name: string) =>
-      `Delete the group "${name}"? Its devices fall back to the default rules.`,
+    confirmDelete: (name: string) => `Delete the group "${name}"? Its devices fall back to the default rules.`,
     forget: 'Forget',
     forgetHint: 'Remove the label, group, notes and rules saved for this device',
     forgetConfirm: (name: string) =>
@@ -819,7 +851,7 @@ export const copy = {
   privacy: {
     title: 'Privacy',
     intro:
-      'The tracking companies your devices talked to: advertising, analytics and telemetry. What got through, what your blocklists stopped, which devices, and a one-click block for a company\'s tracking.',
+      "The tracking companies your devices talked to: advertising, analytics and telemetry. What got through, what your blocklists stopped, which devices, and a one-click block for a company's tracking.",
     deviceTitle: 'Tracking companies',
     deviceHint: 'Advertising, analytics and telemetry this device talked to',
     period: 'Lookups from',
@@ -849,10 +881,11 @@ export const copy = {
     unblock: 'Stop blocking',
     showOther: (n: number) => `Show ${n} other ${n === 1 ? 'company' : 'companies'} (not tracking)`,
     hideOther: 'Hide the other companies',
-    otherNote: 'Companies whose names your devices used for their own sites and services — search, video, time servers, hosting. Not tracking, and not blocked by company.',
+    otherNote:
+      'Companies whose names your devices used for their own sites and services — search, video, time servers, hosting. Not tracking, and not blocked by company.',
     lookups: (n: number) => `${n.toLocaleString()} lookups`,
     footnote:
-      'A name counts as tracking when it is one of a company\'s advertising, analytics or telemetry names that a curated DNS blocklist also blocks; a company\'s own sites and services never do.',
+      "A name counts as tracking when it is one of a company's advertising, analytics or telemetry names that a curated DNS blocklist also blocks; a company's own sites and services never do.",
   },
   device: {
     notFound: 'No device with this address has been seen.',
@@ -919,7 +952,8 @@ export const copy = {
     upstreamFailing: (lastSuccess: string, error: string) =>
       `Failing — ${lastSuccess ? `last answered ${lastSuccess}` : 'has not answered a single query since the last restart'}.` +
       `${error ? ` Last error: ${error}.` : ''} Minos skips it and checks it again every 30 seconds — or press Test.`,
-    upstreamUnused: 'Not checked yet — Minos checks every resolver shortly after it starts. Press Test to check it now.',
+    upstreamUnused:
+      'Not checked yet — Minos checks every resolver shortly after it starts. Press Test to check it now.',
     upstreamTest: 'Test',
     upstreamTesting: 'Testing…',
     upstreamTestHint: 'Ask this resolver a test question now',
@@ -956,7 +990,8 @@ export const copy = {
     threatsEnabledHint:
       'Flags a device that looks up many random-looking domains (how malware finds its control server), sends data out hidden in long DNS names, or tries to reach a domain on a threat-intelligence list. It reads the query log in the background; lookups are never slowed.',
     threatsIgnore: 'Never flag these domains',
-    threatsIgnoreHint: 'One per line, with subdomains — for a service that legitimately looks like this. Antivirus and spam-reputation lookups are already left out.',
+    threatsIgnoreHint:
+      'One per line, with subdomains — for a service that legitimately looks like this. Antivirus and spam-reputation lookups are already left out.',
     privateRelay: 'Block iCloud Private Relay',
     privateRelayHint:
       'Denies the mask.icloud.com hostnames Apple documents for exactly this. Apple devices show "Private Relay is unavailable on this network" and use normal DNS, so Minos can filter their queries. A real privacy trade — off by default.',
@@ -1020,7 +1055,8 @@ export const copy = {
     passwordConfirmRemove: 'Remove the password? Anyone on your network will be able to change Minos.',
     passwordConfirmRemoveToken: 'Remove the password? The API token will still be required.',
     totpTitle: 'Authenticator app',
-    totpExplain: 'Also ask for a 6-digit code from an app on your phone, so a stolen password is not enough on its own.',
+    totpExplain:
+      'Also ask for a 6-digit code from an app on your phone, so a stolen password is not enough on its own.',
     totpStart: 'Set up an authenticator app',
     totpScan: 'Scan this with your authenticator app, then type the code it shows to finish.',
     totpManual: 'Or enter this key by hand:',
@@ -1033,7 +1069,8 @@ export const copy = {
     totpOn: 'Authenticator codes are on.',
     totpOff: 'Authenticator codes are off.',
     sessionsTitle: 'Signed-in browsers',
-    sessionsHint: 'Signing out everywhere ends every other sign-in — use it if you signed in on a device you no longer have.',
+    sessionsHint:
+      'Signing out everywhere ends every other sign-in — use it if you signed in on a device you no longer have.',
     signOut: 'Sign out',
     signOutAll: 'Sign out everywhere else',
     signOutAllConfirm: 'Sign out every other browser? This one stays signed in.',
@@ -1060,14 +1097,42 @@ export const copy = {
         : 'Minos could not work out its own address; set this so notifications can link back to it.',
     eventsTitle: 'What to send',
     events: [
-      { types: ['device_new'], label: 'New devices', hint: 'A device makes its first DNS query (named once discovery finds it; a burst arrives as one message)' },
-      { types: ['list_failing'], label: 'Blocklist problems', hint: 'A list is retired, refuses downloads, never loaded, or has stopped updating' },
-      { types: ['upstream_sick'], label: 'Resolver problems', hint: 'An upstream resolver stops answering (repeat failures within 30 minutes stay quiet)' },
-      { types: ['list_recovered', 'upstream_recovered'], label: 'Recoveries', hint: 'A list or resolver that was reported failing works again' },
+      {
+        types: ['device_new'],
+        label: 'New devices',
+        hint: 'A device makes its first DNS query (named once discovery finds it; a burst arrives as one message)',
+      },
+      {
+        types: ['list_failing'],
+        label: 'Blocklist problems',
+        hint: 'A list is retired, refuses downloads, never loaded, or has stopped updating',
+      },
+      {
+        types: ['upstream_sick'],
+        label: 'Resolver problems',
+        hint: 'An upstream resolver stops answering (repeat failures within 30 minutes stay quiet)',
+      },
+      {
+        types: ['list_recovered', 'upstream_recovered'],
+        label: 'Recoveries',
+        hint: 'A list or resolver that was reported failing works again',
+      },
       { types: ['update_available'], label: 'Minos updates', hint: 'A new release is out (needs the update check on)' },
-      { types: ['acme_renewal_failed'], label: 'Certificate problems', hint: 'The DoT/DoH certificate cannot be renewed' },
-      { types: ['threat_suspected'], label: 'Possible threats', hint: 'A device behaves like malware: random-looking domains, data through DNS, or a known malicious domain' },
-      { types: ['breakage_suspected'], label: 'Something may be broken', hint: 'A device keeps retrying a name it used to reach, which a blocklist has started blocking' },
+      {
+        types: ['acme_renewal_failed'],
+        label: 'Certificate problems',
+        hint: 'The DoT/DoH certificate cannot be renewed',
+      },
+      {
+        types: ['threat_suspected'],
+        label: 'Possible threats',
+        hint: 'A device behaves like malware: random-looking domains, data through DNS, or a known malicious domain',
+      },
+      {
+        types: ['breakage_suspected'],
+        label: 'Something may be broken',
+        hint: 'A device keeps retrying a name it used to reach, which a blocklist has started blocking',
+      },
     ] as { types: string[]; label: string; hint: string }[],
     dnsDownNote: '"DNS is down" — every resolver failing — is always sent, at urgent priority.',
     quietTitle: 'Quiet hours',
@@ -1114,7 +1179,8 @@ export const copy = {
     haPassword: 'Password',
     haPasswordSet: '(password set — type to replace)',
     haDeviceSwitches: 'Add a Block switch for each named device',
-    haDeviceSwitchesHint: 'Devices you have given a name on the Devices page. Turning one on blocks all its DNS, like Block device in Minos.',
+    haDeviceSwitchesHint:
+      'Devices you have given a name on the Devices page. Turning one on blocks all its DNS, like Block device in Minos.',
     haTopicsTitle: 'Topics',
     haTopicsHint: 'Leave these alone unless you need to change them',
     haDiscoveryPrefix: 'Discovery prefix',

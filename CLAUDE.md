@@ -917,7 +917,15 @@ This is security software; hold it to that standard.
   the prefilter ~1.3 µs on x86 and ~17 µs on the Pi (miss with no regexes:
   1.1 µs) — fine for real configs, which carry a handful. `TestNeedlesNeverHideAMatch` holds the prefilter
   to the plain regex on random names. Delete uses `?domain=` because a
-  regex cannot travel in a path segment. **Benchmark the matcher on the
+  regex cannot travel in a path segment. **Wildcard rules** (`*.example.com`,
+  `ads*.example.com`; `wildcard.go`, November 2026) compile to an anchored
+  regex — `*` is `.*`, dots included — and join the regex rules (same cap,
+  prefilter, order); they are kept normalized (lowercase, runs of `*`
+  collapsed). `*.x` excludes the bare `x`, matching wildcard local records;
+  plain `x` already covers subdomains. Recognised only in the builder's
+  not-a-domain branch, and only the user's own rules reach it: list parsers
+  drop non-domains first and AdBlock lines with `*` are skipped.
+  **Benchmark the matcher on the
   Pi, not the x86 box**: there BenchmarkMatchHit swings ~25% between
   builds from code alignment alone (550 ↔ 700 ns with identical Match
   code), while the Pi measured 4.03 / 4.04 µs before and after.

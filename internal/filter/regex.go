@@ -65,7 +65,7 @@ func CompileRegexRule(entry string) (*regexp.Regexp, error) {
 // regexRule is one compiled rule and the list it came from. needles, when
 // set, is the prefilter: any name the rule matches contains at least one.
 type regexRule struct {
-	entry   string // as written, /pattern/
+	entry   string // /pattern/ as written, or a normalized wildcard
 	list    int32
 	re      *regexp.Regexp
 	needles []string

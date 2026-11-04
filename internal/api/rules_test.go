@@ -71,8 +71,17 @@ func TestRulesAddFlipAndDelete(t *testing.T) {
 		t.Errorf("second delete: %d, want 404", rec.Code)
 	}
 
+	// A wildcard is kept in its normal form.
+	if res := post(`{"action":"block","kind":"domain","value":"*.Tracker.Example.","scope":"device","target":"10.0.0.7"}`); res.StatusCode != http.StatusCreated {
+		t.Fatalf("add wildcard: %d", res.StatusCode)
+	}
+	if cl := store.Get().Clients[0]; !slices.Equal(cl.Denylist, []string{"*.tracker.example"}) {
+		t.Errorf("wildcard saved as %v, want *.tracker.example", cl.Denylist)
+	}
+
 	// Mistakes are refused plainly.
 	for body, code := range map[string]int{
+		`{"action":"block","kind":"domain","value":"*.*","scope":"everyone"}`:                     http.StatusBadRequest,
 		`{"action":"allow","kind":"domain","value":"x.example","scope":"group","target":"ghost"}`: http.StatusNotFound,
 		`{"action":"allow","kind":"service","value":"nope","scope":"everyone"}`:                   http.StatusBadRequest,
 		`{"action":"maybe","kind":"domain","value":"x.example","scope":"everyone"}`:               http.StatusBadRequest,
